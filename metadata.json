@@ -1,0 +1,6 @@
+{
+  "name": "BarPro Forwarder",
+  "description": "انتقال خودکار و فوق‌سریع پیامک‌ها و پاسخ به استعلام OTP سرور با رمزنگاری پیشرفته AES-256 و فیلتر هوشمند سرشماره‌ها.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Soft Ambient Halo in Warm Sage (#70A288) fading to #04395E -->
+    <path
+        android:pathData="M54,54m-30,0a30,30 0,1,1 60,0a30,30 0,1,1 -60,0"
+        android:fillAlpha="0.25">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="30"
+                android:startColor="#70A288"
+                android:endColor="#0004395E"
+                android:type="radial" />
+        </aapt:attr>
+    </path>
+
+    <!-- Speed & Waybill Forward Wind Streaks (#D5896F, #DAB785, #70A288) -->
+    <!-- Streak 1 (Top in Terracotta Coral #D5896F) -->
+    <path
+        android:fillColor="#D5896F"
+        android:pathData="M24,39 H45 L41,43.5 H24 Z" />
+
+    <!-- Streak 2 (Longest central impulse in Champagne Gold #DAB785) -->
+    <path
+        android:fillColor="#DAB785"
+        android:pathData="M20,47 H51 L47,51.5 H20 Z" />
+
+    <!-- Streak 3 (Lower mid stream in Sage Mint #70A288) -->
+    <path
+        android:fillColor="#70A288"
+        android:pathData="M24,55 H46 L42,59.5 H24 Z" />
+
+    <!-- Streak 4 (Base trail in Coral #D5896F) -->
+    <path
+        android:fillColor="#D5896F"
+        android:pathData="M28,63 H42 L39,67.5 H28 Z" />
+
+    <!-- Logistics Hauler Truck Body in Warm Champagne Gold (#DAB785) -->
+    <path
+        android:fillColor="#DAB785"
+        android:pathData="M48,37 L44,67 H53 C53,63.2 56.1,60.1 60,60.1 C63.9,60.1 67,63.2 67,67 H81 C83.8,67 86,64.8 86,62 L85.8,53 C85.8,51.3 85.1,49.6 83.8,48.4 L75,41 C73.7,40 72,39.3 70.3,39.3 H66.5 L64.8,37 H48 Z" />
+
+    <!-- Deep Oceanic Windshield (#031D44) -->
+    <path
+        android:fillColor="#031D44"
+        android:pathData="M52,43 H69.8 C70.9,43 72,43.5 72.8,44.4 L77.5,48.5 C78.2,49.2 78.7,50.1 78.7,51.2 V53.5 H50.5 L52,43 Z" />
+
+    <!-- Waybill / Signal Pulse Chevron on Truck Body Panel (#70A288, #D5896F) -->
+    <path
+        android:fillColor="#70A288"
+        android:pathData="M52,56.5 L56,59 L52,61.5 L53.5,59 Z" />
+    <path
+        android:fillColor="#D5896F"
+        android:pathData="M57,56.5 L61,59 L57,61.5 L58.5,59 Z" />
+
+    <!-- Wheel Assembly (#031D44 and #70A288) -->
+    <path
+        android:fillColor="#031D44"
+        android:pathData="M60,67m-5.5,0a5.5,5.5 0,1,1 11,0a5.5,5.5 0,1,1 -11,0" />
+    <path
+        android:fillColor="#70A288"
+        android:pathData="M60,67m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
+
+    <!-- Forward Laser Waybill Dot & Headlight Indicator (#D5896F) -->
+    <path
+        android:fillColor="#D5896F"
+        android:pathData="M83.5,39m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
+    <path
+        android:fillColor="#D5896F"
+        android:pathData="M85.5,58.5 H87 V62 H85.5 Z" />
+</vector>

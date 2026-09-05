@@ -1,11 +1,46 @@
-<div align="center">
+# BarPro SMS Forwarder (فورواردر پیامک بارپرو)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+سامانه هوشمند، امن و بلادرنگ دریافت، فیلترسازی و فوروارد پیامک‌های سامانه بارنامه و ناوگان بارپرو (BarPro / UTCMS).
 
-  <h1>Built with AI Studio</h2>
+---
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 🌟 ویژگی‌های کلیدی (Key Features)
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+- **دریافت دوگانه و پایدار (Dual-Path Reception)**: پشتیبانی همزمان از `BroadcastReceiver` و `NotificationListenerService` برای تضمین دریافت ۱۰۰٪ پیامک‌ها حتی در حالت Sleep سیستم‌عامل و بهینه‌سازی باتری.
+- **پردازش و پارس هوشمند پیامک‌ها (`SmsParser`)**:
+  - نرمال‌سازی خودکار ارقام فارسی/عربی و نویسه‌های نیم‌فاصله.
+  - تشخیص نوع پیام (`UTCMS_CONFIRMATION`, `UTCMS_OTP`, `UTCMS_WARNING`, `OTHER`).
+  - استخراج هوشمند و مجزای **کد رهگیری بارنامه** و **رمز یکبار مصرف (OTP)**.
+- **لایه‌های امنیتی پیشرفته (Enterprise Security)**:
+  - امضای دیجیتال پیام‌ها با الگوریتم **HMAC-SHA256**.
+  - پشتیبانی از رمزنگاری سرتاسری متقارن **AES-256-GCM**.
+  - بررسی خودکار وضعیت امنیتی دستگاه (Root Detection, Debug Mode, Emulator Check).
+  - احراز هویت توکن Bearer و سرآیند اختصاصی راننده و ناوگان.
+- **قابلیت اطمینان در جاده (Offline-First Reliability)**:
+  - صف آفلاین پیامک‌ها با پایگاه‌داده محلی **Room**.
+  - ارسال تضمینی با **WorkManager** و سیاست پس‌رفت نمایی (`Exponential Backoff`).
+  - ردیابی دفعات تلاش مجدد (`retryCount`).
+- **رابط کاربری مدرن و واکنش‌گرا (Jetpack Compose)**:
+  - داشبورد جامع وضعیت سرویس، اتصال شبکه، سلامت سرور و امنیت دستگاه.
+  - مدیریت قوانین پیشرفته فیلترینگ (سفید/سیاه شماره‌ها و عبارات کلیدی).
+  - لاگ تفصیلی با امکان جستجو، فیلتر و کپی سریع کد رهگیری و رمز OTP.
+  - ابزارهای تست شبیه‌ساز پیامک و استعلام کدهای بارنامه.
 
-</div>
+---
+
+## 🏗️ معماری سیستم (Architecture)
+
+پروژه بر اساس الگوهای استاندارد **Clean Architecture** و **MVVM** توسعه یافته است:
+- **UI Layer**: توسعه‌یافته با Jetpack Compose و Material 3 به همراه معماری StateFlow و Single Source of Truth.
+- **Domain & Parser Layer**: پردازش و نرمال‌سازی متون، استخراج الگوهای بارنامه و تولید امضاهای دیجیتال.
+- **Data Layer**: پایگاه داده `AppDatabase` (Room)، مخازن داده (`SmsForwardRepository`) و صف پس‌زمینه `WorkManager`.
+- **Network Layer**: کلاینت `OkHttp` و `Retrofit` مجهز به پشتیبانی از بازتلاش، تایم‌اوت‌های استاندارد و هدرهای امنیتی.
+- **Service Layer**: سرویس فورگراند پیشرفته جهت پایداری بدون وقفه در پس‌زمینه.
+
+---
+
+## 🔒 انطباق با قوانین و حریم خصوصی (Compliance & Privacy)
+
+- برنامه به صورت پیش‌فرض تنها پیامک‌های مربوط به سامانه UTCMS و بارنامه را پردازش و فوروارد می‌کند.
+- کاربر به طور شفاف دسترسی به پیامک‌ها را تایید می‌کند و امکان پاک‌سازی کامل تاریخچه یا غیرفعال‌سازی فوروارد در هر لحظه وجود دارد.
+- مستندات کامل در فایلهای `PRIVACY_POLICY.md`، `ARCHITECTURE.md` و `API_DOCUMENTATION.md` قابل دسترس است.
