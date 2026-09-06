@@ -1,140 +1,181 @@
-# Project Directory Structure: BarPro SMS Forwarder
+# Project Directory Structure: BarPro SMS Forwarder & RPA Backend
+# ساختار جامع دایرکتوری و معماری پروژه بارپرو
 
-This document details the complete filesystem and codebase structure for the **BarPro SMS Forwarder** Android enterprise application.
+این سند ساختار کامل فایل‌ها، ماژول‌ها و وظایف تک‌تک بخش‌های پروژه شامل **اپلیکیشن کلاینت اندروید (BarPro SMS Forwarder)** و **سرویس بک‌اند ابری و اتوماسیون (FastAPI + Redis OTP Vault + Playwright RPA)** را با جزئیات کامل تشریح می‌کند.
+
+---
 
 ```
 barpro-sms-forwarder/
 │
-├── .build-outputs/                     # Compiled APK and test reporting outputs
-├── .env.example                        # Environment variables template for API secrets
-├── .gitignore                          # Git ignore rules for Android/Gradle/Kotlin projects
+├── .build-outputs/                     # خروجی‌های کامپایل‌شده APK و گزارش‌های بیلد
+│   └── app-debug.apk                   # فایل نصبی دیباگ اپلیکیشن اندروید
+├── .env.example                        # فایل نمونه متغیرهای محیطی، کلیدهای محرمانه و تنظیمات سرور
+├── .gitignore                          # قوانین نادیده‌گرفتن فایل‌ها در گیت (Gradle, Python, Pytest)
 │
-├── README.md                           # Comprehensive project overview, badges, features & setup guide
-├── ARCHITECTURE.md                     # Clean Architecture, dual-path reception & data flow diagrams
-├── API_DOCUMENTATION.md                # REST API contracts, JSON schemas, headers, & HMAC auth
-├── USER_GUIDE.md                       # Driver & fleet operator manual for setup, permissions & usage
-├── PRIVACY_POLICY.md                   # Compliance, data minimization, and privacy statements
-├── PROJECT_STRUCTURE.md                # Detailed repository directory tree and file explanations (This file)
+├── README.md                           # مستند اصلی و معرفی جامع پروژه، قابلیت‌ها، پیش‌نیازها و راهنما
+├── ARCHITECTURE.md                     # معماری جامع فنی، دیاگرام‌های جریان داده، دریافت دوگانه و RPA
+├── API_DOCUMENTATION.md                # مستندات کامل وب‌سرویس‌ها، قراردادهای REST، هدرها و کدهای پاسخ
+├── USER_GUIDE.md                       # راهنمای جامع گام‌به‌گام کاربری برای رانندگان ناوگان و اپراتورهای سرور
+├── PRIVACY_POLICY.md                   # بیانیه سیاست‌های حفظ حریم خصوصی، امنیت و عدم ذخیره پیام‌های شخصی
+├── PROJECT_STRUCTURE.md                # ساختار کامل شاخه‌ها، فایل‌ها و توضیح وظایف هر کامپوننت (همین سند)
 │
-├── metadata.json                       # AI Studio project platform identity & configuration
-├── settings.gradle.kts                 # Gradle project and plugin repository settings
-├── build.gradle.kts                    # Root project build configuration
-├── gradle.properties                   # JVM memory options and AndroidX build flags
+├── metadata.json                       # شناسه و پیکربندی پلتفرم AI Studio
+├── settings.gradle.kts                 # پیکربندی پروژه‌ها و مخازن گریدل
+├── build.gradle.kts                    # اسکریپت ریشه بیلد پروژه اندروید
+├── gradle.properties                   # تنظیمات حافظه JVM و فلگ‌های AndroidX
 │
 ├── gradle/
-│   ├── libs.versions.toml              # Centralized version catalog for dependencies and plugins
-│   └── wrapper/                        # Gradle wrapper binaries and properties
+│   ├── libs.versions.toml              # کاتالوگ متمرکز نسخه‌ها، کتابخانه‌ها و پلاگین‌های گریدل
+│   └── wrapper/                        # باینری‌ها و تنظیمات Gradle Wrapper
 │
-└── app/
-    ├── build.gradle.kts                # App-level dependencies (Compose, Room, WorkManager, OkHttp)
-    ├── proguard-rules.pro              # ProGuard / R8 obfuscation and optimization rules
+├── app/                                # ماژول اپلیکیشن اندروید (Client Application)
+│   ├── build.gradle.kts                # وابستگی‌ها و کانفیگ ماژول اپ (Compose, Room, WorkManager, OkHttp)
+│   ├── proguard-rules.pro              # قوانین ProGuard / R8 برای بهینه‌سازی و مینیفای کد
+│   │
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml     # مجوزها (SMS, Notif, Network, Boot)، سرویس‌ها و رسیورها
+│       │   │
+│       │   ├── java/com/example/
+│       │   │   ├── MainActivity.kt                 # اکتیویتی اصلی هاست‌کننده کامپوز و ناوبری صفحات
+│       │   │   ├── SmsForwarderApp.kt              # کلاس Application، راه‌اندازی کانال‌های اعلان و لاگ
+│       │   │   │
+│       │   │   ├── crypto/                         # ماژول امنیت و رمزنگاری پیشرفته کلاینت
+│       │   │   │   ├── AesEncryptionUtils.kt       # رمزنگاری و رمزگشایی متقارن با الگوریتم AES-256-GCM
+│       │   │   │   └── CryptoEngine.kt             # لایه یکپارچه رمزنگاری محتوا و مدیریت کلیدها
+│       │   │   │
+│       │   │   ├── data/                           # لایه داده و پایگاه داده محلی (Data Layer)
+│       │   │   │   ├── local/                      # تعاریف دیتابیس روم و DAOها
+│       │   │   │   │   ├── AppDatabase.kt          # پیکربندی دیتابیس Room و مهاجرت‌ها (Migrations)
+│       │   │   │   │   ├── FilterRuleDao.kt        # عملیات CRUD برای قوانین فیلتر و لیست سفید/سیاه
+│       │   │   │   │   ├── ForwardConfigDao.kt     # دسترسی به آدرس سرور، کلیدهای HMAC و وضعیت سرویس
+│       │   │   │   │   └── ForwardLogDao.kt        # مدیریت تاریخچه پیام‌ها و کوئری صف‌های معوقه آفلاین
+│       │   │   │   │
+│       │   │   │   ├── model/                      # انتیتی‌ها و مدل‌های داده روم (Room Entities)
+│       │   │   │   │   ├── FilterRule.kt           # مدل قوانین فیلتر (پیش‌شماره، کلمات کلیدی، نوع فیلتر)
+│       │   │   │   │   ├── ForwardConfig.kt        # مدل تنظیمات سرور، هدر سکرت، توکن و شناسه راننده
+│       │   │   │   │   └── ForwardLog.kt           # مدل رکوردهای پیامک، وضعیت ارسال، زمان و کدهای استخراجی
+│       │   │   │   │
+│       │   │   │   └── repository/
+│       │   │   │       └── SmsForwardRepository.kt # ریپازیتوری مرکزی مدیریت جریان‌های داده (StateFlow)
+│       │   │   │
+│       │   │   ├── network/                        # لایه شبکه و ارتباط با سرور
+│       │   │   │   ├── DeviceStatusHelper.kt       # استخراج وضعیت دستگاه (مدل، باتری، وضعیت شبکه، سیم‌کارت)
+│       │   │   │   ├── ServerHealthMonitor.kt      # پایش مداوم سلامت سرور، اندازه‌گیری پینگ و لتنسی
+│       │   │   │   └── SmsForwarderClient.kt       # کلاینت OkHttp، امضای HMAC-SHA256 و ارسال درخواست‌ها
+│       │   │   │
+│       │   │   ├── otp/                            # ماژول پردازش و استخراج محلی کد
+│       │   │   │   └── OtpExtractor.kt             # الگوریتم‌های هوشمند شناسایی و استخراج کدهای OTP
+│       │   │   │
+│       │   │   ├── receiver/                       # برودکست رسیورهای سیستم‌عامل اندروید
+│       │   │   │   ├── BootReceiver.kt             # راه‌اندازی خودکار سرویس پس از روشن شدن دستگاه راننده
+│       │   │   │   └── SmsReceiver.kt              # دریافت بلادرنگ پیامک‌ها از Telephony.SMS_RECEIVED
+│       │   │   │
+│       │   │   ├── service/                        # سرویس‌های پس‌زمینه و پردازش ناهمگام
+│       │   │   │   ├── ServerHealthNotifier.kt     # نمایش اعلان‌های سیستمی در صورت بروز اختلال در سرور
+│       │   │   │   ├── SmsForwarderService.kt      # سرویس فورگراند دائم جهت ممانعت از بسته شدن توسط سیستم
+│       │   │   │   ├── SmsNotificationListener.kt  # مسیر پشتیبان دریافت پیامک از نوتیفیکیشن در اندروید ۱۱+
+│       │   │   │   └── SmsSyncWorker.kt            # ورکر WorkManager با بازتلاش نمایی برای مناطق فاقد آنتن
+│       │   │   │
+│       │   │   ├── ui/                             # رابط کاربری مبتنی بر جت‌پک کامپوز و متریال دیزاین ۳
+│       │   │   │   ├── components/
+│       │   │   │   │   └── StatusBadge.kt          # کامپوننت‌های نشانگر وضعیت ارسال (موفق، ناموفق، در صف)
+│       │   │   │   │
+│       │   │   │   ├── screens/
+│       │   │   │   │   ├── DashboardScreen.kt      # داشبورد اصلی: کلید روشن/خاموش، پایش سلامت، آخرین لاگ‌ها
+│       │   │   │   │   ├── LogsScreen.kt           # تاریخچه کامل پیام‌ها، فیلتر، جستجو و کپی سریع OTP
+│       │   │   │   │   ├── RulesScreen.kt          # تعریف و مدیریت قوانین سرشماره و کلمات کلیدی
+│       │   │   │   │   ├── ServerConfigScreen.kt   # تنظیمات سرور، سوییچ خودکار RPA، کلیدها و شناسه راننده
+│       │   │   │   │   ├── PermissionManagerScreen.kt # مدیریت پیشرفته مجوزها با آیکون‌های تایید و فیلترها
+│       │   │   │   │   ├── PermissionDialog.kt     # دیالوگ تعاملی چک‌لیست اعطای مجوزهای برنامه
+│       │   │   │   │   ├── OtpInquiryDialog.kt     # دیالوگ استعلام سریع و کپی کدهای بارنامه و OTP
+│       │   │   │   │   ├── TestSmsDialog.kt        # دیالوگ شبیه‌ساز ارسال پیامک آزمایشی و ارزیابی پاسخ
+│       │   │   │   │   ├── ServerGuideSheet.kt     # راهنمای کشویی پیکربندی سرور و احراز هویت HMAC
+│       │   │   │   │   └── BackgroundExecutionGuideSheet.kt # راهنمای غیرفعال‌سازی محدودیت باتری در برندهای مختلف
+│       │   │   │   │
+│       │   │   │   ├── theme/                      # تم و تایپوگرافی اختصاصی
+│       │   │   │   │   ├── Color.kt                # پالت رنگ متریال ۳ (اقیانوسی تیره و طلایی لوکس)
+│       │   │   │   │   ├── Theme.kt                # پیکربندی تم تاریک/روشن Compose
+│       │   │   │   │   └── Type.kt                 # تایپوگرافی استاندارد متون و اعداد فارسی
+│       │   │   │   │
+│       │   │   │   └── viewmodel/
+│       │   │   │       └── MainViewModel.kt        # ویومدل مرکزی با معماری MVVM و هندلینگ StateFlow
+│       │   │   │
+│       │   │   └── utils/                          # توابع کمکی و پردازشی کلاینت
+│       │   │       ├── PermissionHelper.kt         # بررسی وضعیت مجوزها، باتری و هدایت به تنظیمات سیستم
+│       │   │       ├── SecurityUtils.kt            # تشخیص روت بودن، محیط شبیه‌ساز، Debugger و فایل‌های su
+│       │   │       ├── SignatureUtils.kt           # تولید امضای دیجیتال HMAC-SHA256 برای بدنه بسته‌ها
+│       │   │       └── SmsParser.kt                # پارسر دقیق عبارات منظم برای UTCMS، رهگیری و ارقام فارسی
+│       │   │
+│       │   └── res/                            # منابع گرافیکی، آیکون‌ها و رشته‌های متنی
+│       │       ├── drawable/                   # وکتورها، لوگوی اختصاصی BarPro و پیش‌زمینه آیکون
+│       │       ├── mipmap-*/                   # آیکون‌های ادپتیو برای چگالی‌های مختلف صفحه‌نمایش
+│       │       └── values/
+│       │           ├── strings.xml             # نام برنامه و رشته‌های متنی فارسی
+│       │           ├── colors.xml              # کدهای رنگی ثابت
+│       │           └── themes.xml              # تم‌های سیستمی پنجره و Splash Screen
+│       │
+│       └── test/java/com/example/              # تست‌های واحد، روبولکتریک و اسکرین‌شات
+│           ├── AesEncryptionUtilsTest.kt       # تست‌های واحد رمزنگاری و رمزگشایی AES-256-GCM
+│           ├── ExampleUnitTest.kt              # تست‌های ابتدایی JUnit
+│           ├── ExampleRobolectricTest.kt       # تست‌های محلی JVM با Robolectric برای مجوزها و رسیورها
+│           ├── GreetingScreenshotTest.kt       # تست‌های رگرسیون تصویری با Roborazzi
+│           └── SmsParserTest.kt                # تست‌های جامع نرمال‌سازی ارقام فارسی و استخراج رگکس
+│
+└── backend/                            # ماژول سرور بک‌اند، صندوق OTP و ورکر اتوماسیون (FastAPI + Redis + RPA)
+    ├── app/
+    │   ├── __init__.py                 # مقداردهی پکیج اصلی پایتون
+    │   ├── main.py                     # نقطه ورود اپلیکیشن FastAPI، هندلرهای خطا و اندپوینت /health
+    │   │
+    │   ├── api/                        # مسیریابی و کنترلرهای وب‌سرویس (API Routers)
+    │   │   ├── __init__.py
+    │   │   └── v1/
+    │   │       ├── __init__.py         # تجمیع روت‌های نگارش ۱
+    │   │       └── endpoints/
+    │   │           ├── __init__.py
+    │   │           └── rpa.py          # وب‌هوک /api/v1/rpa/sms-forwarder، اعتبارسنجی سکرت و پاسخ کانونی
+    │   │
+    │   ├── automation/                 # موتور اتوماسیون بارنامه با Playwright
+    │   │   ├── __init__.py
+    │   │   └── waybill_enhanced.py     # کلاس EnhancedWaybillManager، پرکردن فرم، تزریق OTP و ثبت بارنامه
+    │   │
+    │   ├── core/                       # پیکربندی‌های مرکزی، لاگ و اتصالات
+    │   │   ├── __init__.py
+    │   │   ├── config.py               # مدیریت متغیرهای محیطی Pydantic Settings (ردیس، تایم‌اوت‌ها، سکرت)
+    │   │   ├── logging.py              # سیستم لاگ امن، ماسک‌کردن شماره موبایل و جلوگیری از نشت OTP
+    │   │   └── redis.py                # مدیریت کانکشن ردیس، کش محلی، صادرکننده و مشترک‌های اختصاصی Pub/Sub
+    │   │
+    │   ├── schemas/                    # مدل‌ها و اسکیمای Pydantic و Dataclass
+    │   │   ├── __init__.py
+    │   │   └── rpa.py                  # اسکیمای SmsForwarderRequest، پاسخ استاندارد کانونی و Enumهای وضعیت
+    │   │
+    │   ├── services/                   # سرویس‌های زیرساختی کسب‌وکار
+    │   │   ├── __init__.py
+    │   │   └── otp_vault.py            # OtpVaultService: نرمال‌سازی ارقام، تفکیک شماره موبایل، استخراج دقیق ۵ رقمی و ثبت در ردیس
+    │   │
+    │   └── workers/                    # ورکرهای پردازش پس‌زمینه
+    │       ├── __init__.py
+    │       └── waybill_worker.py       # ورکر اجرای ماموریت‌های صدور بارنامه به همراه مدیریت شکست و لاگ
     │
-    └── src/
-        ├── main/
-        │   ├── AndroidManifest.xml     # Permissions (SMS, Notif, Network, Boot), Receivers, Services
-        │   │
-        │   ├── java/com/example/
-        │   │   ├── MainActivity.kt                 # Single-activity host with Compose navigation & dialogs
-        │   │   ├── SmsForwarderApp.kt              # Android Application class (Notification channels init)
-        │   │   │
-        │   │   ├── crypto/
-        │   │   │   └── CryptoEngine.kt             # AES-256-GCM symmetric encryption/decryption utilities
-        │   │   │
-        │   │   ├── data/
-        │   │   │   ├── local/
-        │   │   │   │   ├── AppDatabase.kt          # Room Database definition and schema migrations
-        │   │   │   │   ├── FilterRuleDao.kt        # DAO for whitelist/blacklist rules
-        │   │   │   │   ├── ForwardConfigDao.kt     # DAO for server URL, API keys, and active toggles
-        │   │   │   │   └── ForwardLogDao.kt        # DAO for forwarded SMS records & offline queue queries
-        │   │   │   │
-        │   │   │   ├── model/
-        │   │   │   │   ├── FilterRule.kt           # Entity: Sender prefixes, keywords, action whitelist/blacklist
-        │   │   │   │   ├── ForwardConfig.kt        # Entity: Server endpoint, token, secret, driver ID, toggles
-        │   │   │   │   └── ForwardLog.kt           # Entity: Stored SMS, timestamp, status (SENT/FAILED/PENDING)
-        │   │   │   │
-        │   │   │   └── repository/
-        │   │   │       └── SmsForwardRepository.kt # Repository managing Room DB queries, state flows & logs
-        │   │   │
-        │   │   ├── network/
-        │   │   │   ├── DeviceStatusHelper.kt       # Device info collector (Model, OS, Battery, Network type)
-        │   │   │   ├── ServerHealthMonitor.kt      # Periodic server ping and latency measurement
-        │   │   │   └── SmsForwarderClient.kt       # OkHttp REST client with HMAC signing & retries
-        │   │   │
-        │   │   ├── otp/
-        │   │   │   └── OtpExtractor.kt             # Smart extraction algorithms for 4-8 digit OTP codes
-        │   │   │
-        │   │   ├── receiver/
-        │   │   │   ├── BootReceiver.kt             # Auto-start foreground service on device boot completion
-        │   │   │   └── SmsReceiver.kt              # BroadcastReceiver listening for Telephony.SMS_RECEIVED
-        │   │   │
-        │   │   ├── service/
-        │   │   │   ├── ForegroundForwarderService.kt # Persistent Foreground Service with ongoing notification
-        │   │   │   ├── ServerHealthNotifier.kt     # System notifications for connectivity drops & queue warnings
-        │   │   │   ├── SmsNotificationListener.kt  # Backup NotificationListenerService for Android 11+
-        │   │   │   └── SmsSyncWorker.kt            # WorkManager worker for offline-first exponential retry queue
-        │   │   │
-        │   │   ├── ui/
-        │   │   │   ├── components/
-        │   │   │   │   └── StatusBadge.kt          # Reusable status chip components (SENT, PENDING, FAILED)
-        │   │   │   │
-        │   │   │   ├── screens/
-        │   │   │   │   ├── DashboardScreen.kt      # Main dashboard: Master toggle, health tiles, quick logs
-        │   │   │   │   ├── LogsScreen.kt           # Detailed SMS history with search, filter, OTP copy & retry
-        │   │   │   │   ├── RulesScreen.kt          # Rules management for sender prefixes and keyword filtering
-        │   │   │   │   ├── ServerConfigScreen.kt   # Server endpoint, Driver ID, HMAC secret, encryption keys
-        │   │   │   │   ├── PermissionManagerScreen.kt # Dedicated screen with category filters & M3 status icons
-        │   │   │   │   ├── PermissionDialog.kt     # Full interactive permissions modal & checklist
-        │   │   │   │   ├── OtpInquiryDialog.kt     # Fast lookup dialog for UTCMS waybill & OTP codes
-        │   │   │   │   ├── TestSmsDialog.kt        # Simulator dialog for testing SMS forwarding without real SMS
-        │   │   │   │   ├── ServerGuideSheet.kt     # Bottom sheet guide explaining server endpoint and HMAC auth
-        │   │   │   │   └── BackgroundExecutionGuideSheet.kt # Battery optimization & autostart manufacturer guide
-        │   │   │   │
-        │   │   │   ├── theme/
-        │   │   │   │   ├── Color.kt                # Material 3 dark/golden oceanic color palette
-        │   │   │   │   ├── Theme.kt                # App-level Jetpack Compose MaterialTheme configuration
-        │   │   │   │   └── Type.kt                 # Typography definitions with clean RTL/Persian support
-        │   │   │   │
-        │   │   │   └── viewmodel/
-        │   │   │       └── MainViewModel.kt        # Central ViewModel orchestrating state flows and coroutines
-        │   │   │
-        │   │   └── utils/
-        │   │       ├── PermissionHelper.kt         # Permission verification, battery intent & system settings
-        │   │       ├── SecurityUtils.kt            # Root, su binary, emulator, and debug mode detection
-        │   │       ├── SignatureUtils.kt           # HMAC-SHA256 digital signature generator for payloads
-        │   │       └── SmsParser.kt                # Regex parser for UTCMS waybills, OTPs and Persian digits
-        │   │
-        │   └── res/
-        │       ├── drawable/                       # Vector assets and custom launcher icon XMLs
-        │       ├── mipmap-*/                       # Adaptive launcher icons for all screen densities
-        │       └── values/
-        │           ├── strings.xml                 # Persian localized strings and application name
-        │           └── themes.xml                  # Android system window & splash themes
-        │
-        └── test/java/com/example/
-            ├── ExampleUnitTest.kt                  # Standard JUnit local tests
-            ├── ExampleRobolectricTest.kt           # Robolectric tests for PermissionHelper, rules, and parser
-            ├── GreetingScreenshotTest.kt           # Roborazzi screenshot tests for Compose UI
-            └── SmsParserTest.kt                    # Unit tests validating Persian number normalization and regex
+    └── tests/                          # مجموعه تست‌های خودکار سمت سرور (Pytest)
+        ├── test_foundational_otp.py    # تست‌های پایه نرمال‌سازی ارقام، اعتبارسنجی موبایل و رد شماره‌های نامعتبر
+        ├── test_otp_pipeline.py        # تست پایپ‌لاین کامل استخراج، ذخیره در والت و سابسکرایب Pub/Sub
+        ├── test_sms_forwarder_api.py   # تست اندپوینت وب‌هوک، امضای سکرت، پاسخ کانونی و مدیریت خطاها
+        └── test_staff_verification.py  # تست‌های سناریوی صدور شبانه بارنامه و فرآیند تایید راننده
 ```
 
 ---
 
-## Key Modules Breakdown
+## تشریح تفصیلی لایه‌های سامانه
 
-### 1. Reception & Services (`com.example.receiver` & `com.example.service`)
-- **Dual-Path Reception**: `SmsReceiver` catches incoming SMS broadcasts directly from the telephony stack. In modern Android versions where background broadcast execution may be delayed by aggressive OS battery policies, `SmsNotificationListener` acts as a parallel observer.
-- **Service Continuity**: `ForegroundForwarderService` keeps an ongoing persistent notification to guarantee continuous operation in the background without getting killed by the Android low-memory killer.
+### ۱. کلاینت اندروید (`/app`)
+- **دریافت دو مسیره (Dual-Path Zero-Loss Reception)**: از طریق `SmsReceiver` (رویداد سیستمی تله‌فونی) و `SmsNotificationListener` (شنونده اعلان‌های سیستمی) جهت تضمین دریافت پیام حتی در شرایط شدید محدودیت پس‌زمینه اندروید.
+- **پردازش آفلاین و محلی**: استفاده از دیتابیس `Room` برای نگهداری موقت تمام پیام‌ها و قوانین فیلتر؛ همگام‌سازی تضمینی از طریق `WorkManager` با الگوریتم بازتلاش نمایی (`Exponential Backoff`).
+- **امنیت و رمزنگاری داده‌ها**: امضای بدنه با `HMAC-SHA256` و قابلیت فعال‌سازی رمزنگاری کامل محتوا با `AES-256-GCM` از طریق کلاس `AesEncryptionUtils`.
 
-### 2. Security & Parsing Engine (`com.example.crypto` & `com.example.utils`)
-- **Normalized Regex**: Converts Persian/Arabic digits (۰-۹) into standard digits before parsing waybill numbers (`کد رهگیری`) and verification codes (`OTP`).
-- **HMAC-SHA256 Signatures**: Every forwarded JSON payload carries an `X-Signature` header calculated using the driver's secret key to prevent man-in-the-middle tampering.
-- **AES-256-GCM Encryption**: Optional symmetric encryption for sensitive payload data during transmission over untrusted networks.
+### ۲. سرور بک‌اند و صندوق OTP (`/backend`)
+- **وب‌هوک دریافت پیامک (`/api/v1/rpa/sms-forwarder`)**: دریافت ایمن پیام‌های ارسالی از فورواردر اندروید راننده، بررسی هدر `X-Forwarder-Secret` با مقایسه زمان‌ثابت (`Constant-Time`) و ممانعت از ارسال بسته‌های حجیم یا فاقد مجوز.
+- **صندوق هوشمند و امن ردیس (`Redis OTP Vault`)**: ذخیره کد ۵ رقمی استخراج‌شده در کلید اختصاصی با طول عمر ۱۸۰ ثانیه (TTL 180s) و پخش آنی رویداد روی کانال Pub/Sub برای ورکر در حال انتظار.
+- **موتور اتوماسیون بارنامه (`EnhancedWaybillManager`)**: بازکردن درگاه سامانه بارنامه برخط شهرداری/UTCMS، تکمیل فرم بارنامه، دریافت کد OTP از ردیس در کمتر از چند میلی‌ثانیه و نهایی‌سازی صدور بدون معطلی و با راهبرد Fail-Closed در صورت انقضا.
 
-### 3. Local Persistence & Offline Sync (`com.example.data` & `SmsSyncWorker`)
-- **Room Database**: Complete relational schema storing server configurations, custom filter rules, and comprehensive audit logs of all processed messages.
-- **WorkManager**: Background worker with exponential backoff strategy (`BackoffPolicy.EXPONENTIAL`) that automatically syncs pending or failed SMS packets whenever network connectivity is restored.
-
-### 4. Jetpack Compose UI (`com.example.ui`)
-- Built exclusively with **Material Design 3 (M3)** using a modern Oceanic & Golden palette.
-- **PermissionManagerScreen**: Dedicated permission auditor with filter chips (`SMS`, `Notification`, `Background`) and visual Material 3 status badges (`CheckCircle` vs `Warning`).
-- **RTL & Persian First**: Thoughtfully designed with Right-to-Left layout support and clear Persian typography.

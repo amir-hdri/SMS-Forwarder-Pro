@@ -693,6 +693,20 @@ fun DashboardScreen(
             statusColor = if (securityReport.isRooted) PaletteCoral else PaletteSage
         )
 
+        // Status 7: UTCMS Evening OTP Window (17:30 to 08:00)
+        val isEveningWindow = remember { com.example.utils.SmsParser.isEveningOtpWindow() }
+        StatusTile(
+            icon = Icons.Default.NotificationsActive,
+            iconColor = if (isEveningWindow) PaletteSage else PaletteGold,
+            title = "بازه صدور بارنامه شبانه UTCMS",
+            subtitle = if (isEveningWindow)
+                "هم‌اکنون در بازه فعال صدور خودکار شبانه (۱۷:۳۰ تا ۰۸:۰۰ صبح) قرار دارید."
+            else
+                "بازه کاری اتوماسیون بارپرو: ۱۷:۳۰ بعدازظهر تا ۰۸:۰۰ صبح (سیستم در حالت آماده‌باش است)",
+            statusText = if (isEveningWindow) "ساعت پیک صدور" else "آماده‌باش",
+            statusColor = if (isEveningWindow) PaletteSage else PaletteGold
+        )
+
         // ==========================================
         // 4. QUICK ACTIONS & OFFLINE SYNC
         // ==========================================

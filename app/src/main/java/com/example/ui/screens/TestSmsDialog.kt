@@ -136,15 +136,29 @@ fun TestSmsDialog(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x22F59E0B))
+                            .border(1.dp, Color(0x66F59E0B), RoundedCornerShape(8.dp))
+                            .clickable {
+                                senderInput = "10008545"
+                                messageInput = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد."
+                            }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Text("رمز ۵ رقمی UTCMS (۳۹۱۸۲)", fontSize = 10.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Color(0x2238BDF8))
                             .border(1.dp, Sky400.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                             .clickable {
                                 senderInput = "BAR PRO"
-                                messageInput = "کد ورود به سامانه بارپرو (BarPro): 849201\nمهلت اعتبار ۲ دقیقه"
+                                messageInput = "کد تایید شما برای بارنامه: 48291"
                             }
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
-                        Text("سامانه بارپرو (OTP)", fontSize = 10.sp, color = Sky400, fontWeight = FontWeight.Bold)
+                        Text("بارنامه بارپرو (۴۸۲۹۱)", fontSize = 10.sp, color = Sky400, fontWeight = FontWeight.Bold)
                     }
 
                     Box(

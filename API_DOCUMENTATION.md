@@ -1,27 +1,157 @@
-# BarPro Server API Documentation (مستندات API سرور بارپرو)
+# BarPro API Documentation (مستندات کامل API سرور و وب‌هوک بارپرو)
 
-## Base URL
-```
-POST https://api.barpro.ir/api/v1/sms/forward
-```
-*(قابل تنظیم در بخش تنظیمات اپلیکیشن برای محیط‌های Test / Staging / Production)*
+این مستند تشریح‌کننده کلیه اندپوینت‌ها، هدرهای امنیتی، اسکیمای درخواست‌ها و پاسخ‌های استاندارد سرور مرکزی بارپرو و سرویس اتوماسیون بارنامه (RPA & OTP Vault) می‌باشد.
 
 ---
 
-## 1. Headers
+## فهرست اندپوینت‌ها (API Index)
 
+| متد | مسیر (Path) | کاربرد | احراز هویت |
+|---|---|---|---|
+| `POST` | `/api/v1/rpa/sms-forwarder` | وب‌هوک بلادرنگ دریافت پیامک، استخراج OTP و تزریق به ربات بارنامه | `X-Forwarder-Secret` |
+| `POST` | `/api/v1/sms/forward` | وب‌سرویس عمومی فوروارد لاگ و متادیتای پیامک‌های بارنامه | `HMAC-SHA256` / `Bearer` |
+| `GET` | `/health` | بررسی سلامت سرویس، دیتابیس و وضعیت محیط اجرا | بدون نیاز به احراز هویت |
+
+---
+
+## ۱. وب‌هوک اتوماسیون صدور بارنامه و صندوق OTP (RPA SMS Webhook)
+
+این اندپوینت برای عملیات شبانه و عصرگاهی (۱۷:۳۰ الی ۰۸:۰۰ صبح) به کار می‌رود که رانندگان پیامک‌های سامانه بارنامه شهرداری (UTCMS) را مستقیماً به سمت سامانه ارسال می‌کنند.
+
+### آدرس اندپوینت:
+```http
+POST /api/v1/rpa/sms-forwarder HTTP/1.1
+Content-Type: application/json
+X-Forwarder-Secret: <PRE_SHARED_SECRET>
+```
+
+### هدرهای الزامی و اختیاری:
+| Header | وضعیت | شرح و الزامات | مثال |
+|---|---|---|---|
+| `Content-Type` | الزامی | باید حتماً با `application/json` شروع شود (در غیر این صورت خطای 415) | `application/json` |
+| `X-Forwarder-Secret` | الزامی | کلید امنیتی اختصاصی فورواردر با تطبیق زمان‌ثابت (`Constant-Time`) | `barpro-rpa-secret-2026` |
+| `X-Driver-Phone` | اختیاری | شماره همراه راننده (در صورت ارسال در هدر) | `09333702137` |
+
+### محدودیت‌های سخت‌افزاری و امنیتی:
+- **حداکثر حجم بدنه (Max Body Size)**: ۶۴ کیلوبایت (درخواست‌های بزرگتر خطای `413 Payload Too Large` دریافت می‌کنند).
+- **کنترل طول فیلدها**: حداکثر ۲۰۰۰ کاراکتر برای متن پیامک (`text`) و ۱۰۰ کاراکتر برای شماره فرستنده (`sender`).
+
+### اسکیمای بدنه ارسالی (SmsForwarderRequest):
+سرویس بک‌اند به منظور سازگاری کامل با نگارش‌های مختلف کلاینت اندروید، تنوع‌های نام فیلدها را به صورت منعطف پشتیبانی می‌کند:
+- شماره تلفن: `phone` یا `driver_phone`
+- متن پیامک: `text` یا `message` یا `message_body`
+- فرستنده: `sender` یا `phone_number`
+- برچسب زمان: `timestamp` یا `receivedTimestamp` (میلی‌ثانیه)
+
+```json
+{
+  "phone": "09333702137",
+  "text": "سامانه بارنامه برخط شهرداری: کد ورود شما ۳۹۱۸۲ می باشد.",
+  "sender": "10008545",
+  "timestamp": 1725538341000,
+  "driver_id": "DRV-102938",
+  "document_id": "DOC-WAYBILL-9841",
+  "sms_type": "UTCMS_OTP"
+}
+```
+
+### پاسخ‌های استاندارد کانونی (Canonical Responses):
+
+#### ۱. دریافت موفقیت‌آمیز و استخراج OTP (کد وضعیت 200 OK):
+```json
+{
+  "success": true,
+  "status": "success",
+  "phone": "0933***2137",
+  "message": "OTP accepted",
+  "otp_detected": true,
+  "is_duplicate": false
+}
+```
+*توجه امنیتی:* مقدار خام OTP هرگز در پاسخ API برگردانده نمی‌شود تا از شنود ترافیک جلوگیری گردد؛ کد صرفاً در والت ردیس و کانال رویداد Pub/Sub تزریق می‌شود. همچنین شماره موبایل به صورت خودکار ماسک‌گذاری می‌گردد.
+
+#### ۲. دریافت رویداد تکراری (Idempotent Acknowledgment - کد وضعیت 200 OK):
+```json
+{
+  "success": true,
+  "status": "duplicate",
+  "phone": "0933***2137",
+  "message": "Duplicate SMS event acknowledged (idempotent)",
+  "otp_detected": true,
+  "is_duplicate": true
+}
+```
+
+#### ۳. پیامک فاقد کد معتبر ۵ رقمی (کد وضعیت 200 OK):
+```json
+{
+  "success": false,
+  "status": "no_otp",
+  "phone": "0933***2137",
+  "message": "No valid 5-digit OTP detected in SMS text",
+  "otp_detected": false,
+  "is_duplicate": false
+}
+```
+
+#### ۴. خطای عدم احراز هویت (کد وضعیت 401 Unauthorized):
+```json
+{
+  "success": false,
+  "status": "error",
+  "error": "UNAUTHORIZED",
+  "message": "Authentication failed: Invalid X-Forwarder-Secret.",
+  "detail": "Authentication failed: Invalid X-Forwarder-Secret.",
+  "phone": null,
+  "otp_detected": false,
+  "is_duplicate": false
+}
+```
+
+#### ۵. خطای نامعتبر بودن شماره موبایل یا فرمت داده‌ها (کد وضعیت 422 Unprocessable Entity):
+```json
+{
+  "success": false,
+  "status": "error",
+  "error": "UNPROCESSABLE_ENTITY",
+  "message": "Invalid Iranian mobile phone number format: '02188776655'",
+  "detail": "Invalid Iranian mobile phone number format: '02188776655'",
+  "phone": null,
+  "otp_detected": false,
+  "is_duplicate": false
+}
+```
+
+#### ۶. خطای عدم دسترسی به پایگاه داده یا ردیس (کد وضعیت 503 Service Unavailable):
+```json
+{
+  "success": false,
+  "status": "error",
+  "error": "STORAGE_UNAVAILABLE",
+  "message": "Service temporarily unavailable. Ingestion not safely completed.",
+  "detail": "Service temporarily unavailable. Ingestion not safely completed.",
+  "phone": "0933***2137",
+  "otp_detected": false,
+  "is_duplicate": false
+}
+```
+
+---
+
+## ۲. وب‌سرویس عمومی فوروارد پیامک بارپرو (`/api/v1/sms/forward`)
+
+این اندپوینت برای ثبت لاگ عمومی، پیامک‌های تاییدیه صدور بارنامه، پیامک‌های کسر سهمیه سوخت و هشدارهای جاده‌ای رانندگان به کار می‌رود.
+
+### هدرها:
 | Header | Description | Required | Example |
 |---|---|---|---|
 | `Content-Type` | فرمت بدنه درخواست | بله | `application/json` |
-| `Authorization` | توکن احراز هویت سرویس راننده/ناوگان | اختیاری | `Bearer eyJhbGciOi...` |
-| `X-Signature` | امضای امن دیجیتال متن بدنه با HMAC-SHA256 | بله (در صورت تنظیم Secret) | `a1b2c3d4e5f6...` |
-| `X-Device-Id` | شناسه منحصر‌به‌فرد یا نام دستگاه راننده | بله | `Samsung-SM-G998B` |
-| `X-Driver-Id` | کد شناسایی یا کد ملی راننده ناوگان | اختیاری | `DRV-908172` |
+| `Authorization` | توکن اختیاری کلاینت | اختیاری | `Bearer eyJhbGci...` |
+| `X-Signature` | امضای دیجیتال بدنه با الگوریتم HMAC-SHA256 | الزامی (در صورت تنظیم Secret) | `c8945d81b4f1...` |
+| `X-Device-Id` | شناسه مدل سخت‌افزاری دستگاه | بله | `Samsung-SM-G998B` |
+| `X-Driver-Id` | شناسه اختصاصی راننده | اختیاری | `DRV-908172` |
 
----
-
-## 2. Request Payload Schema
-
+### نمونه بدنه ارسالی (General SMS Forwarding Payload):
 ```json
 {
   "sender": "10001234",
@@ -37,27 +167,7 @@ POST https://api.barpro.ir/api/v1/sms/forward
 }
 ```
 
-### فیلدها و انواع داده:
-- `sender` (string): شماره فرستنده پیامک (مثلا `10001234` یا `UTCMS`).
-- `message` (string): متن کامل پیامک دریافتی.
-- `receivedTimestamp` (long): زمان دریافت پیامک به میلی‌ثانیه (Epoch).
-- `simSlot` (integer): شماره سیم‌کارت دریافت‌کننده (۰ برای سیم‌کارت ۱، ۱ برای سیم‌کارت ۲).
-- `deviceId` (string): نام یا شناسه سخت‌افزاری دستگاه.
-- `driverId` (string): شناسه اختصاصی راننده ناوگان بارپرو.
-- `smsType` (string): نوع پیامک ارزیابی‌شده:
-  - `UTCMS_CONFIRMATION`: تاییدیه صدور یا ترخیص بارنامه
-  - `UTCMS_OTP`: کد تایید و رمز یکبار مصرف ورود راننده یا امضای بارنامه
-  - `UTCMS_WARNING`: هشدارهای سهمیه، تخلف یا انقضای بارنامه
-  - `OTHER`: سایر پیامک‌های عمومی
-- `trackingCode` (string | null): کد رهگیری استخراج‌شده بارنامه (در صورت وجود).
-- `otpCode` (string | null): رمز یکبار مصرف استخراج‌شده (در صورت وجود).
-- `isEncrypted` (boolean): آیا بدنه پیامک با AES-256 رمزنگاری شده است یا خیر.
-
----
-
-## 3. Responses
-
-### Success (200 OK / 201 Created)
+### پاسخ موفقیت (200 OK):
 ```json
 {
   "status": "success",
@@ -67,37 +177,35 @@ POST https://api.barpro.ir/api/v1/sms/forward
 }
 ```
 
-### Error Responses
+---
 
-#### 400 Bad Request
+## ۳. اندپوینت پایش سلامت سیستم (`/health`)
+
+برای نظارت مداوم و مانیتورینگ ابری (Health Check):
+
+### درخواست:
+```http
+GET /health HTTP/1.1
+Host: api.barpro.ir
+```
+
+### پاسخ (200 OK):
 ```json
 {
-  "error": "BAD_REQUEST",
-  "message": "Invalid JSON format or missing required fields"
+  "status": "healthy",
+  "environment": "production"
 }
 ```
 
-#### 401 Unauthorized
-```json
-{
-  "error": "UNAUTHORIZED",
-  "message": "Invalid Bearer Token or HMAC-SHA256 signature mismatch"
-}
-```
+---
 
-#### 429 Too Many Requests (Rate Limiting)
-```json
-{
-  "error": "RATE_LIMIT_EXCEEDED",
-  "message": "Rate limit reached (max 60 requests per minute per device)",
-  "retryAfterSeconds": 15
-}
-```
+## ۴. کلیدها و کانال‌های صندوق OTP ردیس (Redis Schema & Conventions)
 
-#### 500 Internal Server Error
-```json
-{
-  "error": "INTERNAL_ERROR",
-  "message": "BarPro central database unreachable"
-}
-```
+| نام کلید / الگو | نوع داده | زمان حیات (TTL) | شرح |
+|---|---|---|---|
+| `rpa:otp:{phone}` | String (JSON) | ۱۸۰ ثانیه | کلید مقتدرانه نگهداری کد ۵ رقمی و متادیتا |
+| `rpa:otp:{phone}:{doc_id}` | String (JSON) | ۱۸۰ ثانیه | کلید اختصاصی در سناریوهای صدور همزمان چند بارنامه |
+| `rpa:otp:idempotency:{sha256}` | String (JSON) | ۳۰۰ ثانیه | کلید کشف پیام‌های تکراری و جلوگیری از پردازش مضاعف |
+| `rpa:otp:channel:{phone}` | Pub/Sub Channel | - | کانال پخش لحظه‌ای رویداد OTP به ورکر در حال انتظار |
+| `rpa:lock:driver:{phone}` | String (Lock) | ۶۰ ثانیه | قفل توزیع‌شده ممانعت از اجرای همزمان دو ربات برای یک راننده |
+

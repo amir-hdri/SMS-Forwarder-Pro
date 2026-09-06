@@ -49,9 +49,10 @@ object SmsParser {
     )
 
     private val OTP_PATTERNS = listOf(
-        Pattern.compile("""(?:کد\s*(?:تایید|ورود|فعالسازی|فعال‌سازی|صحت‌سنجی|احراز\s*هویت|اعتبارسنجی|پویا|شما|بارپرو|بارنامه|OTP))\s*(?:است|:|=|\s|-)\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""(?:کد\s*(?:تایید|تأیید|ورود|فعالسازی|فعال‌سازی|صحت‌سنجی|احراز\s*هویت|اعتبارسنجی|پویا|شما|بارپرو|بارنامه|OTP))\s*(?:است|:|=|\s|-)\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
         Pattern.compile("""(?:رمز\s*(?:یکبار\s*مصرف|یک‌بار\s*مصرف|پویا|ورود|موقت|شما))\s*(?:است|:|=|\s|-)\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""\b([0-9]{4,6})\b\s*(?:کد\s*تایید|کد\s*ورود|رمز\s*یکبار\s*مصرف|رمز\s*پویا|جهت\s*ورود)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""(?:کد|رمز|تایید|تأیید|otp)[^\d]*(\d{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""\b([0-9]{4,6})\b\s*(?:کد\s*تایید|کد\s*تأیید|کد\s*ورود|رمز\s*یکبار\s*مصرف|رمز\s*پویا|جهت\s*ورود)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
         Pattern.compile("""(?:OTP|Code)\s*[:=]\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE)
     )
 
@@ -115,6 +116,38 @@ object SmsParser {
     }
 
     /**
+     * Normalizes Iranian mobile phone numbers to the canonical 11-digit format starting with 09 (e.g. 09333702137).
+     * Handles:
+     * - Persian/Arabic numerals (۰۱۲۳۴۵۶۷۸۹ -> 0123456789)
+     * - Leading country codes: +989..., 00989..., 989... -> 09...
+     * - 10-digit formats without leading zero: 9333702137 -> 09333702137
+     */
+    fun normalizePhoneNumber(rawPhone: String): String {
+        if (rawPhone.isBlank()) return ""
+        val normalizedDigits = normalizeDigits(rawPhone)
+        var digits = normalizedDigits.replace(Regex("""\D"""), "")
+        if (digits.startsWith("0098")) {
+            digits = "0" + digits.substring(4)
+        } else if (digits.startsWith("98")) {
+            digits = "0" + digits.substring(2)
+        } else if (!digits.startsWith("0") && digits.length == 10) {
+            digits = "0$digits"
+        }
+        return digits
+    }
+
+    /**
+     * Checks if current time is within the evening UTCMS automated OTP issuance window (17:30 to 08:00).
+     */
+    fun isEveningOtpWindow(calendar: java.util.Calendar = java.util.Calendar.getInstance()): Boolean {
+        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(java.util.Calendar.MINUTE)
+        val totalMinutes = hour * 60 + minute
+        // Evening window: 17:30 (1050 mins) to 23:59, and 00:00 to 08:00 (480 mins)
+        return totalMinutes >= 1050 || totalMinutes < 480
+    }
+
+    /**
      * Extracts a tracking / confirmation code (usually 5 to 10 digits).
      */
     fun extractTrackingCode(messageBody: String): String? {
@@ -130,20 +163,29 @@ object SmsParser {
     }
 
     /**
-     * Extracts a 4 to 8 digit verification code (OTP).
+     * Extracts a 4 to 6 digit verification code (OTP), strictly prioritizing 5-digit UTCMS codes.
      */
     fun extractOtp(messageBody: String): String? {
-        val extracted = com.example.otp.OtpExtractor.extractOtp(messageBody)
-        if (!extracted.isNullOrBlank()) return extracted
-
-        val normMsg = normalizeDigits(messageBody)
-        for (pattern in OTP_PATTERNS) {
-            val matcher = pattern.matcher(normMsg)
-            if (matcher.find()) {
-                val code = matcher.group(1)
-                if (!code.isNullOrBlank()) return code
-            }
+        // High-precision UTCMS OTP extraction (matches the BarPro Redis Vault specification)
+        val utcmsOtp = com.example.otp.OtpExtractor.extractUtcMsOtp(messageBody)
+        if (!utcmsOtp.isNullOrBlank()) {
+            return utcmsOtp
         }
-        return null
+
+        // If it is a waybill confirmation without OTP keywords, return null
+        val normMsg = normalizeDigits(messageBody)
+        val isConfirmation = normMsg.contains("ثبت شد") || normMsg.contains("صادر شد") ||
+                normMsg.contains("ثبت گردید") || normMsg.contains("کد رهگیری") ||
+                normMsg.contains("کد ردیابی")
+        val hasOtpKeyword = normMsg.contains("کد تایید") || normMsg.contains("کد تأیید") ||
+                normMsg.contains("رمز یکبار") || normMsg.contains("رمز یک‌بار") ||
+                normMsg.contains("رمز ورود") || normMsg.contains("OTP", ignoreCase = true) ||
+                normMsg.contains("کد ورود")
+
+        if (isConfirmation && !hasOtpKeyword) {
+            return null
+        }
+
+        return com.example.otp.OtpExtractor.extractOtp(messageBody)
     }
 }

@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [FilterRule::class, ForwardLog::class, ForwardConfig::class],
-    version = 3,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -56,15 +56,17 @@ abstract class AppDatabase : RoomDatabase() {
                         ForwardConfig(
                             id = 1,
                             isMasterEnabled = true,
-                            endpointUrl = "https://httpbin.org/post",
-                            authType = AuthType.BEARER_TOKEN,
-                            authHeaderKey = "Authorization",
-                            authHeaderValue = "Bearer barpro-token-secure-2026",
-                            isEncryptionEnabled = true,
-                            secretEncryptionKey = "BarProSecretKey2026AESGCM!",
+                            endpointUrl = "https://api.barpro.ir/api/v1/rpa/sms-forwarder",
+                            authType = AuthType.CUSTOM_HEADER,
+                            authHeaderKey = "X-Forwarder-Secret",
+                            authHeaderValue = "change-me-to-a-secure-random-token",
+                            forwarderSecret = "change-me-to-a-secure-random-token",
+                            isEncryptionEnabled = false,
+                            secretEncryptionKey = "sms-forwarder-secure-key-2026",
                             filterMode = ForwardFilterMode.ALL_MESSAGES,
                             deviceIdentifier = "BarPro Terminal 01",
-                            includeMetadata = true
+                            includeMetadata = true,
+                            driverPhone = "09333702137"
                         )
                     )
 

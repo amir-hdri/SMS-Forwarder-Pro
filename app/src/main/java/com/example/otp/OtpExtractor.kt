@@ -31,10 +31,11 @@ object OtpExtractor {
     // Common Persian and English OTP patterns
     private val KEYWORD_PATTERNS = listOf(
         // Persian patterns
-        Pattern.compile("""(?:کد\s*(?:تایید|ورود|فعالسازی|فعال‌سازی|صحت‌سنجی|احراز\s*هویت|اعتبارسنجی|پویا|شما|بارپرو|بارنامه))\s*(?:است|:|=|\s|-)\s*([0-9]{4,8})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""(?:کد\s*(?:تایید|تأیید|ورود|فعالسازی|فعال‌سازی|صحت‌سنجی|احراز\s*هویت|اعتبارسنجی|پویا|شما|بارپرو|بارنامه))\s*(?:است|:|=|\s|-)\s*([0-9]{4,8})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
         Pattern.compile("""(?:رمز\s*(?:یکبار\s*مصرف|یک‌بار\s*مصرف|پویا|ورود|موقت|شما))\s*(?:است|:|=|\s|-)\s*([0-9]{4,8})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""(?:کد|رمز|تایید|تأیید|otp)[^\d]*(\d{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
         Pattern.compile("""(?:کد|رمز|شناسه|OTP)\s*:\s*([0-9]{4,8})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""([0-9]{4,8})\s*(?:کد\s*تایید|کد\s*ورود|رمز\s*یکبار\s*مصرف|رمز\s*پویا|جهت\s*ورود)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
+        Pattern.compile("""([0-9]{4,8})\s*(?:کد\s*تایید|کد\s*تأیید|کد\s*ورود|رمز\s*یکبار\s*مصرف|رمز\s*پویا|جهت\s*ورود)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
         Pattern.compile("""(?:بارپرو|BarPro)\s*:\s*([0-9]{4,8})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
 
         // English patterns
@@ -47,10 +48,37 @@ object OtpExtractor {
     private val GENERIC_DIGIT_PATTERN = Pattern.compile("""\b([0-9]{4,8})\b""")
 
     /**
+     * Extracts a 5-digit UTCMS OTP or 4-6 digit authentication code from the SMS text.
+     * Complies strictly with the BarPro RPA Webhook / UTCMS OTP Vault specification:
+     * 1. High priority: Standalone 5-digit numeric sequence (\b(\d{5})\b)
+     * 2. Secondary priority: Keywords (تأیید|تایید|رمز|کد|otp) followed by 4-6 digits
+     */
+    fun extractUtcMsOtp(text: String): String? {
+        if (text.isBlank()) return null
+        val normalized = normalizeDigits(text)
+
+        // 1. High priority: Standalone 5-digit sequence (UTCMS standard OTP format)
+        val match5 = Regex("""\b(\d{5})\b""").find(normalized)
+        if (match5 != null) {
+            return match5.groupValues[1]
+        }
+
+        // 2. Secondary priority: Persian/English OTP keyword followed by 4 to 6 digits
+        val matchKeyword = Regex("""(?:تأیید|تایید|رمز|کد|otp)[^\d]*(\d{4,6})""", RegexOption.IGNORE_CASE).find(normalized)
+        if (matchKeyword != null) {
+            return matchKeyword.groupValues[1]
+        }
+
+        return null
+    }
+
+    /**
      * Extracts an OTP / verification code from SMS message text.
      * Supports both Persian and English text and numerals.
      */
     fun extractOtp(rawMessage: String): String? {
+        val utcmsOtp = extractUtcMsOtp(rawMessage)
+        if (utcmsOtp != null) return utcmsOtp
         return extractOtp(sender = "", rawMessage = rawMessage).code
     }
 
@@ -59,6 +87,19 @@ object OtpExtractor {
      */
     fun extractOtp(sender: String, rawMessage: String, timestamp: Long = System.currentTimeMillis()): OtpResult {
         val normalized = normalizeDigits(rawMessage)
+
+        // 0. Check UTCMS 5-digit OTP first
+        val utcmsCode = extractUtcMsOtp(rawMessage)
+        if (utcmsCode != null) {
+            return OtpResult(
+                code = utcmsCode,
+                confidence = 0.98f,
+                matchedPattern = "UTCMS 5-Digit Vault OTP",
+                sender = sender,
+                originalMessage = rawMessage,
+                timestamp = timestamp
+            )
+        }
 
         // 1. Try keyword-based high-confidence regex patterns
         for (pattern in KEYWORD_PATTERNS) {

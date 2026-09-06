@@ -5,6 +5,7 @@ import com.example.data.model.AuthType
 import com.example.data.model.ForwardConfig
 import com.example.data.model.ForwardLog
 import com.example.otp.OtpExtractor
+import com.example.utils.SmsParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -112,11 +113,18 @@ class SmsForwarderClient {
         val ruleLabel = matchedRule?.label ?: (if (config.filterMode == com.example.data.model.ForwardFilterMode.ALL_MESSAGES) "All Messages" else "Unmatched")
         val rulePattern = matchedRule?.senderPattern ?: ""
 
+        val normalizedDriverPhone = SmsParser.normalizePhoneNumber(
+            config.driverPhone.ifBlank { "09333702137" }
+        )
+
         // Build the inner raw SMS data with rich sender and routing metadata
         val rawData = JSONObject().apply {
             put("event", "SMS_RECEIVED")
+            put("phone", normalizedDriverPhone)
+            put("text", messageBody)
             put("driver_id", config.driverId)
             put("driver_name", config.driverFullName)
+            put("driver_phone", normalizedDriverPhone)
             put("sender", sender)
             put("phone_number", sender)
             put("message", messageBody)
@@ -152,12 +160,18 @@ class SmsForwarderClient {
 
         // Encrypt if enabled
         val transmissionJson = JSONObject().apply {
+            // Root-level fields strictly required by BarPro FastAPI SmsForwarderPayload
+            put("phone", normalizedDriverPhone)
+            put("text", messageBody)
+            put("sender", sender)
+            put("timestamp", timestamp)
+
             put("version", "1.0")
             put("type", "SMS_FORWARD")
-            put("timestamp", System.currentTimeMillis())
             put("device_id", config.deviceIdentifier)
             put("driver_id", config.driverId)
-            put("sender", sender)
+            put("driver_name", config.driverFullName)
+            put("driver_phone", normalizedDriverPhone)
             put("phone_number", sender)
             put("message_body", messageBody)
             put("sms_type", smsType.name)
@@ -190,6 +204,14 @@ class SmsForwarderClient {
         val client = buildOkHttpClient(config.timeoutSeconds)
         val requestBody = transmissionJson.toString().toRequestBody(jsonMediaType)
 
+        val forwarderSecret = when {
+            config.forwarderSecret.isNotBlank() -> config.forwarderSecret.trim()
+            config.authType == AuthType.CUSTOM_HEADER && config.authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true) -> config.authHeaderValue.trim()
+            config.authType == AuthType.API_KEY_HEADER -> config.authHeaderValue.trim()
+            config.secretEncryptionKey.isNotBlank() -> config.secretEncryptionKey.trim()
+            else -> config.authHeaderValue.trim()
+        }
+
         val requestBuilder = Request.Builder()
             .url(config.endpointUrl.trim())
             .post(requestBody)
@@ -199,12 +221,17 @@ class SmsForwarderClient {
             .addHeader("X-Forwarder-Device", config.deviceIdentifier)
             .addHeader("X-Device-Id", config.deviceIdentifier)
             .addHeader("X-Driver-Id", config.driverId)
+            .addHeader("X-Driver-Phone", normalizedDriverPhone)
             .addHeader("X-Signature", signature)
             .addHeader("X-SMS-Type", smsType.name)
             .addHeader("X-Forwarder-Sender", sender)
             .addHeader("X-Forwarder-Rule", ruleLabel)
             .addHeader("X-Forwarder-Pattern", rulePattern)
             .addHeader("X-Forwarder-Sim", simSlot)
+
+        if (forwarderSecret.isNotBlank()) {
+            requestBuilder.addHeader("X-Forwarder-Secret", forwarderSecret)
+        }
 
         if (trackingCode != null) {
             requestBuilder.addHeader("X-Tracking-Code", trackingCode)
@@ -231,17 +258,23 @@ class SmsForwarderClient {
 
                 if (response.isSuccessful) {
                     val duration = System.currentTimeMillis() - startTime
+                    val bodyJson = try { JSONObject(responseBody) } catch (e: Exception) { null }
+                    val serverExtractedCode = bodyJson?.optString("extracted_code", null) ?: bodyJson?.optString("otp_code", null)
+                    val finalOtp = if (!serverExtractedCode.isNullOrBlank()) serverExtractedCode else extractedOtp
+                    val isServerSuccess = bodyJson?.optBoolean("success", true) ?: true
+                    val serverMsg = bodyJson?.optString("message", null)
+
                     return@withContext TransmissionResult(
-                        isSuccess = true,
+                        isSuccess = isServerSuccess,
                         httpStatusCode = response.code,
                         responseBody = lastResponseBody,
-                        errorMessage = null,
+                        errorMessage = if (!isServerSuccess) (serverMsg ?: "کد OTP در متن پیامک شناسایی نشد") else null,
                         payloadSent = payloadJsonString,
                         isEncrypted = isEncrypted,
                         durationMs = duration,
                         smsType = smsType,
                         trackingCode = trackingCode,
-                        otpCode = extractedOtp,
+                        otpCode = finalOtp,
                         signature = signature
                     )
                 }
@@ -254,11 +287,19 @@ class SmsForwarderClient {
 
                 // Client error (4xx) - don't retry, return failure
                 val duration = System.currentTimeMillis() - startTime
+                val clientErrorMessage = when (response.code) {
+                    401 -> "خطای احراز هویت (401 Unauthorized): کلید X-Forwarder-Secret با تنظیمات سرور مطابقت ندارد."
+                    403 -> "دسترسی غیرمجاز (403 Forbidden): سرور اجازه انتقال پیامک را به این راننده نداد."
+                    404 -> "مسیر وب‌هوک یافت نشد (404 Not Found): آدرس وب‌هوک /api/v1/rpa/sms-forwarder را بررسی فرمایید."
+                    422 -> "خطای ساختار داده (422 Unprocessable Entity): پارامترهای ارسالی با ساختار SmsForwarderPayload همخوانی ندارد."
+                    429 -> "محدودیت نرخ ارسال (429 Rate Limit): تعداد درخواست‌ها فراتر از سقف مجاز است."
+                    else -> "خطای وب‌سرویس: کد ${response.code} (${response.message})"
+                }
                 return@withContext TransmissionResult(
                     isSuccess = false,
                     httpStatusCode = response.code,
                     responseBody = lastResponseBody,
-                    errorMessage = "خطای وب‌سرویس: کد ${response.code} (${response.message})",
+                    errorMessage = clientErrorMessage,
                     payloadSent = payloadJsonString,
                     isEncrypted = isEncrypted,
                     durationMs = duration,
@@ -520,11 +561,20 @@ class SmsForwarderClient {
         secretKey: String,
         deviceIdentifier: String
     ): TransmissionResult = withContext(Dispatchers.IO) {
+        val forwarderSecret = if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true) && authHeaderValue.isNotBlank()) {
+            authHeaderValue
+        } else if (secretKey.isNotBlank()) {
+            secretKey
+        } else {
+            authHeaderValue
+        }
+
         val testConfig = ForwardConfig(
             endpointUrl = endpointUrl,
             authType = authType,
             authHeaderKey = authHeaderKey,
             authHeaderValue = authHeaderValue,
+            forwarderSecret = forwarderSecret,
             isEncryptionEnabled = isEncryptionEnabled,
             secretEncryptionKey = secretKey,
             deviceIdentifier = deviceIdentifier,
@@ -533,8 +583,8 @@ class SmsForwarderClient {
         )
 
         forwardMessage(
-            sender = "+19995550123",
-            messageBody = "تست اتصال BarPro: اعتبارسنجی وب‌سرویس و رمزنگاری [کد: 849201]",
+            sender = "10008545",
+            messageBody = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد.",
             timestamp = System.currentTimeMillis(),
             config = testConfig
         )

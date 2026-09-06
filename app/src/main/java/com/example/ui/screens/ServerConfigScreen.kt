@@ -121,6 +121,7 @@ fun ServerConfigScreen(
     var healthFailureThreshold by remember(config) { mutableStateOf(config.healthFailureThreshold) }
     var driverId by remember(config) { mutableStateOf(config.driverId) }
     var driverFullName by remember(config) { mutableStateOf(config.driverFullName) }
+    var driverPhone by remember(config) { mutableStateOf(config.driverPhone) }
     var filterUtcmsOnly by remember(config) { mutableStateOf(config.filterUtcmsOnly) }
     var enableWorkManagerSync by remember(config) { mutableStateOf(config.enableWorkManagerSync) }
 
@@ -202,6 +203,59 @@ fun ServerConfigScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
+
+                    // Quick Preset for BarPro RPA Webhook / UTCMS OTP Vault
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0x1A38BDF8))
+                            .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(12.dp))
+                            .clickable {
+                                val rpaUrl = "https://api.barpro.ir/api/v1/rpa/sms-forwarder"
+                                val rpaHeaderKey = "X-Forwarder-Secret"
+                                val rpaHeaderVal = if (authHeaderValue.isBlank() || authHeaderValue.contains("Bearer")) "change-me-to-a-secure-random-token" else authHeaderValue
+                                url = rpaUrl
+                                authType = AuthType.CUSTOM_HEADER
+                                authHeaderKey = rpaHeaderKey
+                                authHeaderValue = rpaHeaderVal
+                                onSaveConfig(
+                                    config.copy(
+                                        endpointUrl = rpaUrl,
+                                        authType = AuthType.CUSTOM_HEADER,
+                                        authHeaderKey = rpaHeaderKey,
+                                        authHeaderValue = rpaHeaderVal
+                                    )
+                                )
+                                Toast.makeText(context, "الگوی وب‌هوک RPA بارپرو و هدر X-Forwarder-Secret اعمال شد", Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Sky400,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "تنظیم خودکار وب‌هوک RPA بارپرو (صندوق OTP)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Sky400
+                                )
+                                Text(
+                                    text = "/api/v1/rpa/sms-forwarder با هدر X-Forwarder-Secret (صدور خودکار ۱۷:۳۰ تا ۰۸:۰۰)",
+                                    fontSize = 10.sp,
+                                    color = Slate300
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     OutlinedTextField(
                         value = url,
@@ -406,6 +460,38 @@ fun ServerConfigScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = driverPhone,
+                        onValueChange = {
+                            driverPhone = it
+                            onSaveConfig(config.copy(driverPhone = it))
+                        },
+                        label = { Text("شماره همراه راننده (سیم‌کارت دریافت‌کننده پیامک)") },
+                        placeholder = { Text("09333702137") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Emerald400,
+                            unfocusedBorderColor = Slate800,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Slate950,
+                            unfocusedContainerColor = Slate950
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    val normalizedPhonePreview = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
+                    if (driverPhone.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "فرمت استاندارد وب‌هوک و ردیس: $normalizedPhonePreview",
+                            fontSize = 11.sp,
+                            color = if (normalizedPhonePreview.startsWith("09") && normalizedPhonePreview.length == 11) Emerald400 else Rose400
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -686,9 +772,9 @@ fun ServerConfigScreen(
                     ) {
                         OutlinedTextField(
                             value = when (authType) {
+                                AuthType.CUSTOM_HEADER -> if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) "وب‌هوک اتوماسیون بارپرو (X-Forwarder-Secret)" else "هدر سفارشی ($authHeaderKey)"
                                 AuthType.BEARER_TOKEN -> "توکن Bearer"
                                 AuthType.API_KEY_HEADER -> "کلید اختصاصی API (هدر X-API-KEY)"
-                                AuthType.CUSTOM_HEADER -> "هدر سفارشی"
                                 AuthType.NONE -> "بدون احراز هویت"
                             },
                             onValueChange = {},
@@ -714,7 +800,16 @@ fun ServerConfigScreen(
                             modifier = Modifier.background(Slate900)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("توکن Bearer (پیش‌فرض)", color = Color.White) },
+                                text = { Text("وب‌هوک اتوماسیون بارپرو (X-Forwarder-Secret)", color = Color.White, fontWeight = FontWeight.Bold) },
+                                onClick = {
+                                    authType = AuthType.CUSTOM_HEADER
+                                    authHeaderKey = "X-Forwarder-Secret"
+                                    onSaveConfig(config.copy(authType = AuthType.CUSTOM_HEADER, authHeaderKey = "X-Forwarder-Secret", forwarderSecret = authHeaderValue))
+                                    authDropdownExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("توکن Bearer", color = Color.White) },
                                 onClick = {
                                     authType = AuthType.BEARER_TOKEN
                                     authHeaderKey = "Authorization"
@@ -749,9 +844,38 @@ fun ServerConfigScreen(
                             value = authHeaderValue,
                             onValueChange = {
                                 authHeaderValue = it
-                                onSaveConfig(config.copy(authHeaderValue = it))
+                                onSaveConfig(
+                                    config.copy(
+                                        authHeaderValue = it,
+                                        forwarderSecret = if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) it else config.forwarderSecret
+                                    )
+                                )
                             },
-                            label = { Text("مقدار توکن / API Key") },
+                            label = {
+                                Text(
+                                    if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true))
+                                        "کلید امنیتی وب‌هوک (X-Forwarder-Secret)"
+                                    else
+                                        "مقدار توکن / API Key"
+                                )
+                            },
+                            placeholder = {
+                                Text(
+                                    if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true))
+                                        "change-me-to-a-secure-random-token"
+                                    else
+                                        "Bearer token یا API key"
+                                )
+                            },
+                            supportingText = {
+                                if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) {
+                                    Text(
+                                        "این مقدار باید با متغیر SMS_FORWARDER_SECRET روی سرور FastAPI یکسان باشد (خطای ۴۰۱ در صورت مغایرت)",
+                                        fontSize = 11.sp,
+                                        color = Sky400
+                                    )
+                                }
+                            },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Indigo400,

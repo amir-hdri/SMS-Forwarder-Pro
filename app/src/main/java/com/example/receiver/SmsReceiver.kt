@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Telephony
 import android.telephony.SmsMessage
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.model.ForwardStatus
@@ -18,6 +19,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class SmsReceiver : BroadcastReceiver() {
+
+    companion object {
+        private const val TAG = "SmsReceiver"
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION &&
@@ -29,10 +34,14 @@ class SmsReceiver : BroadcastReceiver() {
         val messages: Array<SmsMessage>? = try {
             Telephony.Sms.Intents.getMessagesFromIntent(intent)
         } catch (e: Exception) {
+            Log.e(TAG, "Error extracting SMS messages from intent", e)
             null
         }
 
-        if (messages.isNullOrEmpty()) return
+        if (messages.isNullOrEmpty()) {
+            Log.w(TAG, "Received SMS intent but messages array is null or empty")
+            return
+        }
 
         // Group messages by sender in case multiple chunks arrived
         val sender = messages[0].displayOriginatingAddress ?: messages[0].originatingAddress ?: "Unknown"
@@ -54,6 +63,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         val messageText = fullMessageBody.toString()
+        Log.i(TAG, "Incoming SMS detected | Sender: $sender | Length: ${messageText.length} | Slot: $simSlot")
 
         val pendingResult = goAsync()
         val repository = SmsForwardRepository.getInstance(context)
@@ -69,12 +79,14 @@ class SmsReceiver : BroadcastReceiver() {
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                Log.d(TAG, "Processing incoming SMS from $sender...")
                 val log = repository.processIncomingSms(
                     sender = sender,
                     messageBody = messageText,
                     receivedTimestamp = timestamp,
                     simSlot = simSlot
                 )
+                Log.i(TAG, "SMS processed successfully | LogID: ${log.id} | Status: ${log.status} | HTTP: ${log.httpStatusCode} | Extracted OTP: ${log.otpCode ?: "None"}")
 
                 // Show notification if message was forwarded or failed and notifications are enabled
                 val config = repository.getConfig()
@@ -82,7 +94,7 @@ class SmsReceiver : BroadcastReceiver() {
                     showForwardNotification(context, sender, log.status)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Exception while processing incoming SMS from $sender", e)
             } finally {
                 try {
                     if (wakeLock?.isHeld == true) {

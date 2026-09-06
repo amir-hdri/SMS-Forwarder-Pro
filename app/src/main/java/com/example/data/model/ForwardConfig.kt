@@ -20,14 +20,15 @@ data class ForwardConfig(
     @PrimaryKey
     val id: Int = 1, // Single row configuration
     val isMasterEnabled: Boolean = true,
-    val endpointUrl: String = "https://webhook.site/placeholder",
-    val authType: AuthType = AuthType.BEARER_TOKEN,
-    val authHeaderKey: String = "Authorization",
-    val authHeaderValue: String = "Bearer secret-token-12345",
-    val isEncryptionEnabled: Boolean = true,
+    val endpointUrl: String = "https://api.barpro.ir/api/v1/rpa/sms-forwarder",
+    val authType: AuthType = AuthType.CUSTOM_HEADER,
+    val authHeaderKey: String = "X-Forwarder-Secret",
+    val authHeaderValue: String = "change-me-to-a-secure-random-token",
+    val forwarderSecret: String = "change-me-to-a-secure-random-token", // کلید امنیتی اختصاصی X-Forwarder-Secret
+    val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو با HTTPS و JSON استاندارد کار می‌کند
     val secretEncryptionKey: String = "sms-forwarder-secure-key-2026",
     val filterMode: ForwardFilterMode = ForwardFilterMode.ALL_MESSAGES,
-    val deviceIdentifier: String = "Android Device",
+    val deviceIdentifier: String = "BarPro Terminal 01",
     val includeMetadata: Boolean = true,
     val showForegroundNotification: Boolean = true,
     val maxRetries: Int = 2,
@@ -41,6 +42,7 @@ data class ForwardConfig(
     // BarPro Multi-driver and UTCMS automation settings:
     val driverId: String = "DRV-102938", // کد ملی یا شناسه اختصاصی راننده
     val driverFullName: String = "راننده ناوگان بارپرو",
+    val driverPhone: String = "09333702137", // شماره سیم‌کارت راننده جهت احراز هویت در وب‌هوک و ردیس
     val autoExtractOtp: Boolean = true,
     val autoExtractTrackingCode: Boolean = true,
     val filterUtcmsOnly: Boolean = false, // فیلتر هوشمند پیامک‌ها (فقط بارنامه و OTP)

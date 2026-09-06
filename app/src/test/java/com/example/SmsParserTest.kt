@@ -51,6 +51,62 @@ class SmsParserTest {
     }
 
     @Test
+    fun testExtractOtp_pdfPlanCases() {
+        // Case 1: English 5-digit code
+        val msg1 = "کد تایید شما برای بارنامه: 48291"
+        assertEquals("48291", SmsParser.extractOtp(msg1))
+
+        // Case 2: Persian 5-digit code with multi-line message
+        val msg2 = "سامانه بارنامه\nکد تایید: ۲۱۴۵۹\nاین کد را به راننده تحویل ندهید."
+        assertEquals("21459", SmsParser.extractOtp(msg2))
+
+        // Case 3: Municipal Waybill OTP from spec
+        val msg3 = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد"
+        assertEquals("39182", SmsParser.extractOtp(msg3))
+
+        // Case 4: Confirmation message with no OTP - should return null
+        val msgNoOtp = "بارنامه با موفقیت ثبت شد"
+        assertNull(SmsParser.extractOtp(msgNoOtp))
+    }
+
+    @Test
+    fun testNormalizePhoneNumber_allFormats() {
+        // International with +
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("+989333702137"))
+        // International without +
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("989333702137"))
+        // International with 00
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("00989333702137"))
+        // 10 digits without leading zero
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("9333702137"))
+        // Standard 11 digits
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("09333702137"))
+        // Persian digits
+        assertEquals("09333702137", SmsParser.normalizePhoneNumber("۰۹۳۳۳۷۰۲۱۳۷"))
+    }
+
+    @Test
+    fun testEveningOtpWindow() {
+        val eveningCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 18)
+            set(java.util.Calendar.MINUTE, 0)
+        }
+        assertTrue(SmsParser.isEveningOtpWindow(eveningCal))
+
+        val nightCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 2)
+            set(java.util.Calendar.MINUTE, 30)
+        }
+        assertTrue(SmsParser.isEveningOtpWindow(nightCal))
+
+        val dayCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 12)
+            set(java.util.Calendar.MINUTE, 0)
+        }
+        assertFalse(SmsParser.isEveningOtpWindow(dayCal))
+    }
+
+    @Test
     fun testDetectSmsType() {
         val confirmMsg = "بارنامه شما در سامانه UTCMS صادر شد. کد رهگیری: 55443322"
         assertEquals(SmsType.UTCMS_CONFIRMATION, SmsParser.detectSmsType(confirmMsg))
