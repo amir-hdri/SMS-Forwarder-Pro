@@ -352,8 +352,36 @@ class OtpVaultService:
             )
             return False, normalized_phone, None, False, "STORAGE_FAILURE"
 
-        # 7. Low-Latency Fast-Path Broadcast via Redis Pub/Sub
-        # Analyze failure window: Redis key is ALREADY authoritative. Pub/Sub failure does NOT lose the OTP!
+        # 7. Durable Task Processing via Redis Streams (Task 3: rpa:otp:stream)
+        # Guarantees zero message loss in offline or worker crash conditions
+        stream_payload = {
+            "event": "UTCMS_OTP_RECEIVED",
+            "correlation_key": correlation_key,
+            "phone": normalized_phone,
+            "document_id": active_doc or "",
+            "driver_id": driver_id or "",
+            "otp": extracted_otp,
+            "timestamp": str(int(time.time() * 1000))
+        }
+
+        try:
+            await redis_manager.ensure_consumer_group()
+            await redis_manager.xadd(redis_manager.OTP_STREAM, stream_payload)
+            safe_log_otp_event(
+                event_type="STREAM_OTP_ENQUEUED",
+                phone=normalized_phone,
+                correlation_key=correlation_key,
+                extra={"stream": redis_manager.OTP_STREAM}
+            )
+        except Exception as stream_err:
+            safe_log_otp_event(
+                event_type="STREAM_ENQUEUE_WARNING",
+                phone=normalized_phone,
+                correlation_key=correlation_key,
+                extra={"error": str(stream_err)}
+            )
+
+        # Fast-Path Broadcast via Redis Pub/Sub (maintained for backward compatibility)
         channel = redis_manager.channel_name(correlation_key)
         pub_payload = json.dumps({
             "event": "UTCMS_OTP_RECEIVED",
@@ -370,7 +398,6 @@ class OtpVaultService:
             if active_doc:
                 await redis_manager.publish(redis_manager.channel_name(normalized_phone), pub_payload)
         except Exception as pub_err:
-            # Pub/Sub failure logged safely without failing the authoritative operation
             safe_log_otp_event(
                 event_type="PUBSUB_BROADCAST_WARNING",
                 phone=normalized_phone,

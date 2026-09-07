@@ -2,6 +2,7 @@ package com.example
 
 import com.example.crypto.AesEncryptionUtils
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,12 +53,25 @@ class AesEncryptionUtilsTest {
     }
 
     @Test
-    fun testHmacVerification() {
+    fun testHmacVerificationConstantTime() {
         val data = "test-payload-to-sign"
         val hmac = AesEncryptionUtils.computeHmac(data, testSecretKey)
 
         assertTrue(AesEncryptionUtils.verifyHmac(data, hmac, testSecretKey))
-        org.junit.Assert.assertFalse(AesEncryptionUtils.verifyHmac(data, "invalidHmac", testSecretKey))
+        assertFalse(AesEncryptionUtils.verifyHmac(data, "invalidHmac", testSecretKey))
+        assertFalse(AesEncryptionUtils.verifyHmac(data, "", testSecretKey))
+    }
+
+    @Test
+    fun testPbkdf2WithSaltDerivation() {
+        val salt1 = "RandomSalt123456".toByteArray()
+        val key1 = AesEncryptionUtils.deriveKey(testSecretKey, salt1)
+        val key2 = AesEncryptionUtils.deriveKey(testSecretKey, salt1)
+        assertEquals(key1, key2)
+
+        val salt2 = "DifferentSalt987".toByteArray()
+        val key3 = AesEncryptionUtils.deriveKey(testSecretKey, salt2)
+        assertNotEquals(key1.encoded.toList(), key3.encoded.toList())
     }
 
     @Test

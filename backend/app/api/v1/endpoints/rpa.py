@@ -1,11 +1,14 @@
 import hmac
 import json
+import time
 from typing import Dict, Any, Tuple, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, Security, status
 from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.redis import redis_manager
+from app.core.limiter import limiter
 from app.schemas.rpa import (
     SmsForwarderRequest,
     SmsForwarderCanonicalResponse,
@@ -19,6 +22,45 @@ from app.core.logging import safe_log_otp_event, mask_phone
 router = APIRouter()
 
 MAX_PAYLOAD_BYTES = 64 * 1024 # 64 KB maximum request body
+
+async def validate_replay_protection(
+    x_timestamp: Optional[str],
+    x_nonce: Optional[str]
+) -> None:
+    """
+    TASK 2: End-to-End Replay Protection.
+    1. Reject if X-Timestamp is older than 5 minutes (300 seconds).
+    2. Check X-Nonce against Redis using SETNX with 5-minute TTL (300s).
+       If key already exists, reject as Replay Attack (HTTP 409 Conflict).
+    """
+    if x_timestamp:
+        try:
+            ts = float(x_timestamp)
+            if ts > 1e11:
+                ts = ts / 1000.0
+            current_time = time.time()
+            if abs(current_time - ts) > 300:
+                safe_log_otp_event("stale_timestamp_rejected", extra={"x_timestamp": x_timestamp})
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Request rejected: X-Timestamp is older than 5 minutes."
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid X-Timestamp header format."
+            )
+
+    if x_nonce:
+        clean_nonce = x_nonce.strip()
+        nonce_key = f"rpa:nonce:{clean_nonce}"
+        nonce_acquired = await redis_manager.setnx(nonce_key, 300, str(time.time()))
+        if not nonce_acquired:
+            safe_log_otp_event("replay_attack_detected", extra={"x_nonce": clean_nonce})
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Replay attack detected: X-Nonce has already been used."
+            )
 
 api_key_header_scheme = APIKeyHeader(
     name="X-Forwarder-Secret", 
@@ -85,16 +127,19 @@ def verify_forwarder_secret(
     status_code=status.HTTP_200_OK,
     responses={
         200: {"description": "SMS successfully ingested or recognized as idempotent duplicate"},
-        400: {"model": ErrorResponse, "description": "Malformed JSON or bad request"},
+        400: {"model": ErrorResponse, "description": "Malformed JSON or bad request / stale timestamp"},
         401: {"model": ErrorResponse, "description": "Unauthorized - Missing or invalid secret"},
+        409: {"model": ErrorResponse, "description": "Conflict - Replay attack detected (duplicate X-Nonce)"},
         413: {"model": ErrorResponse, "description": "Payload Too Large (> 64KB)"},
         415: {"model": ErrorResponse, "description": "Unsupported Media Type (Non-JSON Content-Type)"},
         422: {"model": ErrorResponse, "description": "Unprocessable Entity - Invalid phone or fields"},
+        429: {"model": ErrorResponse, "description": "Too Many Requests - Rate limit exceeded (60/min)"},
         503: {"model": ErrorResponse, "description": "Storage Unavailable - Ingestion not safely completed"}
     },
     summary="Ingest incoming SMS from Android Forwarder for UTCMS RPA Waybill Automation",
-    description="Authenticates forwarder, extracts strictly 5-digit OTP, stores authoritatively in Redis, broadcasts Pub/Sub event, and handles deduplication."
+    description="Authenticates forwarder, validates replay protection, extracts strictly 5-digit OTP, stores authoritatively in Redis, enqueues to Redis Streams, and handles deduplication."
 )
+@limiter.limit("60/minute")
 async def ingest_sms_forwarder(
     request: Request,
     _auth: str = Depends(verify_forwarder_secret)
@@ -102,6 +147,7 @@ async def ingest_sms_forwarder(
     """
     Production Endpoint: POST /api/v1/rpa/sms-forwarder
     Pipeline:
+    0. Replay Protection (X-Timestamp freshness & X-Nonce deduplication)
     1. Size & Content-Type Protection
     2. Authentication (Handled via Depends)
     3. Pydantic validation
@@ -109,9 +155,14 @@ async def ingest_sms_forwarder(
     5. OTP extraction & validation
     6. Correlation & Idempotency
     7. Authoritative Redis Vault storage
-    8. Pub/Sub notification
+    8. Redis Streams queue dispatch
     9. Canonical Response (Never exposes raw OTP)
     """
+    # 0. Replay Attack Protection (Task 2)
+    x_timestamp = request.headers.get("X-Timestamp") or request.headers.get("x-timestamp")
+    x_nonce = request.headers.get("X-Nonce") or request.headers.get("x-nonce")
+    await validate_replay_protection(x_timestamp, x_nonce)
+
     # 1. Content-Type check
     content_type = request.headers.get("content-type", "")
     if not content_type.lower().startswith("application/json"):
@@ -288,6 +339,43 @@ class RpaWebhookHandler:
                 "error": "UNAUTHORIZED",
                 "message": "Invalid or missing X-Forwarder-Secret header"
             }
+
+        # 1b. Replay Attack Protection (Task 2)
+        x_timestamp = headers.get("X-Timestamp") or headers.get("x-timestamp")
+        x_nonce = headers.get("X-Nonce") or headers.get("x-nonce")
+        if x_timestamp:
+            try:
+                ts = float(x_timestamp)
+                if ts > 1e11:
+                    ts = ts / 1000.0
+                if abs(time.time() - ts) > 300:
+                    safe_log_otp_event("stale_timestamp_rejected", extra={"x_timestamp": x_timestamp})
+                    return 400, {
+                        "status": "error",
+                        "success": False,
+                        "error": "BAD_REQUEST",
+                        "message": "Request rejected: X-Timestamp is older than 5 minutes."
+                    }
+            except ValueError:
+                return 400, {
+                    "status": "error",
+                    "success": False,
+                    "error": "BAD_REQUEST",
+                    "message": "Invalid X-Timestamp header format."
+                }
+
+        if x_nonce:
+            clean_nonce = x_nonce.strip()
+            nonce_key = f"rpa:nonce:{clean_nonce}"
+            nonce_acquired = await redis_manager.setnx(nonce_key, 300, str(time.time()))
+            if not nonce_acquired:
+                safe_log_otp_event("replay_attack_detected", extra={"x_nonce": clean_nonce})
+                return 409, {
+                    "status": "error",
+                    "success": False,
+                    "error": "CONFLICT",
+                    "message": "Replay attack detected: X-Nonce has already been used."
+                }
 
         # 2. Parse & Validate Payload Schema
         try:

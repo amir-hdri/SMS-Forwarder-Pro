@@ -1,7 +1,6 @@
 package com.example.crypto
 
 import android.util.Base64
-import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -24,6 +23,10 @@ data class DecryptionResult(
     val errorMessage: String?
 )
 
+/**
+ * Hardened enterprise CryptoEngine for AES-256-GCM encryption/decryption,
+ * leveraging PBKDF2WithHmacSHA256 key derivation with salt and constant-time HMAC comparison.
+ */
 object CryptoEngine {
     private const val GCM_TAG_LENGTH_BITS = 128
     private const val GCM_IV_LENGTH_BYTES = 12
@@ -31,12 +34,10 @@ object CryptoEngine {
     private const val HMAC_ALGORITHM = "HmacSHA256"
 
     /**
-     * Derives a 256-bit AES Key Spec from user secret string using SHA-256.
+     * Derives a 256-bit AES Key Spec from user secret string using PBKDF2WithHmacSHA256.
      */
     private fun deriveKey(secretKeyString: String): SecretKeySpec {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val keyBytes = digest.digest(secretKeyString.toByteArray(StandardCharsets.UTF_8))
-        return SecretKeySpec(keyBytes, "AES")
+        return AesEncryptionUtils.deriveKey(secretKeyString)
     }
 
     /**
@@ -118,15 +119,22 @@ object CryptoEngine {
     }
 
     /**
+     * Verifies HMAC signature using constant-time byte comparison (MessageDigest.isEqual)
+     * to eliminate timing side-channel attacks.
+     */
+    fun verifyHmac(data: String, receivedHmac: String, secretKey: String): Boolean {
+        if (receivedHmac.isBlank() || secretKey.isBlank()) return false
+        val calculated = computeHmac(data, secretKey)
+        return MessageDigest.isEqual(
+            calculated.toByteArray(StandardCharsets.UTF_8),
+            receivedHmac.toByteArray(StandardCharsets.UTF_8)
+        )
+    }
+
+    /**
      * Generates a cryptographically strong 32-character random key.
      */
     fun generateRandomKey(length: Int = 32): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%^&*-_="
-        val random = SecureRandom()
-        val sb = StringBuilder(length)
-        for (i in 0 until length) {
-            sb.append(chars[random.nextInt(chars.length)])
-        }
-        return sb.toString()
+        return AesEncryptionUtils.generateSecureKey(length)
     }
 }

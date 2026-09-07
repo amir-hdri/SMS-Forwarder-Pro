@@ -13,5 +13,6 @@ class SmsForwarderApp : Application() {
         super.onCreate()
         repository = SmsForwardRepository.getInstance(this)
         com.example.service.ServerHealthNotifier.ensureChannel(this)
+        com.example.service.CleanupWorker.schedule(this)
     }
 }

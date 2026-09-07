@@ -54,9 +54,18 @@ interface ForwardLogDao {
     @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'SKIPPED'")
     fun getSkippedCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'PENDING'")
+    fun getPendingCount(): Flow<Int>
+
+    @Query("SELECT * FROM forward_logs WHERE status = 'PENDING' ORDER BY receivedTimestamp ASC LIMIT :limit")
+    suspend fun getPendingLogs(limit: Int = 20): List<ForwardLog>
+
     @Query("SELECT * FROM forward_logs WHERE status = 'FAILED' ORDER BY receivedTimestamp ASC LIMIT :limit")
     suspend fun getFailedLogs(limit: Int = 20): List<ForwardLog>
 
     @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'FAILED'")
     suspend fun getFailedLogsCountDirect(): Int
+
+    @Query("DELETE FROM forward_logs WHERE status = 'SUCCESS' AND receivedTimestamp < :cutoffTimestamp")
+    suspend fun deleteOldSuccessfulLogs(cutoffTimestamp: Long): Int
 }

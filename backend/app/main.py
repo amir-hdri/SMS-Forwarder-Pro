@@ -5,6 +5,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1 import api_v1_router
 from app.core.config import settings
 from app.core.logging import safe_log_otp_event
+from app.core.limiter import limiter, RateLimitExceeded
 
 def create_application() -> FastAPI:
     """
@@ -21,6 +22,27 @@ def create_application() -> FastAPI:
         redoc_url="/redoc"
     )
 
+    application.state.limiter = limiter
+
+    # RateLimitExceeded Exception Handler (HTTP 429)
+    @application.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        detail_msg = getattr(exc, "detail", "Rate limit exceeded (60 requests per minute).")
+        safe_log_otp_event("rate_limit_exceeded", extra={"detail": detail_msg})
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "success": False,
+                "status": "error",
+                "error": "RATE_LIMIT_EXCEEDED",
+                "message": detail_msg,
+                "detail": detail_msg,
+                "phone": None,
+                "otp_detected": False,
+                "is_duplicate": False
+            }
+        )
+
     # Standardized Exception Handler for all HTTPExceptions
     @application.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -29,9 +51,11 @@ def create_application() -> FastAPI:
             401: "UNAUTHORIZED",
             403: "FORBIDDEN",
             404: "NOT_FOUND",
+            409: "CONFLICT",
             413: "PAYLOAD_TOO_LARGE",
             415: "UNSUPPORTED_MEDIA_TYPE",
             422: "UNPROCESSABLE_ENTITY",
+            429: "RATE_LIMIT_EXCEEDED",
             500: "INTERNAL_SERVER_ERROR",
             503: "SERVICE_UNAVAILABLE"
         }

@@ -22,7 +22,7 @@ data class ForwardLog(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val sender: String,
-    val messageBody: String,
+    val messageBody: String, // Sanitized & redacted (OTP & sensitive numbers masked)
     val receivedTimestamp: Long = System.currentTimeMillis(),
     val forwardedTimestamp: Long? = null,
     val status: ForwardStatus = ForwardStatus.PENDING,
@@ -37,9 +37,10 @@ data class ForwardLog(
     val driverId: String = "",
     val smsType: SmsType = SmsType.OTHER,
     val trackingCode: String? = null,
-    val otpCode: String? = null,
+    val otpCode: String? = null, // Masked (***)
     val signature: String? = null,
     val retryCount: Int = 0,
     val lastRetryTimestamp: Long? = null,
-    val simSlot: String = "SIM 1"
+    val simSlot: String = "SIM 1",
+    val encryptedBody: String? = null // AES-256 encrypted raw payload for outbox transmission without plaintext persistence
 )

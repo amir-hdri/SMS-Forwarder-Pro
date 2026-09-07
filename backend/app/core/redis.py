@@ -39,17 +39,24 @@ class DedicatedPubSubSubscriber:
 
 class RedisManager:
     """
-    Authoritative Redis Vault & Dedicated Pub/Sub Fast-Path Engine.
+    Authoritative Redis Vault & Durable Stream Processing Engine.
     Implements:
     - Authoritative key storage (rpa:otp:{correlation_key})
     - Real idempotency (rpa:otp:idempotency:{fingerprint})
-    - Dedicated Pub/Sub subscribers (rpa:otp:channel:{correlation_key})
+    - Durable Redis Streams (rpa:otp:stream) with Consumer Groups (rpa_workers)
     - Race-free wait_for_otp() with authoritative re-checking and guaranteed cleanup
     """
+    OTP_STREAM: str = "rpa:otp:stream"
+    CONSUMER_GROUP: str = "rpa_workers"
+
     def __init__(self, redis_url: Optional[str] = None):
         self.redis_url = redis_url or settings.REDIS_URL
         self._in_memory_store: Dict[str, Tuple[str, float]] = {} # key -> (val, expire_at)
         self._subscribers: Dict[str, list[asyncio.Queue]] = {}
+        self._streams: Dict[str, list[Tuple[str, Dict[str, Any]]]] = {}
+        self._stream_groups: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._stream_events: Dict[str, asyncio.Event] = {}
+        self._msg_seq: int = 0
 
     # Key Architecture (Section 8)
     @staticmethod
@@ -174,6 +181,169 @@ class RedisManager:
     async def unsubscribe(self, channel: str, queue: asyncio.Queue) -> None:
         """Backward-compatible unsubscription method."""
         await self._unsubscribe_queue(channel, queue)
+
+    # =========================================================================
+    # REDIS STREAMS DURABLE QUEUE ARCHITECTURE (TASK 3)
+    # Stream: rpa:otp:stream | Group: rpa_workers
+    # =========================================================================
+    async def xadd(
+        self,
+        stream: str,
+        fields: Dict[str, Any],
+        maxlen: Optional[int] = None
+    ) -> str:
+        """
+        Appends an entry to the durable Redis Stream.
+        Returns the generated message ID.
+        """
+        self._msg_seq += 1
+        msg_id = f"{int(time.time() * 1000)}-{self._msg_seq}"
+        if stream not in self._streams:
+            self._streams[stream] = []
+
+        clean_fields = {k: str(v) for k, v in fields.items()}
+        self._streams[stream].append((msg_id, clean_fields))
+
+        if maxlen and len(self._streams[stream]) > maxlen:
+            self._streams[stream] = self._streams[stream][-maxlen:]
+
+        if stream in self._stream_events:
+            self._stream_events[stream].set()
+
+        return msg_id
+
+    async def xgroup_create(
+        self,
+        stream: str,
+        group: str,
+        id: str = "$",
+        mkstream: bool = True
+    ) -> bool:
+        """
+        Creates a consumer group on the stream.
+        Handles BUSYGROUP gracefully without raising an error.
+        """
+        if stream not in self._streams and mkstream:
+            self._streams[stream] = []
+
+        group_key = (stream, group)
+        if group_key in self._stream_groups:
+            return True
+
+        start_idx = len(self._streams.get(stream, [])) - 1 if id == "$" else -1
+        self._stream_groups[group_key] = {
+            "last_delivered_idx": start_idx,
+            "pel": {}
+        }
+        return True
+
+    async def ensure_consumer_group(
+        self,
+        stream: str = OTP_STREAM,
+        group: str = CONSUMER_GROUP
+    ) -> bool:
+        """Ensures the consumer group exists on the stream."""
+        return await self.xgroup_create(stream, group, id="0", mkstream=True)
+
+    async def xreadgroup(
+        self,
+        group: str,
+        consumer: str,
+        streams: Dict[str, str],
+        count: int = 1,
+        block: Optional[int] = None
+    ) -> list[Tuple[str, list[Tuple[str, Dict[str, Any]]]]]:
+        """
+        Reads entries from streams using a consumer group.
+        Handles both new entries (">") and pending entries ("0").
+        """
+        results: list[Tuple[str, list[Tuple[str, Dict[str, Any]]]]] = []
+
+        for stream_name, stream_id in streams.items():
+            await self.ensure_consumer_group(stream_name, group)
+            group_key = (stream_name, group)
+            group_state = self._stream_groups[group_key]
+            stream_entries = self._streams.get(stream_name, [])
+
+            entries_to_deliver: list[Tuple[str, Dict[str, Any]]] = []
+
+            if stream_id == ">":
+                start_idx = group_state["last_delivered_idx"] + 1
+
+                if start_idx >= len(stream_entries) and block and block > 0:
+                    if stream_name not in self._stream_events:
+                        self._stream_events[stream_name] = asyncio.Event()
+                    self._stream_events[stream_name].clear()
+                    try:
+                        await asyncio.wait_for(
+                            self._stream_events[stream_name].wait(),
+                            timeout=block / 1000.0
+                        )
+                    except asyncio.TimeoutError:
+                        pass
+                    stream_entries = self._streams.get(stream_name, [])
+
+                while start_idx < len(stream_entries) and len(entries_to_deliver) < count:
+                    msg_id, fields = stream_entries[start_idx]
+                    entries_to_deliver.append((msg_id, fields))
+                    group_state["pel"][msg_id] = {
+                        "consumer": consumer,
+                        "delivery_time": time.time(),
+                        "fields": fields
+                    }
+                    group_state["last_delivered_idx"] = start_idx
+                    start_idx += 1
+
+            elif stream_id == "0":
+                for msg_id, pel_item in list(group_state["pel"].items()):
+                    if pel_item["consumer"] == consumer or not consumer:
+                        entries_to_deliver.append((msg_id, pel_item["fields"]))
+                        if len(entries_to_deliver) >= count:
+                            break
+
+            if entries_to_deliver:
+                results.append((stream_name, entries_to_deliver))
+
+        return results
+
+    async def xack(
+        self,
+        stream: str,
+        group: str,
+        *ids: str
+    ) -> int:
+        """
+        Acknowledges messages in the consumer group, removing them from the PEL.
+        Returns the count of successfully acknowledged messages.
+        """
+        group_key = (stream, group)
+        if group_key not in self._stream_groups:
+            return 0
+
+        pel = self._stream_groups[group_key]["pel"]
+        acked_count = 0
+        for msg_id in ids:
+            if msg_id in pel:
+                del pel[msg_id]
+                acked_count += 1
+        return acked_count
+
+    async def xlen(self, stream: str) -> int:
+        """Returns length of the stream."""
+        return len(self._streams.get(stream, []))
+
+    async def xrange(
+        self,
+        stream: str,
+        min_id: str = "-",
+        max_id: str = "+",
+        count: Optional[int] = None
+    ) -> list[Tuple[str, Dict[str, Any]]]:
+        """Returns entries from stream."""
+        entries = self._streams.get(stream, [])
+        if count:
+            return entries[:count]
+        return entries
 
     # Section 11: wait_for_otp with 10-Step Reconciliation Strategy
     async def wait_for_otp(

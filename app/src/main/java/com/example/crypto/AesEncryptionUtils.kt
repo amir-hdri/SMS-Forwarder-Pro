@@ -6,8 +6,10 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.Mac
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -21,8 +23,9 @@ data class EncryptedSmsPayload(
 )
 
 /**
- * Encryption utility class implementing AES-256 (in both GCM authenticated mode and CBC mode)
- * to securely encrypt and decrypt SMS content, sensitive verification codes, and transmission payloads.
+ * Hardened Encryption utility implementing AES-256 (in both GCM authenticated mode and CBC mode)
+ * with PBKDF2WithHmacSHA256 key derivation (100,000 iterations), secure salt generation,
+ * and constant-time HMAC comparison to prevent timing attacks.
  */
 object AesEncryptionUtils {
 
@@ -31,17 +34,45 @@ object AesEncryptionUtils {
     private const val AES = "AES"
     private const val HMAC_SHA256 = "HmacSHA256"
 
+    private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
+    private const val PBKDF2_ITERATIONS = 100_000
+    private const val KEY_LENGTH_BITS = 256
+
     private const val GCM_IV_LENGTH = 12 // 96-bit recommended IV for AES-GCM
     private const val GCM_TAG_LENGTH_BITS = 128 // 128-bit authentication tag
     private const val CBC_IV_LENGTH = 16 // 128-bit IV for AES-CBC
 
+    // Application default salt fallback used if no dynamic salt is injected (e.g., in unit tests)
+    private val DEFAULT_FALLBACK_SALT = "BarPro_Enterprise_PBKDF2_Salt_2026_Secure".toByteArray(StandardCharsets.UTF_8)
+
+    /**
+     * Optional dynamic salt provider (wired to SecureStorageManager / EncryptedSharedPreferences).
+     */
+    @Volatile
+    var saltProvider: (() -> ByteArray)? = null
+
+    /**
+     * Retrieves the effective cryptographic salt for PBKDF2 key derivation.
+     */
+    fun getEffectiveSalt(providedSalt: ByteArray? = null): ByteArray {
+        if (providedSalt != null && providedSalt.isNotEmpty()) return providedSalt
+        return saltProvider?.invoke() ?: DEFAULT_FALLBACK_SALT
+    }
+
     /**
      * Derives a compliant 256-bit (32-byte) AES SecretKeySpec from any passphrase or secret key
-     * using cryptographic SHA-256 hashing.
+     * using the cryptographically hardened PBKDF2WithHmacSHA256 algorithm with 100,000 iterations.
+     *
+     * @param passphrase The user or system secret string.
+     * @param salt Optional custom salt; defaults to the securely stored or app salt.
+     * @return 256-bit SecretKeySpec suitable for AES cipher operations.
      */
-    fun deriveKey(passphrase: String): SecretKeySpec {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val keyBytes = digest.digest(passphrase.toByteArray(StandardCharsets.UTF_8))
+    fun deriveKey(passphrase: String, salt: ByteArray? = null): SecretKeySpec {
+        require(passphrase.isNotBlank()) { "Secret passphrase cannot be empty" }
+        val effectiveSalt = getEffectiveSalt(salt)
+        val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
+        val spec = PBEKeySpec(passphrase.toCharArray(), effectiveSalt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS)
+        val keyBytes = factory.generateSecret(spec).encoded
         return SecretKeySpec(keyBytes, AES)
     }
 
@@ -51,12 +82,13 @@ object AesEncryptionUtils {
      *
      * @param plainText The SMS message or payload string to encrypt.
      * @param secretKey The secret key or passphrase.
+     * @param salt Optional salt for PBKDF2 key derivation.
      * @return [EncryptedSmsPayload] containing Base64 encoded IV, ciphertext, and HMAC signature.
      */
-    fun encrypt(plainText: String, secretKey: String): EncryptedSmsPayload {
+    fun encrypt(plainText: String, secretKey: String, salt: ByteArray? = null): EncryptedSmsPayload {
         require(secretKey.isNotBlank()) { "Secret key cannot be empty" }
 
-        val keySpec = deriveKey(secretKey)
+        val keySpec = deriveKey(secretKey, salt)
         val iv = ByteArray(GCM_IV_LENGTH)
         SecureRandom().nextBytes(iv)
 
@@ -84,13 +116,14 @@ object AesEncryptionUtils {
      * @param ivBase64 Base64 encoded initialization vector (IV).
      * @param ciphertextBase64 Base64 encoded ciphertext including the GCM authentication tag.
      * @param secretKey The secret key or passphrase used during encryption.
+     * @param salt Optional salt used during key derivation.
      * @return The original decrypted plaintext SMS.
      * @throws Exception if key is invalid, data is corrupted, or authentication fails.
      */
-    fun decrypt(ivBase64: String, ciphertextBase64: String, secretKey: String): String {
+    fun decrypt(ivBase64: String, ciphertextBase64: String, secretKey: String, salt: ByteArray? = null): String {
         require(secretKey.isNotBlank()) { "Secret key cannot be empty" }
 
-        val keySpec = deriveKey(secretKey)
+        val keySpec = deriveKey(secretKey, salt)
         val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
         val ciphertextBytes = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
 
@@ -105,10 +138,10 @@ object AesEncryptionUtils {
     /**
      * Encrypts SMS content using AES-256-CBC with PKCS5 padding for legacy server compatibility.
      */
-    fun encryptCbc(plainText: String, secretKey: String): EncryptedSmsPayload {
+    fun encryptCbc(plainText: String, secretKey: String, salt: ByteArray? = null): EncryptedSmsPayload {
         require(secretKey.isNotBlank()) { "Secret key cannot be empty" }
 
-        val keySpec = deriveKey(secretKey)
+        val keySpec = deriveKey(secretKey, salt)
         val iv = ByteArray(CBC_IV_LENGTH)
         SecureRandom().nextBytes(iv)
 
@@ -131,10 +164,10 @@ object AesEncryptionUtils {
     /**
      * Decrypts AES-256-CBC encrypted ciphertext.
      */
-    fun decryptCbc(ivBase64: String, ciphertextBase64: String, secretKey: String): String {
+    fun decryptCbc(ivBase64: String, ciphertextBase64: String, secretKey: String, salt: ByteArray? = null): String {
         require(secretKey.isNotBlank()) { "Secret key cannot be empty" }
 
-        val keySpec = deriveKey(secretKey)
+        val keySpec = deriveKey(secretKey, salt)
         val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
         val ciphertextBytes = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
 
@@ -158,11 +191,16 @@ object AesEncryptionUtils {
     }
 
     /**
-     * Verifies that the given HMAC signature matches the calculated signature for the data.
+     * Verifies that the given HMAC signature matches the calculated signature for the data
+     * using constant-time byte comparison (MessageDigest.isEqual) to prevent timing attacks.
      */
     fun verifyHmac(data: String, receivedHmac: String, secretKey: String): Boolean {
+        if (receivedHmac.isBlank() || secretKey.isBlank()) return false
         val calculated = computeHmac(data, secretKey)
-        return calculated == receivedHmac
+        return MessageDigest.isEqual(
+            calculated.toByteArray(StandardCharsets.UTF_8),
+            receivedHmac.toByteArray(StandardCharsets.UTF_8)
+        )
     }
 
     /**

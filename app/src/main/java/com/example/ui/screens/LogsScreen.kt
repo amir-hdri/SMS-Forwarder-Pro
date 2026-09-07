@@ -101,13 +101,13 @@ fun LogsScreen(
     var selectedLogForDetail by remember { mutableStateOf<ForwardLog?>(null) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
-    val tabs = listOf("همه", "موفق", "ناموفق", "رد شده")
+    val tabs = listOf("همه", "موفق", "ناموفق", "رد شده", "در انتظار")
     val currentTabIndex = when (selectedFilter) {
         null -> 0
         ForwardStatus.SUCCESS -> 1
         ForwardStatus.FAILED -> 2
         ForwardStatus.SKIPPED -> 3
-        ForwardStatus.PENDING -> 0
+        ForwardStatus.PENDING -> 4
     }
 
     Column(
@@ -164,6 +164,7 @@ fun LogsScreen(
                             1 -> ForwardStatus.SUCCESS
                             2 -> ForwardStatus.FAILED
                             3 -> ForwardStatus.SKIPPED
+                            4 -> ForwardStatus.PENDING
                             else -> null
                         }
                         onFilterChanged(filter)
@@ -532,7 +533,22 @@ private fun LogDetailDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Raw SMS message
-                Text("متن پیامک دریافتی", fontSize = 11.sp, color = Slate400)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("متن پیامک (ماسک‌شده جهت حریم خصوصی)", fontSize = 11.sp, color = Slate400)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0x2210B981))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text("DLP Redacted", fontSize = 9.sp, color = Emerald400, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

@@ -98,6 +98,9 @@ class SmsForwarderClient {
         var payloadJsonString = ""
         var isEncrypted = false
 
+        val currentTimestampSeconds = System.currentTimeMillis() / 1000L
+        val nonce = java.util.UUID.randomUUID().toString()
+
         // Extract OTP and Tracking code and detect SMS type
         val smsType = com.example.utils.SmsParser.detectSmsType(messageBody)
         val trackingCode = com.example.utils.SmsParser.extractTrackingCode(messageBody)
@@ -106,7 +109,8 @@ class SmsForwarderClient {
             driverId = config.driverId,
             phoneNumber = sender,
             messageBody = messageBody,
-            timestamp = timestamp,
+            timestamp = currentTimestampSeconds,
+            nonce = nonce,
             secretKey = config.secretEncryptionKey
         )
 
@@ -139,6 +143,9 @@ class SmsForwarderClient {
             if (extractedOtp != null) {
                 put("otp_code", extractedOtp)
             }
+            put("nonce", nonce)
+            put("x_nonce", nonce)
+            put("x_timestamp", currentTimestampSeconds)
             put("signature", signature)
             put("device_info", JSONObject().apply {
                 put("imei", config.deviceIdentifier)
@@ -217,6 +224,8 @@ class SmsForwarderClient {
             .post(requestBody)
             .addHeader("Content-Type", "application/json")
             .addHeader("User-Agent", "BarPro-Forwarder-Android/1.0")
+            .addHeader("X-Timestamp", currentTimestampSeconds.toString())
+            .addHeader("X-Nonce", nonce)
             .addHeader("X-Forwarder-Type", "SMS_FORWARD")
             .addHeader("X-Forwarder-Device", config.deviceIdentifier)
             .addHeader("X-Device-Id", config.deviceIdentifier)
@@ -362,12 +371,16 @@ class SmsForwarderClient {
 
             val client = buildOkHttpClient(10)
             val requestBody = heartbeatJson.toString().toRequestBody(jsonMediaType)
+            val hbTimestamp = System.currentTimeMillis() / 1000L
+            val hbNonce = java.util.UUID.randomUUID().toString()
 
             val requestBuilder = Request.Builder()
                 .url(config.endpointUrl.trim())
                 .post(requestBody)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("User-Agent", "BarPro-Forwarder-Android/1.0")
+                .addHeader("X-Timestamp", hbTimestamp.toString())
+                .addHeader("X-Nonce", hbNonce)
                 .addHeader("X-Forwarder-Type", "HEARTBEAT")
                 .addHeader("X-Forwarder-Device", config.deviceIdentifier)
 
@@ -515,10 +528,15 @@ class SmsForwarderClient {
 
             val client = buildOkHttpClient(config.timeoutSeconds)
             val requestBody = root.toString().toRequestBody(jsonMediaType)
+            val batchTimestamp = System.currentTimeMillis() / 1000L
+            val batchNonce = java.util.UUID.randomUUID().toString()
+
             val requestBuilder = Request.Builder()
                 .url(config.endpointUrl.trim())
                 .post(requestBody)
                 .addHeader("Content-Type", "application/json")
+                .addHeader("X-Timestamp", batchTimestamp.toString())
+                .addHeader("X-Nonce", batchNonce)
                 .addHeader("X-Forwarder-Type", "BATCH_SYNC")
                 .addHeader("X-Forwarder-Batch-Size", logs.size.toString())
                 .addHeader("X-Forwarder-Device", config.deviceIdentifier)
@@ -646,12 +664,16 @@ class SmsForwarderClient {
 
             payloadJsonString = rootJson.toString(2)
             val body = payloadJsonString.toRequestBody(jsonMediaType)
+            val resTimestamp = System.currentTimeMillis() / 1000L
+            val resNonce = java.util.UUID.randomUUID().toString()
 
             val requestBuilder = Request.Builder()
                 .url(config.endpointUrl.trim())
                 .post(body)
                 .addHeader("Content-Type", "application/json")
                 .addHeader("User-Agent", "BarPro-Forwarder-Android/1.0")
+                .addHeader("X-Timestamp", resTimestamp.toString())
+                .addHeader("X-Nonce", resNonce)
                 .addHeader("X-Forwarder-Device", config.deviceIdentifier)
                 .addHeader("X-Forwarder-Type", "OTP_RESPONSE")
                 .addHeader("X-Forwarder-Sender", sender)
