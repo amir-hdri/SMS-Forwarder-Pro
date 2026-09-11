@@ -244,13 +244,20 @@ class OtpVaultService:
         if cls.is_bank_or_ad_content(normalized):
             return None
 
+        # Phase 0: Direct BarPro Emergency Fallback Format (e.g. BARPRO#DRV-102#09333...#OTP#39182)
+        if "barpro#" in normalized or (normalized.startswith("barpro") and "#" in normalized):
+            for part in normalized.split("#"):
+                clean_part = part.strip()
+                if len(clean_part) == 5 and clean_part.isdigit():
+                    return clean_part
+
         # Phase 1: Contextual OTP extraction with strict 5-digit boundary and strong keywords
         context_pattern = (
             r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|سامانه\s*بارنامه|"
             r"کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|"
             r"کد\s*اعتبارسنجی|کد\s*احراز|کد\s*فعالسازی|"
-            r"(?:بارنامه|بارپرو|utcms)[^\d]*(?:کد|رمز|otp)|"
-            r"(?:کد|رمز|otp)[^\d]*(?:بارنامه|بارپرو|utcms)|"
+            r"(?:بارنامه|بارپرو|utcms|سوخت)[^\d]*(?:کد|رمز|otp)|"
+            r"(?:کد|رمز|otp)[^\d]*(?:بارنامه|بارپرو|utcms|سوخت)|"
             r"auth\s*code|verification\s*code)"
             r"[\s:=،ـ\-_]*"
             r"(?<!\d)(\d{5})(?!\d)"
@@ -274,8 +281,11 @@ class OtpVaultService:
             if cls.validate_otp(code):
                 return code
 
-        # Phase 3: Isolated standalone 5-digit fallback ONLY if transit/waybill context exists
-        has_transit_context = any(term in normalized for term in ["بارنامه", "بارپرو", "utcms", "راهداری", "شهرداری", "باربرگ"])
+        # Phase 3: Isolated standalone 5-digit fallback ONLY if transit/fuel/waybill context exists
+        has_transit_context = any(term in normalized for term in [
+            "بارنامه", "بارپرو", "utcms", "راهداری", "شهرداری", "باربرگ",
+            "سوخت", "سهمیه", "پیمایش", "کارت سوخت", "نفت گاز", "گازوئیل"
+        ])
         if has_transit_context:
             all_numeric_tokens = re.findall(r"(?<!\d)(\d+)(?!\d)", normalized)
             five_digit_tokens = [tok for tok in all_numeric_tokens if len(tok) == 5]

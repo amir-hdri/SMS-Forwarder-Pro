@@ -51,13 +51,20 @@ class SmsForwarderClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    private fun buildOkHttpClient(timeoutSeconds: Int): OkHttpClient {
-        return OkHttpClient.Builder()
-            .connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-            .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-            .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
+    private fun buildOkHttpClient(timeoutSeconds: Int, fastTimeoutMs: Long? = null): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+        if (fastTimeoutMs != null && fastTimeoutMs > 0) {
+            builder.connectTimeout(fastTimeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(fastTimeoutMs, TimeUnit.MILLISECONDS)
+                .writeTimeout(fastTimeoutMs, TimeUnit.MILLISECONDS)
+                .retryOnConnectionFailure(false)
+        } else {
+            builder.connectTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+                .readTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+                .writeTimeout(timeoutSeconds.toLong(), TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+        }
+        return builder.build()
     }
 
     private fun applyAuthHeaders(builder: Request.Builder, config: ForwardConfig) {
@@ -92,7 +99,8 @@ class SmsForwarderClient {
         timestamp: Long,
         config: ForwardConfig,
         matchedRule: com.example.data.model.FilterRule? = null,
-        simSlot: String = "SIM 1"
+        simSlot: String = "SIM 1",
+        fastTimeoutMs: Long? = null
     ): TransmissionResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         var payloadJsonString = ""
@@ -208,7 +216,7 @@ class SmsForwarderClient {
         }
 
         payloadJsonString = transmissionJson.toString(2)
-        val client = buildOkHttpClient(config.timeoutSeconds)
+        val client = buildOkHttpClient(config.timeoutSeconds, fastTimeoutMs)
         val requestBody = transmissionJson.toString().toRequestBody(jsonMediaType)
 
         val forwarderSecret = when {

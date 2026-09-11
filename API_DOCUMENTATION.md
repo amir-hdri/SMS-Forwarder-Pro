@@ -8,7 +8,9 @@
 
 | متد | مسیر (Path) | کاربرد | احراز هویت |
 |---|---|---|---|
-| `POST` | `/api/v1/rpa/sms-forwarder` | وب‌هوک بلادرنگ دریافت پیامک، استخراج OTP و تزریق به ربات بارنامه | `X-Forwarder-Secret` |
+| `POST` | `/api/v1/rpa/sms-forwarder` | وب‌هوک بلادرنگ کلاینت اندروید راننده (Fast-Path اینترنتی) | `X-Forwarder-Secret` |
+| `POST` | `/api/v1/rpa/sms-gateway/webhook` | وب‌هوک ورودی مودم GSM متصل به سرور و پنل‌های پیامکی (فالبک اضطراری) | هدر یا پارامتر `secret` |
+| `POST` | `/api/v1/rpa/sms-inbound-relay` | الیاس رله پیامک برای سازگاری با گیت‌وی‌های مختلف | هدر یا پارامتر `secret` |
 | `POST` | `/api/v1/sms/forward` | وب‌سرویس عمومی فوروارد لاگ و متادیتای پیامک‌های بارنامه | `HMAC-SHA256` / `Bearer` |
 | `GET` | `/health` | بررسی سلامت سرویس، دیتابیس و وضعیت محیط اجرا | بدون نیاز به احراز هویت |
 
@@ -138,7 +140,78 @@ X-Forwarder-Secret: <PRE_SHARED_SECRET>
 
 ---
 
-## ۲. وب‌سرویس عمومی فوروارد پیامک بارپرو (`/api/v1/sms/forward`)
+## ۲. وب‌هوک ورودی مودم‌های GSM و رله پیامکی اضطراری (`/api/v1/rpa/sms-gateway/webhook`)
+
+این اندپوینت برای دریافت پیامک‌های فالبک اضطراری ارسالی از گوشی رانندگان در زمان‌های قطعی اینترنت طراحی شده است. این پیام‌ها توسط **مودم‌های سیم‌کارتی سخت‌افزاری متصل به سرور** (مانند Huawei E3372 یا ماژول‌های SIMCOM) یا **وب‌هوک ورودی پنل‌های پیامکی (کاوه‌نگار، مگفا، فراپیامک)** تحویل داده می‌شوند.
+
+- **مسیرهای در دسترس**:
+  - `POST /api/v1/rpa/sms-gateway/webhook`
+  - `POST /api/v1/rpa/sms-inbound-relay`
+
+### روش‌های احراز هویت پشتیبانی‌شده:
+سرویس برای انعطاف‌پذیری با انواع پنل‌ها و نرم‌افزارهای دیمن پیامک (مانند Gammu یا SMS Server Tools)، کلید امنیتی را از یکی از مسیرهای زیر اعتبارسنجی می‌کند:
+- هدر: `X-Forwarder-Secret` یا `X-Gateway-Secret`
+- کوئری پارامتر URL: `?secret=...` یا `?api_key=...` یا `?token=...`
+
+### فرمت داده‌های ورودی (Content-Type):
+اندپوینت هم بسته‌های `application/json` و هم بسته‌های فرم وب `application/x-www-form-urlencoded` را پشتیبانی می‌کند.
+
+### نام فیلدهای پشتیبانی‌شده:
+- **فرستنده / شماره راننده**: `from` یا `sender` یا `source` یا `phone`
+- **متن پیامک**: `text` یا `message` یا `body` یا `content`
+
+### پروتکل اضطراری بارپرو (Emergency Fallback Protocol):
+کلاینت اندروید در صورت قطعی اینترنت، پیامک اضطراری را در این قالب استاندارد ارسال می‌کند:
+```text
+BARPRO#<driverId>#<driverPhone>#<smsType>#<code>
+```
+مثال واقعی:
+```text
+BARPRO#DRV-908172#09333702137#UTCMS_OTP#92815
+```
+**فرآیند پردازش بک‌اند**:
+1. موتور `OtpVaultService` پیشوند `BARPRO#` را شناسایی کرده و مستقیماً کد ۵ رقمی و شماره راننده را بدون نیاز به پردازش اضافی استخراج می‌کند.
+2. چنانچه پیامک به صورت متن معمولی از درگاه پیامکی مخابرات بازفوروارد شده باشد، الگوریتم هوشمند رگکس ارقام و کلیدواژه‌های سوخت و بارنامه را استخراج می‌نماید.
+3. کد استخراج‌شده در والت ردیس و کانال Pub/Sub ثبت شده و ربات در حال انتظار در کمتر از ۵ میلی‌ثانیه کد را دریافت می‌کند.
+
+### نمونه درخواست JSON (مودم GSM لینوکس / دیمن Gammu):
+```http
+POST /api/v1/rpa/sms-gateway/webhook HTTP/1.1
+Host: api.barpro.ir
+Content-Type: application/json
+X-Gateway-Secret: your-secure-webhook-secret-token
+
+{
+  "from": "09333702137",
+  "text": "BARPRO#DRV-908172#09333702137#UTCMS_OTP#92815"
+}
+```
+
+### نمونه درخواست Form-Urlencoded (پنل‌های پیامک ایران):
+```http
+POST /api/v1/rpa/sms-gateway/webhook?secret=your-secure-webhook-secret-token HTTP/1.1
+Host: api.barpro.ir
+Content-Type: application/x-www-form-urlencoded
+
+from=09333702137&text=BARPRO%23DRV-908172%2309333702137%23UTCMS_OTP%2392815
+```
+
+### نمونه پاسخ موفقیت‌آمیز (200 OK):
+```json
+{
+  "success": true,
+  "status": "success",
+  "source": "sms_gateway",
+  "phone": "0933***2137",
+  "message": "Gateway OTP accepted and stored in vault",
+  "otp_detected": true,
+  "is_duplicate": false
+}
+```
+
+---
+
+## ۳. وب‌سرویس عمومی فوروارد پیامک بارپرو (`/api/v1/sms/forward`)
 
 این اندپوینت برای ثبت لاگ عمومی، پیامک‌های تاییدیه صدور بارنامه، پیامک‌های کسر سهمیه سوخت و هشدارهای جاده‌ای رانندگان به کار می‌رود.
 
@@ -179,7 +252,7 @@ X-Forwarder-Secret: <PRE_SHARED_SECRET>
 
 ---
 
-## ۳. اندپوینت پایش سلامت سیستم (`/health`)
+## ۴. اندپوینت پایش سلامت سیستم (`/health`)
 
 برای نظارت مداوم و مانیتورینگ ابری (Health Check):
 
@@ -199,7 +272,7 @@ Host: api.barpro.ir
 
 ---
 
-## ۴. کلیدها و کانال‌های صندوق OTP ردیس (Redis Schema & Conventions)
+## ۵. کلیدها و کانال‌های صندوق OTP ردیس (Redis Schema & Conventions)
 
 | نام کلید / الگو | نوع داده | زمان حیات (TTL) | شرح |
 |---|---|---|---|

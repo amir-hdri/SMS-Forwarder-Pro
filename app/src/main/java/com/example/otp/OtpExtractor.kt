@@ -51,19 +51,25 @@ object OtpExtractor {
 
         val hasTransitContext = normalized.contains("بارنامه") || normalized.contains("بارپرو") ||
                 normalized.contains("UTCMS", ignoreCase = true) || normalized.contains("راهداری") ||
-                normalized.contains("شهرداری") || normalized.contains("باربرگ") || normalized.contains("راننده")
+                normalized.contains("شهرداری") || normalized.contains("باربرگ") || normalized.contains("راننده") ||
+                normalized.contains("سوخت") || normalized.contains("سهمیه") || normalized.contains("پیمایش") ||
+                normalized.contains("کارت سوخت") || normalized.contains("نفت گاز")
 
         val hasStrongOtpKeyword = normalized.contains("کد تایید بارنامه") ||
                 normalized.contains("کد تأیید بارنامه") ||
                 normalized.contains("سامانه بارپرو") ||
+                normalized.contains("سامانه سوخت") ||
                 normalized.contains("کد تایید") ||
                 normalized.contains("کد تأیید") ||
                 normalized.contains("رمز یکبار مصرف") ||
                 normalized.contains("رمز یک‌بار مصرف") ||
                 normalized.contains("رمز اعتبار") ||
+                normalized.contains("رمز ورود") ||
                 normalized.contains("کد ورود") ||
                 normalized.contains("احراز هویت") ||
-                normalized.contains("اعتبارسنجی")
+                normalized.contains("اعتبارسنجی") ||
+                normalized.contains("کد فعالسازی") ||
+                normalized.contains("کد فعال‌سازی")
 
         if (!hasStrongOtpKeyword && !hasTransitContext) {
             return null

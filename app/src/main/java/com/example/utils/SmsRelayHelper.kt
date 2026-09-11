@@ -19,7 +19,8 @@ object SmsRelayHelper {
         driverId: String,
         driverPhone: String,
         code: String,
-        smsType: String = "OTP"
+        smsType: String = "OTP",
+        simSlot: Int = -1
     ): Boolean {
         if (destinationPhone.isBlank() || code.isBlank()) {
             Log.w(TAG, "Cannot send fallback SMS: empty destination ($destinationPhone) or code ($code)")
@@ -32,11 +33,32 @@ object SmsRelayHelper {
         }
 
         return try {
-            val smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            var smsManager: SmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.getSystemService(SmsManager::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 SmsManager.getDefault()
+            }
+
+            // Multi-SIM support: if simSlot is provided, route through the designated subscription
+            if (simSlot >= 0) {
+                try {
+                    val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
+                    @Suppress("MissingPermission")
+                    val subInfoList = subManager?.activeSubscriptionInfoList
+                    val matchedSub = subInfoList?.firstOrNull { it.simSlotIndex == simSlot }
+                    if (matchedSub != null) {
+                        smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            smsManager.createForSubscriptionId(matchedSub.subscriptionId)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            SmsManager.getSmsManagerForSubscriptionId(matchedSub.subscriptionId)
+                        }
+                        Log.d(TAG, "Routed fallback SMS to SIM Slot #$simSlot (SubId: ${matchedSub.subscriptionId})")
+                    }
+                } catch (subEx: Exception) {
+                    Log.w(TAG, "Multi-SIM subscription resolution fallback to default: ${subEx.message}")
+                }
             }
 
             // Compact standard payload formatted for automated SMS gateway reception:
@@ -50,7 +72,7 @@ object SmsRelayHelper {
                 null,
                 null
             )
-            Log.i(TAG, "Emergency fallback SMS dispatched automatically to $destinationPhone for Driver $driverId (Code: $code)")
+            Log.i(TAG, "Emergency fallback SMS dispatched automatically to $destinationPhone for Driver $driverId (Code: $code) via SIM Slot ${if (simSlot >= 0) simSlot else "default"}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to dispatch emergency fallback SMS: ${e.message}", e)

@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -613,13 +615,27 @@ fun ServerConfigScreen(
 
                     if (enableSmsFallback) {
                         Spacer(modifier = Modifier.height(10.dp))
+                        val isPhoneValid = fallbackServerPhoneNumber.isBlank() ||
+                                fallbackServerPhoneNumber.matches(Regex("""^(\+98|0)?9\d{9}$|^[0-9]{4,14}$"""))
                         OutlinedTextField(
                             value = fallbackServerPhoneNumber,
                             onValueChange = {
-                                fallbackServerPhoneNumber = it
-                                onSaveConfig(config.copy(fallbackServerPhoneNumber = it))
+                                fallbackServerPhoneNumber = it.trim()
+                                onSaveConfig(config.copy(fallbackServerPhoneNumber = it.trim()))
                             },
                             label = { Text("شماره اختصاصی سرور / مودم GSM بارپرو", fontSize = 12.sp, color = Slate400) },
+                            placeholder = { Text("مثال: 09120000000 یا 30000000", fontSize = 11.sp, color = Slate400) },
+                            supportingText = {
+                                if (fallbackServerPhoneNumber.isBlank()) {
+                                    Text("جهت کارکرد فالبک اضطراری، شماره سیم‌کارت سرور یا درگاه پیامک را وارد کنید.", color = Color(0xFFF59E0B), fontSize = 10.sp)
+                                } else if (!isPhoneValid) {
+                                    Text("فرمت شماره تلفن یا خط پیامکی معتبر نیست.", color = Rose400, fontSize = 10.sp)
+                                } else {
+                                    Text("آماده رله خودکار پیامکی به سرور در ۳ تا ۵ ثانیه هنگام قطعی اینترنت.", color = Emerald400, fontSize = 10.sp)
+                                }
+                            },
+                            isError = !isPhoneValid,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(

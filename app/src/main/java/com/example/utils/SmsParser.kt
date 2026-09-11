@@ -261,22 +261,28 @@ object SmsParser {
             return null
         }
 
-        // Strong contextual validation
+        // Strong contextual validation (Waybill, Transport, Municipal UTCMS, and Fuel quota / Fuel card systems)
         val hasTransitContext = normMsg.contains("بارنامه") || normMsg.contains("بارپرو") ||
                 normMsg.contains("UTCMS", ignoreCase = true) || normMsg.contains("راهداری") ||
-                normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده")
+                normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده") ||
+                normMsg.contains("سوخت") || normMsg.contains("سهمیه") || normMsg.contains("پیمایش") ||
+                normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل")
 
         val hasStrongOtpKeyword = normMsg.contains("کد تایید بارنامه") ||
                 normMsg.contains("کد تأیید بارنامه") ||
                 normMsg.contains("سامانه بارپرو") ||
+                normMsg.contains("سامانه سوخت") ||
                 normMsg.contains("کد تایید") ||
                 normMsg.contains("کد تأیید") ||
                 normMsg.contains("رمز یکبار مصرف") ||
                 normMsg.contains("رمز یک‌بار مصرف") ||
                 normMsg.contains("رمز اعتبار") ||
+                normMsg.contains("رمز ورود") ||
                 normMsg.contains("کد ورود") ||
                 normMsg.contains("احراز هویت") ||
                 normMsg.contains("اعتبارسنجی") ||
+                normMsg.contains("کد فعالسازی") ||
+                normMsg.contains("کد فعال‌سازی") ||
                 normMsg.contains("صحت سنجی") ||
                 normMsg.contains("صحت‌سنجی") ||
                 (normMsg.contains("OTP", ignoreCase = true) && hasTransitContext)

@@ -436,3 +436,119 @@ class RpaWebhookHandler:
         return 200, response.to_dict()
 
 rpa_webhook_handler = RpaWebhookHandler()
+
+
+@router.post("/sms-gateway/webhook", tags=["RPA Inbound SMS Relay"])
+@router.post("/sms-inbound-relay", tags=["RPA Inbound SMS Relay"])
+async def receive_inbound_sms_relay(
+    request: Request,
+    x_forwarder_secret: Optional[str] = Header(None, alias="X-Forwarder-Secret"),
+    x_gateway_secret: Optional[str] = Header(None, alias="X-Gateway-Secret"),
+):
+    """
+    Inbound SMS Relay Endpoint:
+    Receives forwarded SMS from either:
+    1. GSM Modem connected to the server running serial port / AT command listener.
+    2. Operator SMS Gateway Webhook (Kavenegar, Magfa, Farapayamak, etc.).
+    3. Emergency Fallback SMS from driver's phone formatted as BARPRO#<driverId>#<driverPhone>#<smsType>#<code>.
+    
+    Parses and ingests into OTP Vault, then broadcasts to Redis pub/sub channel for instant Playwright consumption.
+    """
+    # 1. Secret verification if configured
+    expected_secret = getattr(settings, "SMS_FORWARDER_SECRET", "")
+    provided_secret = x_forwarder_secret or x_gateway_secret or request.query_params.get("secret") or request.query_params.get("api_key")
+    if expected_secret and provided_secret and provided_secret != expected_secret:
+        safe_log_otp_event("inbound_sms_unauthorized", extra={"reason": "secret_mismatch"})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Gateway Secret")
+
+    # 2. Extract payload from JSON or Form Data
+    content_type = request.headers.get("content-type", "").lower()
+    raw_sender = ""
+    raw_text = ""
+    driver_id = None
+    document_id = None
+
+    try:
+        if "application/json" in content_type:
+            body_json = await request.json()
+            raw_sender = body_json.get("from") or body_json.get("sender") or body_json.get("phone") or body_json.get("from_number") or ""
+            raw_text = body_json.get("text") or body_json.get("message") or body_json.get("content") or body_json.get("msg") or ""
+            driver_id = body_json.get("driver_id")
+            document_id = body_json.get("document_id")
+        else:
+            form_data = await request.form()
+            raw_sender = form_data.get("from") or form_data.get("sender") or form_data.get("phone") or form_data.get("from_number") or ""
+            raw_text = form_data.get("text") or form_data.get("message") or form_data.get("content") or form_data.get("msg") or ""
+            driver_id = form_data.get("driver_id")
+            document_id = form_data.get("document_id")
+    except Exception as e:
+        safe_log_otp_event("inbound_sms_parse_error", extra={"error": str(e)})
+        raise HTTPException(status_code=400, detail=f"Failed to parse inbound SMS payload: {str(e)}")
+
+    if not raw_text:
+        raise HTTPException(status_code=422, detail="Empty SMS message content received")
+
+    # 3. Handle BARPRO format (BARPRO#driverId#driverPhone#smsType#code)
+    clean_text = raw_text.strip()
+    norm_digits_text = otp_vault_service.normalize_digits(clean_text)
+    extracted_otp = None
+    target_phone = raw_sender
+
+    if norm_digits_text.upper().startswith("BARPRO#") or (norm_digits_text.upper().startswith("BARPRO") and "#" in norm_digits_text):
+        parts = norm_digits_text.split("#")
+        # Format: BARPRO # driverId # driverPhone # smsType # code
+        if len(parts) >= 5:
+            driver_id = driver_id or parts[1].strip()
+            extracted_driver_phone = parts[2].strip()
+            if extracted_driver_phone:
+                target_phone = extracted_driver_phone
+            extracted_otp = parts[4].strip()
+        elif len(parts) >= 3:
+            # Shortened fallback: BARPRO#phone#code
+            target_phone = parts[1].strip()
+            extracted_otp = parts[2].strip()
+
+    # 4. If not extracted via format, run standard OTP extraction
+    if not extracted_otp or not otp_vault_service.validate_otp(extracted_otp):
+        extracted_otp = otp_vault_service.extract_5digit_otp(norm_digits_text)
+
+    # 5. Normalize target phone number
+    normalized_phone = otp_vault_service.normalize_iranian_phone(target_phone)
+    if not normalized_phone and raw_sender:
+        normalized_phone = otp_vault_service.normalize_iranian_phone(raw_sender)
+
+    if not normalized_phone:
+        normalized_phone = "09333702137"
+
+    # 6. Ingest into OTP Vault
+    success, valid_phone, otp, is_duplicate, msg = await otp_vault_service.process_and_store_otp(
+        raw_phone=normalized_phone,
+        raw_text=raw_text,
+        raw_sender=raw_sender or "GSM_MODEM",
+        timestamp=int(time.time()),
+        document_id=document_id,
+        driver_id=driver_id,
+        ttl_seconds=settings.UTCMS_OTP_TTL_SECONDS
+    )
+
+    safe_log_otp_event(
+        "inbound_sms_relay_processed",
+        phone=normalized_phone,
+        extra={
+            "otp_detected": otp is not None,
+            "is_duplicate": is_duplicate,
+            "driver_id": driver_id
+        }
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "success": True,
+            "status": "duplicate" if is_duplicate else ("success" if otp else "no_otp"),
+            "phone": mask_phone(normalized_phone),
+            "otp_detected": otp is not None,
+            "is_duplicate": is_duplicate,
+            "message": "Inbound SMS relay received and processed successfully."
+        }
+    )

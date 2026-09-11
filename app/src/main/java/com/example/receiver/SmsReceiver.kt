@@ -80,7 +80,7 @@ class SmsReceiver : BroadcastReceiver() {
             "BarPro:SmsForwarderWakeLock"
         )?.apply {
             setReferenceCounted(false)
-            acquire(15_000L)
+            acquire(35_000L)
         }
 
         CoroutineScope(Dispatchers.IO).launch {
