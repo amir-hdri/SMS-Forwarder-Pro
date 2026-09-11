@@ -6,7 +6,8 @@ import java.util.regex.Pattern
 /**
  * Intelligent parser for SMS messages related to UTCMS, BarPro, and transportation systems.
  * Provides normalization for Persian/Arabic numerals, categorization into SmsType,
- * and robust extraction of tracking codes (کد رهگیری / ردیابی) and OTP codes (کد تایید / رمز یکبار مصرف).
+ * smart anti-false-positive filtering for banks and advertising senders,
+ * and robust extraction of tracking codes and waybill OTPs.
  */
 object SmsParser {
 
@@ -22,6 +23,79 @@ object SmsParser {
         "BAR PRO",
         "RMTO"
     )
+
+    private val KNOWN_BANK_SENDERS = setOf(
+        "tejaratbank", "tejarat", "mellatbank", "mellat", "bankmelli", "melli", "bmi",
+        "saderat", "saderatbank", "bsi", "sepah", "banksepah", "parsian", "bankparsian",
+        "pasargad", "bpi", "saman", "samanbank", "keshavarzi", "bki", "refah", "bankrefah",
+        "maskan", "bankmaskan", "shahr", "shahrbank", "dey", "deybank", "sina", "sinabank",
+        "karafarin", "ayandeh", "bankayandeh", "postbank", "sarmayeh", "taavon", "ttbank", "resalat",
+        "rqbank", "mehr", "qmb", "blubank", "blu", "shaparak", "sadad", "behpardakht",
+        "asanpardakht", "vandar", "zibal", "idpay", "zarinpal"
+    )
+
+    private val KNOWN_BANK_PERSIAN_KEYWORDS = listOf(
+        "بانک", "تجارت", "ملت", "ملی", "صادرات", "سپه", "پارسیان", "پاسارگاد",
+        "سامان", "کشاورزی", "رفاه", "مسکن", "شهر", "دی", "سینا", "کارآفرین",
+        "آینده", "پست بانک", "سرمایه", "توسعه تعاون", "رسالت", "مهر ایران", "شاپرک", "سداد", "به‌پرداخت", "به پرداخت"
+    )
+
+    private val KNOWN_BANK_NUMBERS = setOf(
+        "20004000", "200021", "10008588", "20001", "300060", "200073", "200096"
+    )
+
+    /**
+     * Checks if a sender is a known bank shortcode/name or a generic promotional advertising sender.
+     */
+    fun isBankOrAdSender(sender: String): Boolean {
+        if (sender.isBlank()) return false
+        val cleanSender = normalizeDigits(sender).trim().lowercase()
+        val digitsOnly = cleanSender.replace(Regex("""\D"""), "")
+
+        // Never filter authentic BarPro, UTCMS or RMTO senders
+        if (cleanSender.contains("barpro") || cleanSender.contains("utcms") || cleanSender.contains("rmto") || digitsOnly == "10001234") {
+            return false
+        }
+
+        // 1. Direct Bank Name or Code match
+        if (KNOWN_BANK_SENDERS.any { bank ->
+            if (bank.length <= 3) {
+                cleanSender == bank || cleanSender.startsWith("$bank ") || cleanSender.endsWith(" $bank")
+            } else {
+                cleanSender.contains(bank)
+            }
+        }) return true
+        if (KNOWN_BANK_NUMBERS.contains(digitsOnly)) return true
+        if (KNOWN_BANK_PERSIAN_KEYWORDS.any { cleanSender.contains(it) }) return true
+
+        // 2. Advertising numbers (Iran standard bulk SMS trunks 5000..., 9000...)
+        if (digitsOnly.startsWith("5000") || digitsOnly.startsWith("9000")) return true
+
+        // 3. Ad / Promotional textual senders
+        val adKeywords = listOf("تبلیغ", "tabligh", "adv", "off", "تخفیف", "discount", "فروشگاه", "shop", "prize", "قرعه")
+        if (adKeywords.any { cleanSender.contains(it) }) return true
+
+        return false
+    }
+
+    /**
+     * Detects bank transactional messages or commercial advertising content.
+     */
+    fun isBankOrAdContent(normalizedText: String): Boolean {
+        val bankPhrases = listOf(
+            "برداشت از حساب", "واریز به حساب", "انتقال وجه", "مانده حساب",
+            "کارت به کارت", "خرید اینترنتی", "رمز دوم پویا", "رمز پویای کارت",
+            "رمز دوم یکبار مصرف"
+        )
+        if (bankPhrases.any { normalizedText.contains(it) }) return true
+
+        val adPhrases = listOf(
+            "کد تخفیف", "تخفیف ویژه", "فروش ویژه", "قرعه کشی", "جایزه نقدی"
+        )
+        if (adPhrases.any { normalizedText.contains(it) }) return true
+
+        return false
+    }
 
     /**
      * Converts Persian (۰-۹) and Arabic (٠-٩) numerals to ASCII digits (0-9)
@@ -48,23 +122,23 @@ object SmsParser {
         Pattern.compile("""\b([0-9]{6,10})\b\s*(?:کد\s*رهگیری|کد\s*ردیابی|شماره\s*سند)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
     )
 
-    private val OTP_PATTERNS = listOf(
-        Pattern.compile("""(?:کد\s*(?:تایید|تأیید|ورود|فعالسازی|فعال‌سازی|صحت‌سنجی|احراز\s*هویت|اعتبارسنجی|پویا|شما|بارپرو|بارنامه|OTP))\s*(?:است|:|=|\s|-)\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""(?:رمز\s*(?:یکبار\s*مصرف|یک‌بار\s*مصرف|پویا|ورود|موقت|شما))\s*(?:است|:|=|\s|-)\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""(?:کد|رمز|تایید|تأیید|otp)[^\d]*(\d{4,6})""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""\b([0-9]{4,6})\b\s*(?:کد\s*تایید|کد\s*تأیید|کد\s*ورود|رمز\s*یکبار\s*مصرف|رمز\s*پویا|جهت\s*ورود)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE),
-        Pattern.compile("""(?:OTP|Code)\s*[:=]\s*([0-9]{4,6})""", Pattern.CASE_INSENSITIVE)
-    )
-
     private val WARNING_PATTERNS = listOf(
         Pattern.compile("""(?:سوخت|سهمیه|پایان\s*اعتبار|اخطار|هشدار|تخلف|مغایرت|اتمام|بدهی|غیرمجاز)""", Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
     )
 
     /**
      * Checks whether an SMS originated from or pertains to UTCMS, BarPro, or transportation authorities.
+     * Rejects bank shortcodes and bulk promotional advertising messages.
      */
     fun isUtcmsSms(phoneNumber: String, messageBody: String): Boolean {
+        if (isBankOrAdSender(phoneNumber)) {
+            return false
+        }
         val normMsg = normalizeDigits(messageBody)
+        if (isBankOrAdContent(normMsg)) {
+            return false
+        }
+
         val isSenderMatch = UTCMS_NUMBERS.any { phoneNumber.contains(it, ignoreCase = true) }
         val isBodyMatch = normMsg.contains("UTCMS", ignoreCase = true) ||
                 normMsg.contains("بارنامه") ||
@@ -84,8 +158,16 @@ object SmsParser {
     /**
      * Categorizes an SMS into a specific SmsType.
      */
-    fun detectSmsType(messageBody: String): SmsType {
+    fun detectSmsType(messageBody: String, sender: String = ""): SmsType {
+        if (isBankOrAdSender(sender)) {
+            return SmsType.OTHER
+        }
+
         val normMsg = normalizeDigits(messageBody)
+        if (isBankOrAdContent(normMsg)) {
+            return SmsType.OTHER
+        }
+
         val trackingCode = extractTrackingCode(messageBody)
         val hasConfirmWord = normMsg.contains("ثبت شد") || normMsg.contains("صادر شد") ||
                 normMsg.contains("ثبت گردید") || normMsg.contains("کد رهگیری") ||
@@ -95,10 +177,17 @@ object SmsParser {
             return SmsType.UTCMS_CONFIRMATION
         }
 
-        val otp = extractOtp(messageBody)
-        val hasOtpWord = normMsg.contains("کد تایید") || normMsg.contains("رمز یکبار") ||
-                normMsg.contains("رمز یک‌بار") || normMsg.contains("OTP", ignoreCase = true) ||
-                normMsg.contains("کد ورود") || normMsg.contains("احراز هویت")
+        val otp = extractOtp(messageBody, sender)
+        val hasOtpWord = normMsg.contains("کد تایید بارنامه") ||
+                normMsg.contains("کد تأیید بارنامه") ||
+                normMsg.contains("سامانه بارپرو") ||
+                normMsg.contains("کد تایید") ||
+                normMsg.contains("کد تأیید") ||
+                normMsg.contains("رمز یکبار") ||
+                normMsg.contains("رمز یک‌بار") ||
+                normMsg.contains("OTP", ignoreCase = true) ||
+                normMsg.contains("کد ورود") ||
+                normMsg.contains("احراز هویت")
 
         if (otp != null && (hasOtpWord || !hasConfirmWord)) {
             return SmsType.UTCMS_OTP
@@ -117,10 +206,6 @@ object SmsParser {
 
     /**
      * Normalizes Iranian mobile phone numbers to the canonical 11-digit format starting with 09 (e.g. 09333702137).
-     * Handles:
-     * - Persian/Arabic numerals (۰۱۲۳۴۵۶۷۸۹ -> 0123456789)
-     * - Leading country codes: +989..., 00989..., 989... -> 09...
-     * - 10-digit formats without leading zero: 9333702137 -> 09333702137
      */
     fun normalizePhoneNumber(rawPhone: String): String {
         if (rawPhone.isBlank()) return ""
@@ -143,7 +228,6 @@ object SmsParser {
         val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
         val minute = calendar.get(java.util.Calendar.MINUTE)
         val totalMinutes = hour * 60 + minute
-        // Evening window: 17:30 (1050 mins) to 23:59, and 00:00 to 08:00 (480 mins)
         return totalMinutes >= 1050 || totalMinutes < 480
     }
 
@@ -164,28 +248,76 @@ object SmsParser {
 
     /**
      * Extracts a 4 to 6 digit verification code (OTP), strictly prioritizing 5-digit UTCMS codes.
+     * Rejects known bank shortcodes and bulk promotional advertising senders.
+     * Requires stronger contextual keywords (e.g., "کد تایید بارنامه", "سامانه بارپرو")
+     * rather than generic isolated words like "کد" or "رمز".
      */
-    fun extractOtp(messageBody: String): String? {
-        // High-precision UTCMS OTP extraction (matches the BarPro Redis Vault specification)
-        val utcmsOtp = com.example.otp.OtpExtractor.extractUtcMsOtp(messageBody)
+    fun extractOtp(messageBody: String, sender: String = ""): String? {
+        if (sender.isNotBlank() && isBankOrAdSender(sender)) {
+            return null
+        }
+        val normMsg = normalizeDigits(messageBody)
+        if (isBankOrAdContent(normMsg)) {
+            return null
+        }
+
+        // Strong contextual validation
+        val hasTransitContext = normMsg.contains("بارنامه") || normMsg.contains("بارپرو") ||
+                normMsg.contains("UTCMS", ignoreCase = true) || normMsg.contains("راهداری") ||
+                normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده")
+
+        val hasStrongOtpKeyword = normMsg.contains("کد تایید بارنامه") ||
+                normMsg.contains("کد تأیید بارنامه") ||
+                normMsg.contains("سامانه بارپرو") ||
+                normMsg.contains("کد تایید") ||
+                normMsg.contains("کد تأیید") ||
+                normMsg.contains("رمز یکبار مصرف") ||
+                normMsg.contains("رمز یک‌بار مصرف") ||
+                normMsg.contains("رمز اعتبار") ||
+                normMsg.contains("کد ورود") ||
+                normMsg.contains("احراز هویت") ||
+                normMsg.contains("اعتبارسنجی") ||
+                normMsg.contains("صحت سنجی") ||
+                normMsg.contains("صحت‌سنجی") ||
+                (normMsg.contains("OTP", ignoreCase = true) && hasTransitContext)
+
+        if (!hasStrongOtpKeyword && !hasTransitContext) {
+            return null
+        }
+
+        // Check if message is purely a waybill confirmation without any OTP request
+        val isConfirmation = normMsg.contains("ثبت شد") || normMsg.contains("صادر شد") ||
+                normMsg.contains("ثبت گردید") || normMsg.contains("کد رهگیری") ||
+                normMsg.contains("کد ردیابی")
+
+        if (isConfirmation && !hasStrongOtpKeyword) {
+            return null
+        }
+
+        // High-precision UTCMS OTP extraction
+        val utcmsOtp = com.example.otp.OtpExtractor.extractUtcMsOtp(messageBody, sender)
         if (!utcmsOtp.isNullOrBlank()) {
             return utcmsOtp
         }
 
-        // If it is a waybill confirmation without OTP keywords, return null
-        val normMsg = normalizeDigits(messageBody)
-        val isConfirmation = normMsg.contains("ثبت شد") || normMsg.contains("صادر شد") ||
-                normMsg.contains("ثبت گردید") || normMsg.contains("کد رهگیری") ||
-                normMsg.contains("کد ردیابی")
-        val hasOtpKeyword = normMsg.contains("کد تایید") || normMsg.contains("کد تأیید") ||
-                normMsg.contains("رمز یکبار") || normMsg.contains("رمز یک‌بار") ||
-                normMsg.contains("رمز ورود") || normMsg.contains("OTP", ignoreCase = true) ||
-                normMsg.contains("کد ورود")
+        return com.example.otp.OtpExtractor.extractOtp(sender = sender, rawMessage = messageBody).code
+    }
 
-        if (isConfirmation && !hasOtpKeyword) {
-            return null
+    /**
+     * Computes a deterministic SHA-256 fingerprint for incoming SMS.
+     * Normalizes digits, sender format, and whitespace.
+     * Used by repository for sliding-window deduplication between dual-path receivers.
+     */
+    fun computeFingerprint(sender: String, messageBody: String): String {
+        val normSender = normalizePhoneNumber(sender).ifBlank { normalizeDigits(sender).trim().lowercase() }
+        val normBody = normalizeDigits(messageBody).trim().replace(Regex("""\s+"""), " ")
+        val seed = "$normSender:$normBody"
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest.digest(seed.toByteArray(Charsets.UTF_8))
+            hash.joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            seed
         }
-
-        return com.example.otp.OtpExtractor.extractOtp(messageBody)
     }
 }

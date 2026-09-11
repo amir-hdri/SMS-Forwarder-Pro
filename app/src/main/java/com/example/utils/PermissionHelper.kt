@@ -50,6 +50,13 @@ object PermissionHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun isSendSmsGranted(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.SEND_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isPostNotificationGranted(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -125,6 +132,19 @@ object PermissionHelper {
                 isRequired = true,
                 permissionType = PermissionType.RUNTIME_PERMISSION,
                 manifestPermission = Manifest.permission.READ_SMS,
+                category = PermissionCategory.SMS
+            )
+        )
+
+        list.add(
+            PermissionItemInfo(
+                id = "send_sms",
+                title = "ارسال پیامک پشتیبان اضطراری (SEND_SMS)",
+                description = "ارسال خودکار کد به سرور در زمان قطعی کامل اینترنت بدون نیاز به دخالت راننده.",
+                isGranted = isSendSmsGranted(context),
+                isRequired = false,
+                permissionType = PermissionType.RUNTIME_PERMISSION,
+                manifestPermission = Manifest.permission.SEND_SMS,
                 category = PermissionCategory.SMS
             )
         )

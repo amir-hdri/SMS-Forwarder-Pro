@@ -49,6 +49,17 @@ class SmsSyncWorker(
                     return Result.success()
                 }
 
+                // 5-Minute OTP Expiry Guard:
+                // If message is an OTP and more than 5 minutes (300,000 ms) have passed since receipt while offline,
+                // the code is invalid. Mark as FAILED (expired) rather than delivering stale credentials to server.
+                val isOtpMessage = log.otpCode != null || log.smsType == com.example.data.model.SmsType.UTCMS_OTP
+                val ageMs = System.currentTimeMillis() - log.receivedTimestamp
+                if (isOtpMessage && ageMs > 5 * 60 * 1000L) {
+                    Log.w(TAG, "OTP message #$logId has exceeded the 5-minute validity window (Age: ${ageMs / 1000}s). Marking as expired.")
+                    repository.updateLogStatus(logId, ForwardStatus.FAILED, "اعتبار کد ۵ دقیقه‌ای به پایان رسیده است (بیش از ۵ دقیقه در حالت آفلاین)")
+                    return Result.failure()
+                }
+
                 // Transmit pending log through repository outbox processor
                 val result = repository.transmitPendingLog(logId)
 
@@ -123,38 +134,46 @@ class SmsSyncWorker(
          * Uses WorkManager.enqueueUniqueWork with ExistingWorkPolicy.KEEP to prevent duplicate workers.
          */
         fun enqueue(context: Context, logId: Long) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            try {
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
 
-            val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
-                .setInputData(workDataOf(KEY_LOG_ID to logId))
-                .setConstraints(constraints)
-                .setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    WorkRequest.MIN_BACKOFF_MILLIS,
-                    TimeUnit.MILLISECONDS
+                val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
+                    .setInputData(workDataOf(KEY_LOG_ID to logId))
+                    .setConstraints(constraints)
+                    .setBackoffCriteria(
+                        BackoffPolicy.EXPONENTIAL,
+                        WorkRequest.MIN_BACKOFF_MILLIS,
+                        TimeUnit.MILLISECONDS
+                    )
+                    .addTag("sms_forward_$logId")
+                    .build()
+
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    "sms_sync_$logId",
+                    ExistingWorkPolicy.KEEP,
+                    request
                 )
-                .addTag("sms_forward_$logId")
-                .build()
-
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                "sms_sync_$logId",
-                ExistingWorkPolicy.KEEP,
-                request
-            )
+            } catch (e: Exception) {
+                Log.w(TAG, "WorkManager enqueue failed or not initialized: ${e.message}")
+            }
         }
 
         fun enqueueBatchSync(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            try {
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
 
-            val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
-                .setConstraints(constraints)
-                .build()
+                val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
+                    .setConstraints(constraints)
+                    .build()
 
-            WorkManager.getInstance(context).enqueue(request)
+                WorkManager.getInstance(context).enqueue(request)
+            } catch (e: Exception) {
+                Log.w(TAG, "WorkManager enqueueBatchSync failed or not initialized: ${e.message}")
+            }
         }
     }
 }

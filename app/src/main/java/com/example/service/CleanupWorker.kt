@@ -48,21 +48,25 @@ class CleanupWorker(
          * Uses ExistingPeriodicWorkPolicy.KEEP to prevent duplicate schedules.
          */
         fun schedule(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiresBatteryNotLow(true)
-                .build()
+            try {
+                val constraints = Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
 
-            val cleanupRequest = PeriodicWorkRequestBuilder<CleanupWorker>(1, TimeUnit.DAYS)
-                .setConstraints(constraints)
-                .addTag("retention_cleanup")
-                .build()
+                val cleanupRequest = PeriodicWorkRequestBuilder<CleanupWorker>(1, TimeUnit.DAYS)
+                    .setConstraints(constraints)
+                    .addTag("retention_cleanup")
+                    .build()
 
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
-                cleanupRequest
-            )
-            Log.i(TAG, "Enqueued periodic 24-hour retention cleanup worker with ExistingPeriodicWorkPolicy.KEEP")
+                WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    WORK_NAME,
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    cleanupRequest
+                )
+                Log.i(TAG, "Enqueued periodic 24-hour retention cleanup worker with ExistingPeriodicWorkPolicy.KEEP")
+            } catch (e: Exception) {
+                Log.w(TAG, "WorkManager schedule skipped or failed: ${e.message}")
+            }
         }
     }
 }

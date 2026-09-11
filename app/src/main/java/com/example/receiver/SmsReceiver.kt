@@ -63,7 +63,12 @@ class SmsReceiver : BroadcastReceiver() {
             else -> "SIM 1"
         }
 
-        val messageText = fullMessageBody.toString()
+        val messageText = fullMessageBody.toString().trim()
+        if (messageText.isBlank()) {
+            Log.w(TAG, LogSanitizer.sanitize("Received blank SMS body, skipping"))
+            return
+        }
+
         Log.i(TAG, LogSanitizer.sanitize("Incoming SMS detected | Sender: $sender | Length: ${messageText.length} | Slot: $simSlot"))
 
         val pendingResult = goAsync()

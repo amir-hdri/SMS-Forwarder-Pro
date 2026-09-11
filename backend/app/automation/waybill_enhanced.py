@@ -93,7 +93,12 @@ class EnhancedWaybillManager:
             return bool(dom_state.get("has_otp_modal") or dom_state.get("otp_input_present"))
         if hasattr(dom_state, "locator"):
             try:
-                return dom_state.locator("#otp").is_visible()
+                for sel in ["#otp", "input[name='otp']", "input[id*='otp']", "input[type='tel']", "#txtOtp", ".otp-modal", "#otpModal"]:
+                    try:
+                        if dom_state.locator(sel).first.is_visible():
+                            return True
+                    except Exception:
+                        continue
             except Exception:
                 return False
         return False
@@ -187,7 +192,19 @@ class EnhancedWaybillManager:
         if isinstance(mock_page, dict):
             mock_page["otp_value"] = clean_otp
         elif hasattr(mock_page, "fill"):
-            mock_page.fill("#otp", clean_otp)
+            filled = False
+            for sel in ["#otp", "input[name='otp']", "input[id*='otp']", "input[type='tel']", "#txtOtp", "#verification_code", ".otp-input"]:
+                try:
+                    if hasattr(mock_page, "locator"):
+                        loc = mock_page.locator(sel).first
+                        if loc.is_visible():
+                            loc.fill(clean_otp)
+                            filled = True
+                            break
+                except Exception:
+                    continue
+            if not filled:
+                mock_page.fill("#otp", clean_otp)
 
     def _click_once_no_retry(self, mock_page: Any) -> bool:
         """
@@ -201,7 +218,19 @@ class EnhancedWaybillManager:
                 return False
             mock_page["submitted"] = True
         elif hasattr(mock_page, "click"):
-            mock_page.click("#finalize_btn")
+            clicked = False
+            for sel in ["#finalize_btn", "button[type='submit']", "#btnSubmit", "#btnConfirm", "button:has-text('ثبت نهایی')", "button:has-text('تایید')"]:
+                try:
+                    if hasattr(mock_page, "locator"):
+                        loc = mock_page.locator(sel).first
+                        if loc.is_visible():
+                            loc.click()
+                            clicked = True
+                            break
+                except Exception:
+                    continue
+            if not clicked:
+                mock_page.click("#finalize_btn")
         self._submitted = True
         return True
 
@@ -243,8 +272,12 @@ class EnhancedWaybillManager:
 
         if hasattr(mock_page, "locator"):
             try:
-                if mock_page.locator(".otp-error, .alert-danger").is_visible():
-                    return False, "otp_rejected"
+                for err_sel in [".otp-error", ".alert-danger", ".error-message", ".validation-summary-errors"]:
+                    try:
+                        if mock_page.locator(err_sel).first.is_visible():
+                            return False, "otp_rejected"
+                    except Exception:
+                        continue
                 if not mock_page.locator("#otp").is_visible():
                     return True, None
             except Exception:
@@ -266,10 +299,21 @@ class EnhancedWaybillManager:
             else:
                 code = None
         elif hasattr(mock_page, "locator"):
-            try:
-                code = mock_page.locator("#tracking_code").text_content()
-            except Exception:
-                code = None
+            for sel in ["#tracking_code", ".tracking-code", "#txtTrackingCode", "[data-tracking-code]", ".issue-success .code"]:
+                try:
+                    loc = mock_page.locator(sel).first
+                    if loc.is_visible():
+                        txt = loc.text_content()
+                        if txt and txt.strip():
+                            code = txt.strip()
+                            break
+                except Exception:
+                    continue
+            if not code:
+                try:
+                    code = mock_page.locator("#tracking_code").text_content()
+                except Exception:
+                    code = None
 
         if code:
             self.tracking_code = str(code).strip()

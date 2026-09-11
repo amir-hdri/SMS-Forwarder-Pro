@@ -99,6 +99,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val skippedCount: StateFlow<Int> = repository.skippedCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    val pendingCount: StateFlow<Int> = repository.pendingCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     val rulesCount: StateFlow<Int> = repository.rulesCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 

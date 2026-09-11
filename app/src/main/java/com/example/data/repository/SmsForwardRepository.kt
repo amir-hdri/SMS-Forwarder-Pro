@@ -69,6 +69,7 @@ class SmsForwardRepository(
     val successCount: Flow<Int> = database.forwardLogDao().getSuccessCount()
     val failedCount: Flow<Int> = database.forwardLogDao().getFailedCount()
     val skippedCount: Flow<Int> = database.forwardLogDao().getSkippedCount()
+    val pendingCount: Flow<Int> = database.forwardLogDao().getPendingCount()
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
     suspend fun getConfig(): ForwardConfig {
@@ -249,17 +250,28 @@ class SmsForwardRepository(
         result
     }
 
+    suspend fun updateLogStatus(logId: Long, status: ForwardStatus, errorMessage: String? = null) = withContext(Dispatchers.IO) {
+        val log = database.forwardLogDao().getLogById(logId) ?: return@withContext
+        val updated = log.copy(
+            status = status,
+            errorMessage = errorMessage ?: log.errorMessage,
+            lastRetryTimestamp = System.currentTimeMillis()
+        )
+        database.forwardLogDao().updateLog(updated)
+    }
+
     suspend fun retryForwardLog(log: ForwardLog): ForwardLog = withContext(Dispatchers.IO) {
         transmitPendingLog(log.id)
         database.forwardLogDao().getLogById(log.id) ?: log
     }
 
     /**
-     * Transactional Outbox Pattern:
-     * 1. Inspects filtering criteria. If excluded or disabled, saves SKIPPED log.
-     * 2. If valid for forwarding, inserts into Room with status PENDING inside database.withTransaction.
-     * 3. Sanitizes visible log body and masks OTP.
-     * 4. Enqueues SmsSyncWorker via WorkManager passing only the logId.
+     * Transactional Outbox Pattern with In-Memory Sliding-Window Deduplication:
+     * 1. Checks in-memory fingerprint cache to deduplicate simultaneous events from SmsReceiver and SmsNotificationListener.
+     * 2. Inspects filtering criteria. If excluded or disabled, saves SKIPPED log.
+     * 3. If valid for forwarding, inserts into Room with status PENDING inside database.withTransaction.
+     * 4. Sanitizes visible log body and masks OTP.
+     * 5. Enqueues SmsSyncWorker via WorkManager passing only the logId.
      */
     suspend fun processIncomingSms(
         sender: String,
@@ -267,6 +279,24 @@ class SmsForwardRepository(
         receivedTimestamp: Long = System.currentTimeMillis(),
         simSlot: String = "SIM 1"
     ): ForwardLog = withContext(Dispatchers.IO) {
+        val fingerprint = com.example.utils.SmsParser.computeFingerprint(sender, messageBody)
+        val now = System.currentTimeMillis()
+
+        synchronized(dedupLock) {
+            val lastSeen = recentSmsTimestamps[fingerprint]
+            if (lastSeen != null && (now - lastSeen) < DEDUP_WINDOW_MS) {
+                val cached = recentSmsLogs[fingerprint]
+                if (cached != null) {
+                    android.util.Log.i(
+                        TAG,
+                        "Dual-capture redundant SMS ignored within ${now - lastSeen}ms | Sender: $sender | Cached Log ID: ${cached.id}"
+                    )
+                    return@withContext cached
+                }
+            }
+            recentSmsTimestamps[fingerprint] = now
+        }
+
         val config = getConfig()
 
         // 0. If filterUtcmsOnly is enabled, check if SMS is UTCMS/BarPro related
@@ -284,7 +314,9 @@ class SmsForwardRepository(
                 otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
             )
             val id = database.forwardLogDao().insertLog(log)
-            return@withContext log.copy(id = id)
+            val resultLog = log.copy(id = id)
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+            return@withContext resultLog
         }
 
         // 1. Check if master toggle is enabled
@@ -302,7 +334,9 @@ class SmsForwardRepository(
                 otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
             )
             val id = database.forwardLogDao().insertLog(log)
-            return@withContext log.copy(id = id)
+            val resultLog = log.copy(id = id)
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+            return@withContext resultLog
         }
 
         // 2. Check filter rules if in SPECIFIC_RULES_ONLY mode
@@ -325,7 +359,9 @@ class SmsForwardRepository(
                     otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
                 )
                 val id = database.forwardLogDao().insertLog(log)
-                return@withContext log.copy(id = id)
+                val resultLog = log.copy(id = id)
+                synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+                return@withContext resultLog
             }
         }
 
@@ -373,12 +409,66 @@ class SmsForwardRepository(
             initialLog.copy(id = id)
         }
 
-        // Transactional Outbox Step 2: Enqueue WorkManager job with unique work name
-        if (appContext != null) {
-            com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
+        // Cache in deduplication map
+        synchronized(dedupLock) {
+            recentSmsLogs[fingerprint] = insertedLog
         }
 
-        insertedLog
+        // Zero-Latency Direct Push (Fast-Path):
+        // Since OTP codes have a strict 5-minute validity window, attempt immediate network transmission
+        // right inside the active Coroutine / WakeLock. If successful within milliseconds, mark SUCCESS.
+        // If device is currently offline or connection fails:
+        // 1. If SMS Fallback is enabled, automatically relay the code via SMS to the server gateway immediately.
+        // 2. WorkManager will handle guaranteed network transmission as outbox fallback.
+        var finalLog = insertedLog
+        try {
+            val directResult = transmitPendingLog(insertedLog.id)
+            if (directResult.isSuccess) {
+                finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
+                synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
+                android.util.Log.i(TAG, "Fast-path immediate delivery succeeded for Log #${insertedLog.id} in ${directResult.durationMs}ms")
+            } else {
+                // If offline or weak internet, trigger automated SMS Fallback Relay if configured
+                val codeToSend = extractedOtp ?: trackingCode
+                if (appContext != null && config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                    val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
+                        context = appContext,
+                        destinationPhone = config.fallbackServerPhoneNumber,
+                        driverId = config.driverId,
+                        driverPhone = config.driverPhone,
+                        code = codeToSend,
+                        smsType = smsType.name
+                    )
+                    if (smsSuccess) {
+                        android.util.Log.i(TAG, "Automated SMS Fallback dispatched code $codeToSend to ${config.fallbackServerPhoneNumber}")
+                    }
+                }
+
+                // Also enqueue guaranteed WorkManager sync for when connection restores
+                if (appContext != null) {
+                    com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Fast-path attempt failed, delegating to WorkManager: ${e.message}")
+            // Fallback SMS in exception case
+            val codeToSend = extractedOtp ?: trackingCode
+            if (appContext != null && config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                com.example.utils.SmsRelayHelper.sendFallbackSms(
+                    context = appContext,
+                    destinationPhone = config.fallbackServerPhoneNumber,
+                    driverId = config.driverId,
+                    driverPhone = config.driverPhone,
+                    code = codeToSend,
+                    smsType = smsType.name
+                )
+            }
+            if (appContext != null) {
+                com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
+            }
+        }
+
+        finalLog
     }
 
     suspend fun queryAndSendOtpForServer(
@@ -602,6 +692,22 @@ class SmsForwardRepository(
     }
 
     companion object {
+        private const val TAG = "SmsForwardRepository"
+        private const val DEDUP_WINDOW_MS = 15_000L // 15 seconds window to absorb dual-capture broadcast + notification listener
+
+        // Thread-safe sliding LRU caches for deduplication
+        private val recentSmsTimestamps = object : LinkedHashMap<String, Long>(50, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean {
+                return size > 50
+            }
+        }
+        private val recentSmsLogs = object : LinkedHashMap<String, ForwardLog>(50, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ForwardLog>?): Boolean {
+                return size > 50
+            }
+        }
+        private val dedupLock = Any()
+
         @Volatile
         private var INSTANCE: SmsForwardRepository? = null
 

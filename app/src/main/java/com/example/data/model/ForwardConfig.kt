@@ -47,5 +47,8 @@ data class ForwardConfig(
     val autoExtractTrackingCode: Boolean = true,
     val filterUtcmsOnly: Boolean = false, // فیلتر هوشمند پیامک‌ها (فقط بارنامه و OTP)
     val userConsentGiven: Boolean = true, // تاییدیه و رضایت‌نامه رسمی حریم خصوصی
-    val enableWorkManagerSync: Boolean = true // صف‌بندی پس‌زمینه با WorkManager
+    val enableWorkManagerSync: Boolean = true, // صف‌بندی پس‌زمینه با WorkManager
+    // Automatic SMS Fallback when internet is offline/weak:
+    val enableSmsFallback: Boolean = true, // ارسال پیامکی پشتیبان به محض نبود یا قطعی اینترنت
+    val fallbackServerPhoneNumber: String = "09120000000" // شماره سیم‌کارت سرور یا درگاه پیامکی جهت دریافت خودکار کدها
 )

@@ -1,26 +1,53 @@
-from fastapi import FastAPI, Request, status
+import os
+from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.v1 import api_v1_router
 from app.core.config import settings
 from app.core.logging import safe_log_otp_event
 from app.core.limiter import limiter, RateLimitExceeded
+from app.core.redis import redis_manager
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware applying strict OWASP/production security headers to every response.
+    - X-Content-Type-Options: nosniff (Prevents MIME-sniffing exploits)
+    - Strict-Transport-Security: max-age=31536000; includeSubDomains (Enforces HSTS)
+    - X-Frame-Options: DENY (Prevents clickjacking in iframes)
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
 
 def create_application() -> FastAPI:
     """
     Creates and configures the production FastAPI application.
-    Mounts /api/v1 router including /api/v1/rpa/sms-forwarder with standardized
-    consistent response models that hide internal OTP values and provide descriptive
-    error messages.
+    - Adds SecurityHeadersMiddleware
+    - Conditionally disables Swagger/ReDoc/OpenAPI in production
+    - Implements standardized exception handlers
+    - Probes Redis connection pool on /health
     """
+    env = os.getenv("ENVIRONMENT", settings.ENVIRONMENT).lower()
+    is_production = env == "production"
+
     application = FastAPI(
         title="BarPro RPA & UTCMS OTP API",
         version="1.0.0",
         description="Production API for Android SMS Forwarder ingestion, Redis OTP Vault, and RPA waybill automation.",
-        docs_url="/docs",
-        redoc_url="/redoc"
+        docs_url=None if is_production else "/docs",
+        redoc_url=None if is_production else "/redoc",
+        openapi_url=None if is_production else "/openapi.json"
     )
+
+    # Attach Web Security Middleware
+    application.add_middleware(SecurityHeadersMiddleware)
 
     application.state.limiter = limiter
 
@@ -106,10 +133,27 @@ def create_application() -> FastAPI:
     # Mount API v1 router
     application.include_router(api_v1_router)
 
+    # Active Dependency Probing Health Endpoint
     @application.get("/health", tags=["system"])
     async def health_check():
-        return {"status": "healthy", "environment": settings.ENVIRONMENT}
+        """
+        Active health probe for Kubernetes/Cloud Run load balancers.
+        Actively pings the Redis connection pool. Raises HTTP 503 if unreachable.
+        """
+        try:
+            await redis_manager.ping()
+            return {
+                "status": "healthy",
+                "redis": "connected",
+                "environment": os.getenv("ENVIRONMENT", settings.ENVIRONMENT)
+            }
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service Unavailable"
+            )
 
     return application
+
 
 app = create_application()

@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [34])
 class ExampleRobolectricTest {
 
     @Test
@@ -102,5 +102,17 @@ class ExampleRobolectricTest {
         val requiredItems = list.filter { it.isRequired }
         assertTrue(requiredItems.any { it.id == "receive_sms" })
         assertTrue(requiredItems.any { it.id == "read_sms" })
+    }
+
+    @Test
+    fun `verify UTCMS numbers and OTP detection in SmsParser`() {
+        val sample1 = "سامانه مدیریت سوخت و ناوگان UTCMS: کد رهگیری 987654 و رمز اعتبار 432109 صادر شد."
+        assertTrue("Message should be recognized as UTCMS", com.example.utils.SmsParser.isUtcmsSms("10001234", sample1))
+        assertEquals("432109", com.example.utils.SmsParser.extractOtp(sample1))
+        assertEquals("987654", com.example.utils.SmsParser.extractTrackingCode(sample1))
+
+        val sample2 = "بارپرو - حواله بارنامه ثبت گردید. کد تایید: 887231"
+        assertTrue("Message should be recognized as UTCMS/BarPro", com.example.utils.SmsParser.isUtcmsSms("BARPRO", sample2))
+        assertEquals("887231", com.example.utils.SmsParser.extractOtp(sample2))
     }
 }

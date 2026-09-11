@@ -127,6 +127,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
     val totalLogsCount by viewModel.totalLogsCount.collectAsState()
     val successCount by viewModel.successCount.collectAsState()
     val failedCount by viewModel.failedCount.collectAsState()
+    val pendingCount by viewModel.pendingCount.collectAsState()
     val rulesCount by viewModel.rulesCount.collectAsState()
 
     val serverHealthState by viewModel.serverHealthState.collectAsState()
@@ -251,6 +252,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
                 totalCount = totalLogsCount,
                 successCount = successCount,
                 failedCount = failedCount,
+                pendingCount = pendingCount,
                 rulesCount = rulesCount,
                 recentLogs = filteredLogs,
                 onToggleMaster = { viewModel.toggleMasterSwitch(it) },

@@ -139,31 +139,123 @@ class OtpVaultService:
             
         return None
 
+    KNOWN_BANK_SENDERS = {
+        "tejaratbank", "tejarat", "mellatbank", "mellat", "bankmelli", "melli", "bmi",
+        "saderat", "saderatbank", "bsi", "sepah", "banksepah", "parsian", "bankparsian",
+        "pasargad", "bpi", "saman", "samanbank", "keshavarzi", "bki", "refah", "bankrefah",
+        "maskan", "bankmaskan", "shahr", "shahrbank", "dey", "deybank", "sina", "sinabank",
+        "karafarin", "ayandeh", "bankayandeh", "postbank", "sarmayeh", "taavon", "ttbank", "resalat",
+        "rqbank", "mehr", "qmb", "blubank", "blu", "shaparak", "sadad", "behpardakht",
+        "asanpardakht"
+    }
+
+    KNOWN_BANK_PERSIAN_KEYWORDS = [
+        "بانک", "تجارت", "ملت", "ملی", "صادرات", "سپه", "پارسیان", "پاسارگاد",
+        "سامان", "کشاورزی", "رفاه", "مسکن", "شهر", "دی", "سینا", "کارآفرین",
+        "آینده", "پست بانک", "سرمایه", "تعاون", "رسالت", "مهر ایران", "شاپرک", "سداد", "به‌پرداخت"
+    ]
+
+    KNOWN_BANK_NUMBERS = {
+        "20004000", "200021", "10008588", "20001", "300060", "200073", "200096"
+    }
+
     @classmethod
-    def extract_utcms_otp(cls, text: str) -> Optional[str]:
+    def is_ignored_sender(cls, raw_sender: Optional[str]) -> bool:
+        """
+        Identifies bank shortcodes, bank sender IDs, and generic bulk advertising numbers
+        to strictly prevent extracting false-positive OTPs from non-UTCMS/BarPro sources.
+        """
+        if not raw_sender:
+            return False
+
+        normalized = cls.normalize_digits(str(raw_sender).strip().lower())
+        digits_only = re.sub(r"\D", "", normalized)
+
+        # Never filter authentic BarPro, UTCMS or RMTO transit senders
+        if "barpro" in normalized or "utcms" in normalized or "rmto" in normalized or digits_only == "10001234":
+            return False
+
+        # 1. Known bank sender names / English shortcodes
+        if any(
+            (normalized == bank or normalized.startswith(f"{bank} ") or normalized.endswith(f" {bank}"))
+            if len(bank) <= 3 else bank in normalized
+            for bank in cls.KNOWN_BANK_SENDERS
+        ):
+            return True
+
+        # 2. Known bank Persian names
+        if any(k in normalized for k in cls.KNOWN_BANK_PERSIAN_KEYWORDS):
+            return True
+
+        # 3. Known bank short numbers
+        if digits_only in cls.KNOWN_BANK_NUMBERS:
+            return True
+
+        # 4. Generic bulk promotional advertising shortcodes (Iran 5000..., 9000...)
+        if digits_only.startswith("5000") or digits_only.startswith("9000"):
+            return True
+
+        # 5. Ad keywords in sender name
+        ad_keywords = ["تبلیغ", "tabligh", "adv", "off", "تخفیف", "فروشگاه", "shop", "discount", "prize"]
+        if any(ad in normalized for ad in ad_keywords):
+            return True
+
+        return False
+
+    @classmethod
+    def is_bank_or_ad_content(cls, normalized_text: str) -> bool:
+        """
+        Identifies bank transaction notices or commercial discount adverts in text.
+        """
+        bank_phrases = [
+            "برداشت از حساب", "واریز به حساب", "انتقال وجه", "مانده حساب",
+            "کارت به کارت", "خرید اینترنتی", "رمز دوم پویا", "رمز پویای کارت",
+            "رمز دوم یکبار مصرف"
+        ]
+        if any(p in normalized_text for p in bank_phrases):
+            return True
+        ad_phrases = [
+            "کد تخفیف", "تخفیف ویژه", "فروش ویژه", "قرعه کشی", "جایزه نقدی"
+        ]
+        if any(p in normalized_text for p in ad_phrases):
+            return True
+        return False
+
+    @classmethod
+    def extract_utcms_otp(cls, text: str, sender: Optional[str] = None) -> Optional[str]:
         """
         Extracts EXACTLY 5-DIGIT OTP according to business requirement.
         Strict Rules:
         - NEVER returns 4 or 6 digits.
-        - Prioritizes contextual patterns: کد تایید, کد تأیید, رمز, کد, OTP.
+        - Rejects known bank shortcodes and bulk promotional advertising senders.
+        - Requires stronger contextual keywords (e.g., 'کد تایید بارنامه', 'سامانه بارپرو',
+          'کد تایید', 'رمز یکبار مصرف') rather than generic isolated words like 'کد' or 'رمز'.
         - Does NOT accidentally select 5 digits from an unrelated number (e.g. 123456789).
-        - Safe standalone 5-digit fallback only if word boundaries (\b\d{5}\b) are respected
-          and not part of longer numeric sequences.
+        - Safe standalone 5-digit fallback only if transit/waybill context is confirmed.
         """
         if not text:
             return None
-        
+
+        if sender and cls.is_ignored_sender(sender):
+            return None
+
         normalized = cls.normalize_digits(text)
-        
-        # Phase 1: Contextual OTP extraction with strict 5-digit boundary
-        # Pattern looks for: [OTP Keyword] followed by optional punctuation/spaces and EXACTLY 5 digits
+
+        if cls.is_bank_or_ad_content(normalized):
+            return None
+
+        # Phase 1: Contextual OTP extraction with strict 5-digit boundary and strong keywords
         context_pattern = (
-            r"(?:کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|"
-            r"کد\s*اعتبارسنجی|کد\s*احراز|کد\s*فعالسازی|کد|رمز|otp|auth\s*code|verification\s*code)"
+            r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|سامانه\s*بارنامه|"
+            r"کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|"
+            r"کد\s*اعتبارسنجی|کد\s*احراز|کد\s*فعالسازی|"
+            r"(?:بارنامه|بارپرو|utcms)[^\d]*(?:کد|رمز|otp)|"
+            r"(?:کد|رمز|otp)[^\d]*(?:بارنامه|بارپرو|utcms)|"
+            r"auth\s*code|verification\s*code)"
             r"[\s:=،ـ\-_]*"
             r"(?<!\d)(\d{5})(?!\d)"
         )
-        
+
         context_match = re.search(context_pattern, normalized, re.IGNORECASE)
         if context_match:
             code = context_match.group(1)
@@ -174,7 +266,7 @@ class OtpVaultService:
         reverse_context_pattern = (
             r"(?<!\d)(\d{5})(?!\d)"
             r"[\s:=،ـ\-_]*"
-            r"(?:کد\s*تأیید|کد\s*تایید|رمز|otp|کد)"
+            r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|auth\s*code|verification\s*code)"
         )
         reverse_match = re.search(reverse_context_pattern, normalized, re.IGNORECASE)
         if reverse_match:
@@ -182,20 +274,16 @@ class OtpVaultService:
             if cls.validate_otp(code):
                 return code
 
-        # Phase 3: Isolated standalone 5-digit fallback
-        # Finds all isolated sequences of digits in the text
-        all_numeric_tokens = re.findall(r"(?<!\d)(\d+)(?!\d)", normalized)
-        
-        # Collect strictly 5-digit numbers
-        five_digit_tokens = [tok for tok in all_numeric_tokens if len(tok) == 5]
-        
-        # If there is exactly one 5-digit number in the entire message and no conflicting longer numbers
-        # with OTP keywords, treat it as the safe standalone fallback
-        if len(five_digit_tokens) == 1:
-            code = five_digit_tokens[0]
-            if cls.validate_otp(code):
-                return code
-                
+        # Phase 3: Isolated standalone 5-digit fallback ONLY if transit/waybill context exists
+        has_transit_context = any(term in normalized for term in ["بارنامه", "بارپرو", "utcms", "راهداری", "شهرداری", "باربرگ"])
+        if has_transit_context:
+            all_numeric_tokens = re.findall(r"(?<!\d)(\d+)(?!\d)", normalized)
+            five_digit_tokens = [tok for tok in all_numeric_tokens if len(tok) == 5]
+            if len(five_digit_tokens) == 1:
+                code = five_digit_tokens[0]
+                if cls.validate_otp(code):
+                    return code
+
         return None
 
     @classmethod
@@ -278,8 +366,17 @@ class OtpVaultService:
         normalized_text = cls.normalize_digits(raw_text or "")
         normalized_sender = cls.normalize_digits(str(raw_sender or "").strip())
 
+        # Check Ignored Sender (Banks, Advertising numbers)
+        if cls.is_ignored_sender(raw_sender) or cls.is_ignored_sender(normalized_sender):
+            safe_log_otp_event(
+                event_type="otp_rejected",
+                phone=normalized_phone,
+                extra={"reason": "ignored_sender_bank_or_ad", "sender": str(raw_sender)[:30]}
+            )
+            return False, normalized_phone, None, False, f"Sender '{raw_sender}' is recognized as a bank or advertising sender and was ignored."
+
         # 3. Extract & Validate OTP (EXACTLY 5 DIGITS)
-        extracted_otp = cls.extract_utcms_otp(normalized_text)
+        extracted_otp = cls.extract_utcms_otp(normalized_text, sender=normalized_sender)
         if not extracted_otp or not cls.validate_otp(extracted_otp):
             safe_log_otp_event(
                 event_type="otp_rejected",

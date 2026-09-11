@@ -55,15 +55,18 @@ import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -106,6 +109,7 @@ import com.example.ui.theme.PaletteCoral
 import com.example.ui.theme.PaletteGold
 import com.example.ui.theme.PaletteMidnight
 import com.example.ui.theme.PaletteOceanic
+import com.example.ui.theme.PalettePale
 import com.example.ui.theme.PaletteSage
 
 @Composable
@@ -115,6 +119,7 @@ fun DashboardScreen(
     totalCount: Int = 0,
     successCount: Int = 0,
     failedCount: Int = 0,
+    pendingCount: Int = 0,
     rulesCount: Int = 0,
     recentLogs: List<ForwardLog> = emptyList(),
     onToggleMaster: (Boolean) -> Unit,
@@ -158,7 +163,7 @@ fun DashboardScreen(
     var isChecklistExpanded by remember { mutableStateOf(!isAllPermissionsGranted) }
 
     val isWorking = config.isMasterEnabled && isAllPermissionsGranted
-    val isConnected = (serverHealthState.status == ServerHealthStatus.CONNECTED) || isWorking
+    val isConnected = serverHealthState.status == ServerHealthStatus.CONNECTED
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -652,14 +657,17 @@ fun DashboardScreen(
             statusColor = if (isWorking) PaletteSage else PaletteCoral
         )
 
-        // Status 3: Background Keep-Alive Service
+        // Status 3: Background Keep-Alive & Guaranteed Auto Sync
         StatusTile(
             icon = Icons.Default.Shield,
             iconColor = if (isWorking) PaletteSage else PaletteCoral,
-            title = "اجرای خودکار و پیوسته در پس‌زمینه",
-            subtitle = "فعال بودن سرویس حتی در زمان بسته بودن برنامه و قفل گوشی",
-            statusText = if (isWorking) "تضمین‌شده" else "غیرفعال",
-            statusColor = if (isWorking) PaletteSage else PaletteCoral
+            title = "ارسال خودکار و تضمینی (WorkManager)",
+            subtitle = if (pendingCount > 0)
+                "تعداد $pendingCount پیامک در صف آفلاین؛ به محض برقراری اینترنت به صورت کاملاً خودکار منتقل می‌شوند"
+            else
+                "سرویس فعال است؛ در صورت نبود اینترنت پیامک‌ها ذخیره و با اتصال مجدد شبکه خودکار ارسال می‌گردند",
+            statusText = if (isWorking) (if (pendingCount > 0) "$pendingCount در صف" else "خودکار فعال") else "غیرفعال",
+            statusColor = if (isWorking) (if (pendingCount > 0) PaletteGold else PaletteSage) else PaletteCoral
         )
 
         // Status 4: End-to-End Encryption
@@ -707,6 +715,29 @@ fun DashboardScreen(
             statusColor = if (isEveningWindow) PaletteSage else PaletteGold
         )
 
+        // Status 8: 5-Minute OTP Expiry SLA Guarantee
+        StatusTile(
+            icon = Icons.Default.Timer,
+            iconColor = PaletteCoral,
+            title = "محدودیت زمانی ۵ دقیقه‌ای کد",
+            subtitle = "کدهای اعتبارسنجی ارسالی حداکثر ۵ دقیقه معتبر هستند. سیستم به محض دریافت پیامک، با حداقل تاخیر (Fast-Path) کد را مخابره می‌کند.",
+            statusText = "سقف ۵ دقیقه",
+            statusColor = PaletteCoral
+        )
+
+        // Status 9: Automatic Offline SMS Relay
+        StatusTile(
+            icon = Icons.AutoMirrored.Filled.Send,
+            iconColor = PaletteSage,
+            title = "پشتیبان پیامکی خودکار (SMS Fallback)",
+            subtitle = if (config.enableSmsFallback)
+                "در صورت قطعی یا ضعف اینترنت در جاده، کد ۵ دقیقه‌ای به صورت اتوماتیک و بدون دخالت راننده از طریق پیامک به سرور مخابره می‌شود."
+            else
+                "ارسال پیامکی اضطراری غیرفعال است (در تنظیمات سرور قابل فعال‌سازی است).",
+            statusText = if (config.enableSmsFallback) "کاملاً خودکار" else "غیرفعال",
+            statusColor = if (config.enableSmsFallback) PaletteSage else PaletteGold
+        )
+
         // ==========================================
         // 4. QUICK ACTIONS & OFFLINE SYNC
         // ==========================================
@@ -740,17 +771,41 @@ fun DashboardScreen(
 
             Button(
                 onClick = onSyncOfflineLogs,
-                colors = ButtonDefaults.buttonColors(containerColor = PaletteOceanic, contentColor = PaletteCoral),
+                enabled = !isOfflineSyncing,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (pendingCount > 0) PaletteCoral.copy(alpha = 0.2f) else PaletteOceanic,
+                    contentColor = if (pendingCount > 0) PaletteCoral else PalettePale
+                ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.1f)
                     .height(44.dp)
-                    .border(1.dp, PaletteCoral.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .border(
+                        1.dp,
+                        if (pendingCount > 0) PaletteCoral else PaletteOceanic.copy(alpha = 0.5f),
+                        RoundedCornerShape(12.dp)
+                    )
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp))
+                    if (isOfflineSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = PaletteCoral
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("همگام‌سازی", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (pendingCount > 0) "ارسال ($pendingCount)" else "همگام خودکار",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

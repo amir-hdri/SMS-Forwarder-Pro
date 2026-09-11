@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -53,6 +55,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,8 +69,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.ForwardLog
 import com.example.data.model.ForwardStatus
@@ -397,14 +403,11 @@ private fun LogCardItem(
                         }
                     }
                     log.otpCode?.let { otp ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0x22DAB785))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("رمز: $otp", fontSize = 10.sp, color = Color(0xFFDAB785), fontWeight = FontWeight.Bold)
-                        }
+                        OtpPrivacyBadge(
+                            otp = otp,
+                            labelPrefix = "رمز: ",
+                            fontSize = 10.sp
+                        )
                     }
                 }
             }
@@ -579,15 +582,12 @@ private fun LogDetailDialog(
                             }
                         }
                         log.otpCode?.let { otp ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0x22DAB785))
-                                    .border(1.dp, Color(0xFFDAB785).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text("رمز یکبار مصرف: $otp", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDAB785))
-                            }
+                            OtpPrivacyBadge(
+                                otp = otp,
+                                labelPrefix = "رمز یکبار مصرف: ",
+                                fontSize = 12.sp,
+                                isLarge = true
+                            )
                         }
                     }
                 }
@@ -707,3 +707,70 @@ private fun LogDetailDialog(
         }
     }
 }
+
+/**
+ * Privacy badge for OTP display:
+ * Shows OTP code for 30 seconds upon display, then automatically masks it with '***'.
+ * Provides an interactive Show/Hide toggle button to reveal/mask on demand.
+ */
+@Composable
+fun OtpPrivacyBadge(
+    otp: String,
+    modifier: Modifier = Modifier,
+    labelPrefix: String = "رمز: ",
+    fontSize: TextUnit = 10.sp,
+    isLarge: Boolean = false
+) {
+    var isRevealed by remember(otp) { mutableStateOf(true) }
+
+    // Privacy timer: Auto-mask with '***' after 30 seconds
+    LaunchedEffect(isRevealed, otp) {
+        if (isRevealed) {
+            delay(30_000L)
+            isRevealed = false
+        }
+    }
+
+    val displayOtp = if (isRevealed) otp else "***"
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(if (isLarge) 8.dp else 4.dp))
+            .background(Color(0x22DAB785))
+            .border(
+                width = 1.dp,
+                color = Color(0xFFDAB785).copy(alpha = if (isLarge) 0.5f else 0.3f),
+                shape = RoundedCornerShape(if (isLarge) 8.dp else 4.dp)
+            )
+            .padding(
+                horizontal = if (isLarge) 10.dp else 6.dp,
+                vertical = if (isLarge) 4.dp else 2.dp
+            )
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (isLarge) 6.dp else 4.dp)
+        ) {
+            Text(
+                text = "$labelPrefix$displayOtp",
+                fontSize = fontSize,
+                color = Color(0xFFDAB785),
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(
+                onClick = { isRevealed = !isRevealed },
+                modifier = Modifier
+                    .size(if (isLarge) 24.dp else 18.dp)
+                    .testTag(if (isRevealed) "mask_otp_button" else "unmask_otp_button")
+            ) {
+                Icon(
+                    imageVector = if (isRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (isRevealed) "مخفی‌سازی رمز یکبار مصرف" else "نمایش رمز یکبار مصرف",
+                    tint = Color(0xFFDAB785),
+                    modifier = Modifier.size(if (isLarge) 14.dp else 11.dp)
+                )
+            }
+        }
+    }
+}
+

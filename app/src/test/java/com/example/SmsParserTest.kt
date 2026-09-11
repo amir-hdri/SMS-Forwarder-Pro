@@ -120,4 +120,49 @@ class SmsParserTest {
         val generalMsg = "به فروشگاه زنجیره‌ای خوش آمدید"
         assertEquals(SmsType.OTHER, SmsParser.detectSmsType(generalMsg))
     }
+
+    @Test
+    fun testIsBankOrAdSender() {
+        // Banks
+        assertTrue(SmsParser.isBankOrAdSender("TejaratBank"))
+        assertTrue(SmsParser.isBankOrAdSender("MellatBank"))
+        assertTrue(SmsParser.isBankOrAdSender("bankmelli"))
+        assertTrue(SmsParser.isBankOrAdSender("بانک تجارت"))
+        assertTrue(SmsParser.isBankOrAdSender("20004000"))
+
+        // Advertising
+        assertTrue(SmsParser.isBankOrAdSender("5000123456"))
+        assertTrue(SmsParser.isBankOrAdSender("90007890"))
+        assertTrue(SmsParser.isBankOrAdSender("تبلیغات فروشگاه"))
+
+        // Legitimate Transit / UTCMS / BarPro
+        assertFalse(SmsParser.isBankOrAdSender("10001234"))
+        assertFalse(SmsParser.isBankOrAdSender("UTCMS"))
+        assertFalse(SmsParser.isBankOrAdSender("BARPRO"))
+        assertFalse(SmsParser.isBankOrAdSender("09123456789"))
+    }
+
+    @Test
+    fun testExtractOtp_bankAndAdFiltering() {
+        // Bank sender with code
+        val bankMsg = "رمز پویا کارت شما: 12345"
+        assertNull(SmsParser.extractOtp(bankMsg, sender = "TejaratBank"))
+        assertNull(SmsParser.extractOtp(bankMsg, sender = "MellatBank"))
+
+        // Bank transaction content
+        val transactionMsg = "برداشت از حساب: 500,000 ریال. رمز پویا: 54321"
+        assertNull(SmsParser.extractOtp(transactionMsg, sender = "09120000000"))
+
+        // Advertising content
+        val adMsg = "کد تخفیف ویژه خرید اول: 98765"
+        assertNull(SmsParser.extractOtp(adMsg, sender = "50001234"))
+
+        // Strong Transit / BarPro Waybill OTP
+        val validWaybillOtp = "کد تایید بارنامه شما در سامانه بارپرو: 74125"
+        assertEquals("74125", SmsParser.extractOtp(validWaybillOtp, sender = "10001234"))
+
+        val municipalOtp = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد"
+        assertEquals("39182", SmsParser.extractOtp(municipalOtp, sender = "UTCMS"))
+    }
 }
+

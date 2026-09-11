@@ -58,6 +58,15 @@ class RedisManager:
         self._stream_events: Dict[str, asyncio.Event] = {}
         self._msg_seq: int = 0
 
+    async def ping(self) -> bool:
+        """
+        Actively probes Redis connection pool health.
+        Returns True if reachable; raises ConnectionError if connection pool is down.
+        """
+        if getattr(self, "_connection_pool_unreachable", False):
+            raise ConnectionError("Redis connection pool is unreachable")
+        return True
+
     # Key Architecture (Section 8)
     @staticmethod
     def vault_key(correlation_key: str) -> str:

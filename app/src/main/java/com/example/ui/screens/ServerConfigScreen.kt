@@ -124,6 +124,8 @@ fun ServerConfigScreen(
     var driverPhone by remember(config) { mutableStateOf(config.driverPhone) }
     var filterUtcmsOnly by remember(config) { mutableStateOf(config.filterUtcmsOnly) }
     var enableWorkManagerSync by remember(config) { mutableStateOf(config.enableWorkManagerSync) }
+    var enableSmsFallback by remember(config) { mutableStateOf(config.enableSmsFallback) }
+    var fallbackServerPhoneNumber by remember(config) { mutableStateOf(config.fallbackServerPhoneNumber) }
 
     var keyVisible by remember { mutableStateOf(false) }
     var authDropdownExpanded by remember { mutableStateOf(false) }
@@ -565,6 +567,66 @@ fun ServerConfigScreen(
                                 checkedTrackColor = Emerald400,
                                 uncheckedThumbColor = Slate400,
                                 uncheckedTrackColor = Slate800
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Slate800))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // SMS Fallback Relay Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "فوروارد پیامکی اضطراری (SMS Fallback)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "در زمان قطعی کامل اینترنت در جاده، کد ۵ دقیقه‌ای فوراً و خودکار از طریق پیامک به سرور ارسال شود",
+                                fontSize = 11.sp,
+                                color = Slate400,
+                                lineHeight = 16.sp
+                            )
+                        }
+
+                        Switch(
+                            checked = enableSmsFallback,
+                            onCheckedChange = {
+                                enableSmsFallback = it
+                                onSaveConfig(config.copy(enableSmsFallback = it))
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Slate950,
+                                checkedTrackColor = Emerald400,
+                                uncheckedThumbColor = Slate400,
+                                uncheckedTrackColor = Slate800
+                            )
+                        )
+                    }
+
+                    if (enableSmsFallback) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = fallbackServerPhoneNumber,
+                            onValueChange = {
+                                fallbackServerPhoneNumber = it
+                                onSaveConfig(config.copy(fallbackServerPhoneNumber = it))
+                            },
+                            label = { Text("شماره اختصاصی سرور / مودم GSM بارپرو", fontSize = 12.sp, color = Slate400) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Emerald400,
+                                unfocusedBorderColor = Slate800,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
                             )
                         )
                     }
