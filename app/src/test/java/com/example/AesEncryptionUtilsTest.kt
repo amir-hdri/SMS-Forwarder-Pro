@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = android.app.Application::class, sdk = [34])
 class AesEncryptionUtilsTest {
 
     private val testSecretKey = "BarProSuperSecretEncryptionKey2026!#"

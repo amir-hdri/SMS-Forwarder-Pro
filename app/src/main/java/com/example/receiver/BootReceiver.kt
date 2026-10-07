@@ -21,7 +21,9 @@ class BootReceiver : BroadcastReceiver() {
                 try {
                     val config = repository.getConfig()
                     if (config.isMasterEnabled) {
-                        SmsForwarderService.startService(context)
+                        // Android 15+ forbids starting dataSync foreground services from boot.
+                        com.example.service.MaintenanceWorker.schedule(context)
+                        com.example.service.SmsSyncWorker.enqueueBatchSync(context)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()

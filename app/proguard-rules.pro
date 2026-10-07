@@ -76,3 +76,14 @@
 -keepclassmembers class com.example.crypto.** { *; }
 -keep class com.example.utils.** { *; }
 -keepclassmembers class com.example.utils.** { *; }
+
+# ------------------------------------------------------------------------------
+# 6. Google ErrorProne & Tink (used by AndroidX Security Crypto)
+# ------------------------------------------------------------------------------
+-dontwarn com.google.errorprone.annotations.**
+
+# ------------------------------------------------------------------------------
+# 7. Self-Update and Remote Config models and receivers
+# ------------------------------------------------------------------------------
+-keep class com.example.update.** { *; }
+-keepclassmembers class com.example.update.** { *; }

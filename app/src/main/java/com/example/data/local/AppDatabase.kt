@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.model.AuthType
 import com.example.data.model.FilterRule
@@ -17,7 +18,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [FilterRule::class, ForwardLog::class, ForwardConfig::class],
-    version = 6,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +27,30 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun forwardConfigDao(): ForwardConfigDao
 
     companion object {
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE forward_logs ADD COLUMN recipientPhone TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE forward_logs ADD COLUMN messageFingerprint TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE app_config SET endpointUrl = REPLACE(endpointUrl, '/api/v1/rpa/sms-forwarder', '/api/v1/otp/sms-forwarder')")
+                db.execSQL("UPDATE app_config SET authHeaderKey = 'X-OTP-Webhook-Token' WHERE authHeaderKey = 'X-Forwarder-Secret'")
+                // Version 6 shipped pre-enabled sample settings without an actual opt-in.
+                db.execSQL("UPDATE app_config SET isMasterEnabled = 0, userConsentGiven = 0, enableSmsFallback = 0")
+            }
+        }
+
+        /** Adds the remote-config / self-update channel and the explicit cleartext acknowledgement. */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE app_config ADD COLUMN allowCleartextTransport INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE app_config ADD COLUMN configManifestUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_config ADD COLUMN updateManifestUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE app_config ADD COLUMN autoUpdateEnabled INTEGER NOT NULL DEFAULT 1")
+                // An existing install is already configured and working; do not send it back
+                // through the first-run wizard.
+                db.execSQL("ALTER TABLE app_config ADD COLUMN setupCompleted INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -37,7 +62,8 @@ abstract class AppDatabase : RoomDatabase() {
                     "sms_forwarder_database"
                 )
                     .addCallback(DatabaseCallback(context))
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance
@@ -55,21 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
                     val database = getDatabase(context)
                     // Pre-populate with default config
                     database.forwardConfigDao().insertOrUpdate(
-                        ForwardConfig(
-                            id = 1,
-                            isMasterEnabled = true,
-                            endpointUrl = "https://api.barpro.ir/api/v1/rpa/sms-forwarder",
-                            authType = AuthType.CUSTOM_HEADER,
-                            authHeaderKey = "X-Forwarder-Secret",
-                            authHeaderValue = "change-me-to-a-secure-random-token",
-                            forwarderSecret = "change-me-to-a-secure-random-token",
-                            isEncryptionEnabled = false,
-                            secretEncryptionKey = "sms-forwarder-secure-key-2026",
-                            filterMode = ForwardFilterMode.ALL_MESSAGES,
-                            deviceIdentifier = "BarPro Terminal 01",
-                            includeMetadata = true,
-                            driverPhone = "09333702137"
-                        )
+                        ForwardConfig()
                     )
 
                     // Pre-populate with helpful filter rules for BarPro, logistics, and OTPs

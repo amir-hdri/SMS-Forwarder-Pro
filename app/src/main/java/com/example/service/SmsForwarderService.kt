@@ -89,6 +89,13 @@ class SmsForwarderService : Service() {
         ServerHealthMonitor.stopPeriodicMonitoring(this)
     }
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        // Android 15 limits dataSync foreground time; SMS broadcasts/WorkManager remain active.
+        MaintenanceWorker.schedule(applicationContext)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {

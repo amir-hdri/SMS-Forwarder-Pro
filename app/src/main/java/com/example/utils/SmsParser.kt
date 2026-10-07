@@ -16,9 +16,9 @@ object SmsParser {
         "UTCMS",
         "UT CMS",
         "+9810001234",
-        "3000",
-        "2000",
-        "1000",
+        "20007777",
+        "30001923",
+        "10008545",
         "BARPRO",
         "BAR PRO",
         "RMTO"
@@ -43,6 +43,24 @@ object SmsParser {
     private val KNOWN_BANK_NUMBERS = setOf(
         "20004000", "200021", "10008588", "20001", "300060", "200073", "200096"
     )
+
+    /**
+     * Literal senders and keywords added by a signature-verified remote config document, so a new
+     * UTCMS shortcode can be rolled out without shipping an APK. Deliberately literals only — see
+     * [com.example.update.RemoteConfig]. Volatile because the SMS broadcast path reads this on a
+     * different thread from the one that applies config.
+     */
+    @Volatile
+    private var remoteSenders: List<String> = emptyList()
+
+    @Volatile
+    private var remoteKeywords: List<String> = emptyList()
+
+    /** Replaces the overlay wholesale; an empty pair restores pure built-in matching. */
+    fun setRemoteOverlay(extraSenders: List<String>, extraKeywords: List<String>) {
+        remoteSenders = extraSenders.toList()
+        remoteKeywords = extraKeywords.toList()
+    }
 
     /**
      * Checks if a sender is a known bank shortcode/name or a generic promotional advertising sender.
@@ -139,18 +157,18 @@ object SmsParser {
             return false
         }
 
-        val isSenderMatch = UTCMS_NUMBERS.any { phoneNumber.contains(it, ignoreCase = true) }
+        val normalizedSender = normalizeDigits(phoneNumber).trim()
+        val isSenderMatch = UTCMS_NUMBERS.any { normalizedSender.equals(it, ignoreCase = true) } ||
+                remoteSenders.any { normalizedSender.equals(it, ignoreCase = true) }
         val isBodyMatch = normMsg.contains("UTCMS", ignoreCase = true) ||
                 normMsg.contains("بارنامه") ||
                 normMsg.contains("باربرگ") ||
                 normMsg.contains("راهداری") ||
                 normMsg.contains("شهرداری") ||
-                normMsg.contains("کد تایید") ||
-                normMsg.contains("کد رهگیری") ||
-                normMsg.contains("کد ردیابی") ||
                 normMsg.contains("سهمیه سوخت") ||
                 normMsg.contains("بارپرو") ||
-                normMsg.contains("BarPro", ignoreCase = true)
+                normMsg.contains("BarPro", ignoreCase = true) ||
+                remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
 
         return isSenderMatch || isBodyMatch
     }
@@ -275,7 +293,16 @@ object SmsParser {
                 normMsg.contains("کد تایید") ||
                 normMsg.contains("کد تأیید") ||
                 normMsg.contains("رمز یکبار مصرف") ||
+                normMsg.contains("رمز یکبارمصرف") ||
                 normMsg.contains("رمز یک‌بار مصرف") ||
+                normMsg.contains("کد یکبار مصرف") ||
+                normMsg.contains("کد یکبارمصرف") ||
+                normMsg.contains("کد امنیتی") ||
+                normMsg.contains("کد مجوز") ||
+                normMsg.contains("کد صدور") ||
+                normMsg.contains("کد ثبت") ||
+                normMsg.contains("رمز تایید") ||
+                normMsg.contains("رمز تأیید") ||
                 normMsg.contains("رمز اعتبار") ||
                 normMsg.contains("رمز ورود") ||
                 normMsg.contains("کد ورود") ||

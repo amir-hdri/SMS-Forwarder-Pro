@@ -50,6 +50,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .combine(MutableStateFlow(ForwardConfig())) { cfg, fallback -> cfg ?: fallback }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ForwardConfig())
 
+    // Navigation trigger from notifications or external intents
+    val showServerSettings = MutableStateFlow(false)
+
+    fun openServerSettings() {
+        showServerSettings.value = true
+    }
+
+    fun closeServerSettings() {
+        showServerSettings.value = false
+    }
+
     // Log Filtering & Search
     val selectedLogFilter = MutableStateFlow<ForwardStatus?>(null)
     val selectedSmsTypeFilter = MutableStateFlow<com.example.data.model.SmsType?>(null)
@@ -137,7 +148,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleMasterSwitch(enabled: Boolean) {
         viewModelScope.launch {
             val current = config.value
-            val updated = current.copy(isMasterEnabled = enabled)
+            // This explicit switch is the user's opt-in to forwarding.
+            val updated = current.copy(isMasterEnabled = enabled, userConsentGiven = enabled)
             repository.saveConfig(updated)
 
             if (enabled && updated.showForegroundNotification) {

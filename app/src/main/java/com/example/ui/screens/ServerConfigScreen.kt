@@ -55,6 +55,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -128,6 +129,7 @@ fun ServerConfigScreen(
     var enableWorkManagerSync by remember(config) { mutableStateOf(config.enableWorkManagerSync) }
     var enableSmsFallback by remember(config) { mutableStateOf(config.enableSmsFallback) }
     var fallbackServerPhoneNumber by remember(config) { mutableStateOf(config.fallbackServerPhoneNumber) }
+    var allowCleartextTransport by remember(config) { mutableStateOf(config.allowCleartextTransport) }
 
     var keyVisible by remember { mutableStateOf(false) }
     var authDropdownExpanded by remember { mutableStateOf(false) }
@@ -216,8 +218,8 @@ fun ServerConfigScreen(
                             .background(Color(0x1A38BDF8))
                             .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(12.dp))
                             .clickable {
-                                val rpaUrl = "https://api.barpro.ir/api/v1/rpa/sms-forwarder"
-                                val rpaHeaderKey = "X-Forwarder-Secret"
+                                val rpaUrl = "https://api.barpro.ir/api/v1/otp/sms-forwarder"
+                                val rpaHeaderKey = "X-OTP-Webhook-Token"
                                 val rpaHeaderVal = if (authHeaderValue.isBlank() || authHeaderValue.contains("Bearer")) "change-me-to-a-secure-random-token" else authHeaderValue
                                 url = rpaUrl
                                 authType = AuthType.CUSTOM_HEADER
@@ -231,7 +233,7 @@ fun ServerConfigScreen(
                                         authHeaderValue = rpaHeaderVal
                                     )
                                 )
-                                Toast.makeText(context, "الگوی وب‌هوک RPA بارپرو و هدر X-Forwarder-Secret اعمال شد", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "الگوی وب‌هوک RPA بارپرو و هدر X-OTP-Webhook-Token اعمال شد", Toast.LENGTH_SHORT).show()
                             }
                             .padding(12.dp)
                     ) {
@@ -251,7 +253,7 @@ fun ServerConfigScreen(
                                     color = Sky400
                                 )
                                 Text(
-                                    text = "/api/v1/rpa/sms-forwarder با هدر X-Forwarder-Secret (صدور خودکار ۱۷:۳۰ تا ۰۸:۰۰)",
+                                    text = "/api/v1/otp/sms-forwarder با هدر X-OTP-Webhook-Token (صدور خودکار ۱۷:۳۰ تا ۰۸:۰۰)",
                                     fontSize = 10.sp,
                                     color = Slate300
                                 )
@@ -282,6 +284,44 @@ fun ServerConfigScreen(
                             .fillMaxWidth()
                             .testTag("server_url_input")
                     )
+
+                    if (!isHttps && url.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0x1AF59E0B))
+                                .border(1.dp, Color(0x33F59E0B), RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "تأیید اتصال ناامن HTTP (مخصوص بارپرو فعلی)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF59E0B)
+                                )
+                                Text(
+                                    text = "سرور بارپرو در حال حاضر بدون HTTPS است؛ برای امکان ارسال به این آدرس فعال شود.",
+                                    fontSize = 10.sp,
+                                    color = Slate300
+                                )
+                            }
+                            Switch(
+                                checked = allowCleartextTransport,
+                                onCheckedChange = {
+                                    allowCleartextTransport = it
+                                    onSaveConfig(config.copy(allowCleartextTransport = it))
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFFF59E0B),
+                                    checkedTrackColor = Color(0x4DF59E0B)
+                                )
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -850,7 +890,7 @@ fun ServerConfigScreen(
                     ) {
                         OutlinedTextField(
                             value = when (authType) {
-                                AuthType.CUSTOM_HEADER -> if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) "وب‌هوک اتوماسیون بارپرو (X-Forwarder-Secret)" else "هدر سفارشی ($authHeaderKey)"
+                                AuthType.CUSTOM_HEADER -> if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) "وب‌هوک اتوماسیون بارپرو (X-OTP-Webhook-Token)" else "هدر سفارشی ($authHeaderKey)"
                                 AuthType.BEARER_TOKEN -> "توکن Bearer"
                                 AuthType.API_KEY_HEADER -> "کلید اختصاصی API (هدر X-API-KEY)"
                                 AuthType.NONE -> "بدون احراز هویت"
@@ -869,7 +909,7 @@ fun ServerConfigScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
 
                         ExposedDropdownMenu(
@@ -878,11 +918,11 @@ fun ServerConfigScreen(
                             modifier = Modifier.background(Slate900)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("وب‌هوک اتوماسیون بارپرو (X-Forwarder-Secret)", color = Color.White, fontWeight = FontWeight.Bold) },
+                                text = { Text("وب‌هوک اتوماسیون بارپرو (X-OTP-Webhook-Token)", color = Color.White, fontWeight = FontWeight.Bold) },
                                 onClick = {
                                     authType = AuthType.CUSTOM_HEADER
-                                    authHeaderKey = "X-Forwarder-Secret"
-                                    onSaveConfig(config.copy(authType = AuthType.CUSTOM_HEADER, authHeaderKey = "X-Forwarder-Secret", forwarderSecret = authHeaderValue))
+                                    authHeaderKey = "X-OTP-Webhook-Token"
+                                    onSaveConfig(config.copy(authType = AuthType.CUSTOM_HEADER, authHeaderKey = "X-OTP-Webhook-Token", forwarderSecret = authHeaderValue))
                                     authDropdownExpanded = false
                                 }
                             )
@@ -925,28 +965,28 @@ fun ServerConfigScreen(
                                 onSaveConfig(
                                     config.copy(
                                         authHeaderValue = it,
-                                        forwarderSecret = if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) it else config.forwarderSecret
+                                        forwarderSecret = if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) it else config.forwarderSecret
                                     )
                                 )
                             },
                             label = {
                                 Text(
-                                    if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true))
-                                        "کلید امنیتی وب‌هوک (X-Forwarder-Secret)"
+                                    if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true))
+                                        "کلید امنیتی وب‌هوک (X-OTP-Webhook-Token)"
                                     else
                                         "مقدار توکن / API Key"
                                 )
                             },
                             placeholder = {
                                 Text(
-                                    if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true))
+                                    if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true))
                                         "change-me-to-a-secure-random-token"
                                     else
                                         "Bearer token یا API key"
                                 )
                             },
                             supportingText = {
-                                if (authHeaderKey.equals("X-Forwarder-Secret", ignoreCase = true)) {
+                                if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) {
                                     Text(
                                         "این مقدار باید با متغیر SMS_FORWARDER_SECRET روی سرور FastAPI یکسان باشد (خطای ۴۰۱ در صورت مغایرت)",
                                         fontSize = 11.sp,

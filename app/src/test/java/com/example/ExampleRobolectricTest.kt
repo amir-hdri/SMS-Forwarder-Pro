@@ -7,6 +7,7 @@ import com.example.data.model.FilterRule
 import com.example.data.model.MatchType
 import com.example.otp.OtpExtractor
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(application = android.app.Application::class, sdk = [34])
 class ExampleRobolectricTest {
 
     @Test
@@ -101,7 +102,7 @@ class ExampleRobolectricTest {
         // Verify required permissions
         val requiredItems = list.filter { it.isRequired }
         assertTrue(requiredItems.any { it.id == "receive_sms" })
-        assertTrue(requiredItems.any { it.id == "read_sms" })
+        assertFalse("Undeclared READ_SMS must not be required", requiredItems.any { it.id == "read_sms" })
     }
 
     @Test
@@ -114,5 +115,18 @@ class ExampleRobolectricTest {
         val sample2 = "بارپرو - حواله بارنامه ثبت گردید. کد تایید: 887231"
         assertTrue("Message should be recognized as UTCMS/BarPro", com.example.utils.SmsParser.isUtcmsSms("BARPRO", sample2))
         assertEquals("887231", com.example.utils.SmsParser.extractOtp(sample2))
+    }
+
+    @Test
+    fun `verify MainActivity intent lifecycle and navigation handling`() {
+        val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java)
+        val activity = controller.create().start().resume().get()
+        assertNotNull(activity)
+
+        val healthAlertIntent = android.content.Intent(activity, MainActivity::class.java).apply {
+            putExtra(com.example.service.ServerHealthNotifier.EXTRA_NAVIGATE_TAB, com.example.service.ServerHealthNotifier.TAB_SERVER)
+        }
+        controller.newIntent(healthAlertIntent)
+        assertEquals(healthAlertIntent, activity.intent)
     }
 }

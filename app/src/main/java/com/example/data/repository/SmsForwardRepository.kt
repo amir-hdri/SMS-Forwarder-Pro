@@ -20,6 +20,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.example.network.BarProContract
 
 data class OtpInquiryExecutionResult(
     val isSuccess: Boolean,
@@ -41,8 +45,7 @@ class SmsForwardRepository(
     init {
         // Wire salt provider for PBKDF2 key derivation from secure storage
         appContext?.let { ctx ->
-            val storage = SecureStorageManager.getInstance(ctx)
-            AesEncryptionUtils.saltProvider = { storage.getOrCreateSalt() }
+            AesEncryptionUtils.saltProvider = { SecureStorageManager.getInstance(ctx).getOrCreateSalt() }
         }
     }
 
@@ -50,17 +53,16 @@ class SmsForwardRepository(
     val allLogs: Flow<List<ForwardLog>> = database.forwardLogDao().getAllLogs()
 
     val configFlow: Flow<ForwardConfig?> = database.forwardConfigDao().getConfigFlow().map { config ->
-        if (config == null) null
-        else {
-            val storage = secureStorage
-            if (storage != null) {
-                val secret = storage.getForwarderSecret().ifBlank { config.forwarderSecret }
-                val key = storage.getSecretEncryptionKey().ifBlank { config.secretEncryptionKey }
-                config.copy(forwarderSecret = secret, secretEncryptionKey = key)
-            } else {
-                config
-            }
+        config?.let { restoreSecrets(it) }
+    }
+
+    private fun restoreSecrets(config: ForwardConfig): ForwardConfig {
+        val storage = secureStorage ?: return config
+        val secret = storage.getForwarderSecret().ifBlank {
+            config.authHeaderValue.ifBlank { config.forwarderSecret }
         }
+        val key = storage.getSecretEncryptionKey().ifBlank { config.secretEncryptionKey }
+        return config.copy(forwarderSecret = secret, authHeaderValue = secret, secretEncryptionKey = key)
     }
 
     val serverHealthState: StateFlow<ServerHealthState> = ServerHealthMonitor.healthState
@@ -73,40 +75,41 @@ class SmsForwardRepository(
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
     suspend fun getConfig(): ForwardConfig {
-        val dbConfig = database.forwardConfigDao().getConfig() ?: ForwardConfig()
-        val storage = secureStorage
-        if (storage != null) {
-            val storedSecret = storage.getForwarderSecret()
-            val storedKey = storage.getSecretEncryptionKey()
-
-            val finalSecret = if (storedSecret.isNotBlank()) storedSecret else {
-                if (dbConfig.forwarderSecret.isNotBlank()) {
-                    storage.saveForwarderSecret(dbConfig.forwarderSecret)
-                    dbConfig.forwarderSecret
-                } else ""
-            }
-
-            val finalKey = if (storedKey.isNotBlank()) storedKey else {
-                if (dbConfig.secretEncryptionKey.isNotBlank()) {
-                    storage.saveSecretEncryptionKey(dbConfig.secretEncryptionKey)
-                    dbConfig.secretEncryptionKey
-                } else ""
-            }
-
-            return dbConfig.copy(
-                forwarderSecret = finalSecret,
-                secretEncryptionKey = finalKey
-            )
+        val persisted = database.forwardConfigDao().getConfig() ?: ForwardConfig()
+        val restored = restoreSecrets(persisted)
+        // Migrate previous plaintext config fields into the Keystore-backed store.
+        if (secureStorage != null && (persisted.forwarderSecret.isNotEmpty() ||
+                persisted.authHeaderValue.isNotEmpty() || persisted.secretEncryptionKey.isNotEmpty())) {
+            saveConfig(restored)
         }
-        return dbConfig
+        return restored
     }
 
     suspend fun saveConfig(config: ForwardConfig) = withContext(Dispatchers.IO) {
-        secureStorage?.apply {
-            saveForwarderSecret(config.forwarderSecret)
-            saveSecretEncryptionKey(config.secretEncryptionKey)
+        val storage = secureStorage
+        if (storage == null) {
+            // Used only by repositories without an Android context (unit tests).
+            database.forwardConfigDao().insertOrUpdate(config)
+        } else {
+            storage.saveForwarderSecret(BarProContract.token(config))
+            storage.saveSecretEncryptionKey(config.secretEncryptionKey)
+            database.forwardConfigDao().insertOrUpdate(config.copy(
+                forwarderSecret = "", authHeaderValue = "", secretEncryptionKey = ""
+            ))
         }
-        database.forwardConfigDao().insertOrUpdate(config)
+    }
+
+    private fun decryptOutbox(log: ForwardLog, config: ForwardConfig): String {
+        val parts = requireNotNull(log.encryptedBody) { "Missing encrypted outbox" }.split(":")
+        return if (parts.size == 3 && parts[0] == "v2") {
+            val key = requireNotNull(secureStorage) { "Secure storage unavailable" }.getOrCreateOutboxKey()
+            AesEncryptionUtils.decrypt(parts[1], parts[2], key)
+        } else {
+            require(parts.size == 2) { "Invalid encrypted outbox" }
+            // Read existing v1 records only; new records never use a shared/default key.
+            val key = config.secretEncryptionKey.ifBlank { "BarPro-Outbox-Key-2026" }
+            AesEncryptionUtils.decrypt(parts[0], parts[1], key)
+        }
     }
 
     suspend fun insertRule(rule: FilterRule) = withContext(Dispatchers.IO) {
@@ -182,7 +185,8 @@ class SmsForwardRepository(
      * performs the HTTP forward request, updates the entity status to SUCCESS or FAILED,
      * and redacts sensitive data (OTP and phone numbers) in the persistent log.
      */
-    suspend fun transmitPendingLog(logId: Long, fastTimeoutMs: Long? = null): TransmissionResult = withContext(Dispatchers.IO) {
+    suspend fun transmitPendingLog(logId: Long, fastTimeoutMs: Long? = null): TransmissionResult = transmissionMutex.withLock {
+        withContext(Dispatchers.IO) {
         val log = database.forwardLogDao().getLogById(logId)
             ?: return@withContext TransmissionResult(
                 isSuccess = false,
@@ -195,32 +199,76 @@ class SmsForwardRepository(
             )
 
         val config = getConfig()
-        val outboxKey = config.secretEncryptionKey.ifBlank { "BarPro-Outbox-Key-2026" }
-
-        // Decrypt raw message from encryptedBody if available
-        val rawMessage = if (!log.encryptedBody.isNullOrBlank()) {
-            val parts = log.encryptedBody.split(":")
-            if (parts.size == 2) {
-                try {
-                    AesEncryptionUtils.decrypt(parts[0], parts[1], outboxKey)
-                } catch (e: Exception) {
-                    log.messageBody
-                }
-            } else log.messageBody
-        } else log.messageBody
+        if (log.status == ForwardStatus.SUCCESS) {
+            return@withContext TransmissionResult(true, log.httpStatusCode, null, null, "", false, 0)
+        }
+        val age = System.currentTimeMillis() - log.receivedTimestamp
+        val updateStore = appContext?.let { com.example.update.UpdateStore.getInstance(it) }
+        val stopReason = when {
+            updateStore?.blockedByMandatoryUpdate == true -> "ارسال پیامک به دلیل نیاز به به‌روزرسانی ضروری متوقف شده است."
+            !config.isMasterEnabled || !config.userConsentGiven -> "ارسال پیامک غیرفعال است."
+            log.status == ForwardStatus.SKIPPED -> "این پیامک برای ارسال مجاز نیست."
+            !BarProContract.isTimestampAcceptable(log.receivedTimestamp) -> "اعتبار OTP به پایان رسیده یا ساعت دستگاه نادرست است."
+            log.recipientPhone.isBlank() -> "گیرنده این پیامک قدیمی ثبت نشده؛ ارسال امن ممکن نیست."
+            log.recipientPhone != com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone) -> "شماره راننده از زمان دریافت پیامک تغییر کرده است."
+            else -> BarProContract.configurationError(config)
+        }
+        if (stopReason != null) {
+            updateLogStatus(logId, ForwardStatus.SKIPPED, stopReason)
+            return@withContext TransmissionResult(false, null, null, stopReason, "", false, 0)
+        }
+        val rawMessage = try {
+            decryptOutbox(log, config)
+        } catch (_: Exception) {
+            updateLogStatus(logId, ForwardStatus.SKIPPED, "بازکردن پیامک رمزنگاری‌شده ممکن نیست.")
+            return@withContext TransmissionResult(false, null, null, "خطای رمزگشایی پیامک", "", false, 0)
+        }
 
         val activeRules = database.filterRuleDao().getActiveRules()
         val matchedRule = activeRules.firstOrNull { it.label == log.matchedRuleLabel || it.matches(log.sender, rawMessage) }
 
-        val result = client.forwardMessage(
-            sender = log.sender,
-            messageBody = rawMessage,
-            timestamp = log.receivedTimestamp,
-            config = config,
-            matchedRule = matchedRule,
-            simSlot = log.simSlot,
-            fastTimeoutMs = fastTimeoutMs
-        )
+        // Cellular Egress Guard (Fail-closed against foreign VPN leak):
+        // If device has an active VPN, route the forward request through the physical
+        // Iranian cellular network using CellularEgress.
+        val vpnActive = appContext != null && com.example.network.CellularEgress.isVpnActive(appContext)
+        val result = if (vpnActive) {
+            val egressSession = com.example.network.CellularEgress.acquire(appContext!!, timeoutMs = 4000L)
+            if (egressSession != null) {
+                egressSession.use { session ->
+                    client.forwardMessage(
+                        sender = log.sender,
+                        messageBody = rawMessage,
+                        timestamp = log.receivedTimestamp,
+                        config = config,
+                        matchedRule = matchedRule,
+                        simSlot = log.simSlot,
+                        fastTimeoutMs = fastTimeoutMs,
+                        clientOverride = session.bind(client.httpClient)
+                    )
+                }
+            } else {
+                TransmissionResult(
+                    isSuccess = false,
+                    httpStatusCode = null,
+                    responseBody = null,
+                    errorMessage = "فیلترشکن روی گوشی فعال است و امکان اتصال مستقیم به شبکه سلولار ایران میسر نشد.",
+                    payloadSent = "",
+                    isEncrypted = false,
+                    durationMs = 0L,
+                    isRetryable = true
+                )
+            }
+        } else {
+            client.forwardMessage(
+                sender = log.sender,
+                messageBody = rawMessage,
+                timestamp = log.receivedTimestamp,
+                config = config,
+                matchedRule = matchedRule,
+                simSlot = log.simSlot,
+                fastTimeoutMs = fastTimeoutMs
+            )
+        }
 
         if (result.isSuccess) {
             ServerHealthMonitor.recordSuccess(appContext, config.endpointUrl, result.durationMs)
@@ -230,10 +278,10 @@ class SmsForwardRepository(
 
         val updatedLog = log.copy(
             forwardedTimestamp = System.currentTimeMillis(),
-            status = if (result.isSuccess) ForwardStatus.SUCCESS else ForwardStatus.FAILED,
+            status = if (result.isSuccess) ForwardStatus.SUCCESS else if (result.isRetryable) ForwardStatus.FAILED else ForwardStatus.SKIPPED,
             httpStatusCode = result.httpStatusCode,
-            responseSummary = result.responseBody,
-            errorMessage = result.errorMessage,
+            responseSummary = LogSanitizer.sanitize(result.responseBody),
+            errorMessage = LogSanitizer.sanitize(result.errorMessage),
             isEncrypted = result.isEncrypted,
             payloadPreview = LogSanitizer.sanitize(result.payloadSent),
             endpointUrl = config.endpointUrl,
@@ -249,6 +297,7 @@ class SmsForwardRepository(
         database.forwardLogDao().updateLog(updatedLog)
 
         result
+        }
     }
 
     suspend fun updateLogStatus(logId: Long, status: ForwardStatus, errorMessage: String? = null) = withContext(Dispatchers.IO) {
@@ -279,7 +328,8 @@ class SmsForwardRepository(
         messageBody: String,
         receivedTimestamp: Long = System.currentTimeMillis(),
         simSlot: String = "SIM 1"
-    ): ForwardLog = withContext(Dispatchers.IO) {
+    ): ForwardLog = ingestionMutex.withLock {
+        withContext(Dispatchers.IO) {
         val fingerprint = com.example.utils.SmsParser.computeFingerprint(sender, messageBody)
         val now = System.currentTimeMillis()
 
@@ -299,6 +349,9 @@ class SmsForwardRepository(
         }
 
         val config = getConfig()
+        val recipient = com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
+        database.forwardLogDao().findRecentCapture(fingerprint, recipient, receivedTimestamp - DEDUP_WINDOW_MS)
+            ?.let { return@withContext it }
 
         // 0. If filterUtcmsOnly is enabled, check if SMS is UTCMS/BarPro related
         if (config.filterUtcmsOnly && !com.example.utils.SmsParser.isUtcmsSms(sender, messageBody)) {
@@ -321,7 +374,7 @@ class SmsForwardRepository(
         }
 
         // 1. Check if master toggle is enabled
-        if (!config.isMasterEnabled) {
+        if (!config.isMasterEnabled || !config.userConsentGiven) {
             val log = ForwardLog(
                 sender = sender,
                 messageBody = LogSanitizer.sanitize(messageBody),
@@ -367,25 +420,18 @@ class SmsForwardRepository(
         }
 
         val ruleLabel = matchedRule?.label ?: if (config.filterMode == ForwardFilterMode.ALL_MESSAGES) "تمام پیامک‌ها (All Messages)" else "قانون اختصاصی"
-        val smsType = com.example.utils.SmsParser.detectSmsType(messageBody)
+        val smsType = com.example.utils.SmsParser.detectSmsType(messageBody, sender)
         val trackingCode = com.example.utils.SmsParser.extractTrackingCode(messageBody)
-        val extractedOtp = com.example.utils.SmsParser.extractOtp(messageBody)
-        val signature = com.example.utils.SignatureUtils.generateSignature(
-            driverId = config.driverId,
-            phoneNumber = sender,
-            messageBody = messageBody,
-            timestamp = receivedTimestamp,
-            secretKey = config.secretEncryptionKey
-        )
-
-        // Encrypt raw message body for Outbox dispatch so plaintext SMS is never persisted in SQLite
-        val outboxKey = config.secretEncryptionKey.ifBlank { "BarPro-Outbox-Key-2026" }
-        val encryptedPayload = try {
-            val enc = AesEncryptionUtils.encrypt(messageBody, outboxKey)
-            "${enc.iv}:${enc.ciphertext}"
-        } catch (e: Exception) {
-            null
+        val extractedOtp = com.example.utils.SmsParser.extractOtp(messageBody, sender)
+        if (extractedOtp == null) {
+            val skipped = ForwardLog(sender = sender, messageBody = LogSanitizer.sanitize(messageBody),
+                receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
+                errorMessage = "این پیامک کد OTP معتبر برای بارپرو ندارد.", smsType = smsType)
+            return@withContext skipped.copy(id = database.forwardLogDao().insertLog(skipped))
         }
+        val outboxKey = requireNotNull(secureStorage) { "Secure storage unavailable" }.getOrCreateOutboxKey()
+        val enc = AesEncryptionUtils.encrypt(messageBody, outboxKey)
+        val encryptedPayload = "v2:" + enc.iv + ":" + enc.ciphertext
 
         // Transactional Outbox Step 1: Insert into Room with PENDING status inside database.withTransaction
         val insertedLog = database.withTransaction {
@@ -401,10 +447,12 @@ class SmsForwardRepository(
                 smsType = smsType,
                 trackingCode = trackingCode,
                 otpCode = LogSanitizer.maskOtp(extractedOtp), // Redacted as ***
-                signature = signature,
+                signature = null,
                 retryCount = 0,
                 simSlot = simSlot,
-                encryptedBody = encryptedPayload
+                encryptedBody = encryptedPayload,
+                recipientPhone = recipient,
+                messageFingerprint = fingerprint
             )
             val id = database.forwardLogDao().insertLog(initialLog)
             initialLog.copy(id = id)
@@ -415,6 +463,10 @@ class SmsForwardRepository(
             recentSmsLogs[fingerprint] = insertedLog
         }
 
+        // Persist work before the fast attempt so process death cannot strand the outbox.
+        val ctx = appContext
+        if (ctx != null) com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
+
         // Zero-Latency Direct Push (Fast-Path):
         // Since OTP codes have a strict 5-minute validity window, attempt immediate network transmission
         // right inside the active Coroutine / WakeLock.
@@ -423,11 +475,11 @@ class SmsForwardRepository(
         // 3. If online, attempt HTTP forward with a strict Fast-Path timeout (1,500ms).
         // 4. If HTTP fails or times out, immediately relay code via SMS to the server GSM modem.
         var finalLog = insertedLog
-        val codeToSend = extractedOtp ?: trackingCode
+        val codeToSend = extractedOtp
         val slotIndex = if (simSlot.contains("2")) 1 else if (simSlot.contains("1")) 0 else -1
 
         // Check active network capability
-        val cm = appContext?.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+        val cm = ctx?.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
         val activeNet = cm?.activeNetwork
         val netCaps = cm?.getNetworkCapabilities(activeNet)
         val isFastOnline = netCaps != null &&
@@ -437,23 +489,25 @@ class SmsForwardRepository(
         if (!isFastOnline) {
             // IMMEDIATE OFFLINE FALLBACK (Zero socket delay)
             android.util.Log.i(TAG, "Device is offline/unvalidated. Triggering instantaneous SMS Fallback...")
-            if (appContext != null && config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
-                val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                    context = appContext,
-                    destinationPhone = config.fallbackServerPhoneNumber,
-                    driverId = config.driverId,
-                    driverPhone = config.driverPhone,
-                    code = codeToSend,
-                    smsType = smsType.name,
-                    simSlot = slotIndex
-                )
-                if (smsSuccess) {
-                    android.util.Log.i(TAG, "Instantaneous SMS Fallback dispatched code $codeToSend to ${config.fallbackServerPhoneNumber}")
+            if (ctx != null) {
+                if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                    val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
+                        context = ctx,
+                        destinationPhone = config.fallbackServerPhoneNumber,
+                        driverId = config.driverId,
+                        driverPhone = config.driverPhone,
+                        code = codeToSend,
+                        smsType = smsType.name,
+                        simSlot = slotIndex,
+                        receivedTimestamp = receivedTimestamp,
+                        webhookSecret = BarProContract.token(config)
+                    )
+                    if (smsSuccess) {
+                        android.util.Log.i(TAG, "SMS fallback handed to the device modem; delivery unconfirmed")
+                    }
                 }
-            }
-            // Enqueue WorkManager for guaranteed HTTP outbox sync once internet reconnects
-            if (appContext != null) {
-                com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
+                // Enqueue WorkManager for guaranteed HTTP outbox sync once internet reconnects
+                com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
             }
         } else {
             // FAST ONLINE ATTEMPT (Strict 1.5s timeout)
@@ -466,44 +520,47 @@ class SmsForwardRepository(
                 } else {
                     // HTTP failed or timed out: trigger immediate SMS Fallback Relay
                     android.util.Log.w(TAG, "Fast-path HTTP failed (${directResult.errorMessage}). Relaying emergency SMS...")
-                    if (appContext != null && config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                    if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
                         val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                            context = appContext,
+                            context = ctx,
                             destinationPhone = config.fallbackServerPhoneNumber,
                             driverId = config.driverId,
                             driverPhone = config.driverPhone,
                             code = codeToSend,
                             smsType = smsType.name,
-                            simSlot = slotIndex
+                            simSlot = slotIndex,
+                            receivedTimestamp = receivedTimestamp,
+                            webhookSecret = BarProContract.token(config)
                         )
                         if (smsSuccess) {
-                            android.util.Log.i(TAG, "Automated SMS Fallback dispatched code $codeToSend to ${config.fallbackServerPhoneNumber}")
+                            android.util.Log.i(TAG, "SMS fallback handed to the device modem; delivery unconfirmed")
                         }
                     }
-                    if (appContext != null) {
-                        com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
-                    }
+                    com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 android.util.Log.w(TAG, "Fast-path attempt failed (${e.message}), triggering immediate SMS Fallback...")
-                if (appContext != null && config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
                     com.example.utils.SmsRelayHelper.sendFallbackSms(
-                        context = appContext,
+                        context = ctx,
                         destinationPhone = config.fallbackServerPhoneNumber,
                         driverId = config.driverId,
                         driverPhone = config.driverPhone,
                         code = codeToSend,
                         smsType = smsType.name,
-                        simSlot = slotIndex
+                        simSlot = slotIndex,
+                        receivedTimestamp = receivedTimestamp,
+                        webhookSecret = BarProContract.token(config)
                     )
                 }
-                if (appContext != null) {
-                    com.example.service.SmsSyncWorker.enqueue(appContext, insertedLog.id)
-                }
+                com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
             }
         }
 
         finalLog
+        }
     }
 
     suspend fun queryAndSendOtpForServer(
@@ -516,7 +573,7 @@ class SmsForwardRepository(
 
         val candidateLog = database.forwardLogDao().getClosestLogForSender(senderQuery.trim(), requestedTimestamp)
             ?: database.forwardLogDao().getLogsForSenderSince(senderQuery.trim(), minTime).firstOrNull()
-            ?: database.forwardLogDao().getLatestLog()
+
 
         if (candidateLog == null) {
             return@withContext OtpInquiryExecutionResult(
@@ -528,18 +585,16 @@ class SmsForwardRepository(
             )
         }
 
-        // Recover raw message if available
-        val outboxKey = config.secretEncryptionKey.ifBlank { "BarPro-Outbox-Key-2026" }
-        val rawMessage = if (!candidateLog.encryptedBody.isNullOrBlank()) {
-            val parts = candidateLog.encryptedBody.split(":")
-            if (parts.size == 2) {
-                try {
-                    AesEncryptionUtils.decrypt(parts[0], parts[1], outboxKey)
-                } catch (_: Exception) {
-                    candidateLog.messageBody
-                }
-            } else candidateLog.messageBody
-        } else candidateLog.messageBody
+        if (!config.isMasterEnabled || !config.userConsentGiven || candidateLog.status == ForwardStatus.SKIPPED ||
+            candidateLog.recipientPhone != com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone) ||
+            System.currentTimeMillis() - candidateLog.receivedTimestamp >= BarProContract.OTP_TTL_MS) {
+            return@withContext OtpInquiryExecutionResult(false, null, candidateLog, null, "پیامک مجاز و تازه برای این گیرنده یافت نشد.")
+        }
+        val rawMessage = try {
+            decryptOutbox(candidateLog, config)
+        } catch (_: Exception) {
+            return@withContext OtpInquiryExecutionResult(false, null, candidateLog, null, "رمزگشایی پیامک ممکن نیست.")
+        }
 
         val otpResult = com.example.otp.OtpExtractor.extractOtp(
             sender = candidateLog.sender,
@@ -558,15 +613,44 @@ class SmsForwardRepository(
             )
         }
 
-        val transmission = client.sendOtpInquiryResponse(
-            sender = candidateLog.sender,
-            otpCode = otpCode,
-            requestedTimestamp = requestedTimestamp,
-            smsTimestamp = candidateLog.receivedTimestamp,
-            rawMessage = rawMessage,
-            matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
-            config = config
-        )
+        val vpnActive = appContext != null && com.example.network.CellularEgress.isVpnActive(appContext)
+        val transmission = if (vpnActive) {
+            val egressSession = com.example.network.CellularEgress.acquire(appContext!!, timeoutMs = 4000L)
+            if (egressSession != null) {
+                egressSession.use { session ->
+                    client.sendOtpInquiryResponse(
+                        sender = candidateLog.sender,
+                        otpCode = otpCode,
+                        requestedTimestamp = requestedTimestamp,
+                        smsTimestamp = candidateLog.receivedTimestamp,
+                        rawMessage = rawMessage,
+                        matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
+                        config = config,
+                        clientOverride = session.bind(client.httpClient)
+                    )
+                }
+            } else {
+                client.sendOtpInquiryResponse(
+                    sender = candidateLog.sender,
+                    otpCode = otpCode,
+                    requestedTimestamp = requestedTimestamp,
+                    smsTimestamp = candidateLog.receivedTimestamp,
+                    rawMessage = rawMessage,
+                    matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
+                    config = config
+                )
+            }
+        } else {
+            client.sendOtpInquiryResponse(
+                sender = candidateLog.sender,
+                otpCode = otpCode,
+                requestedTimestamp = requestedTimestamp,
+                smsTimestamp = candidateLog.receivedTimestamp,
+                rawMessage = rawMessage,
+                matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
+                config = config
+            )
+        }
 
         if (transmission.isSuccess) {
             ServerHealthMonitor.recordSuccess(appContext, config.endpointUrl, transmission.durationMs)
@@ -638,10 +722,6 @@ class SmsForwardRepository(
         if (result.isSuccess) {
             ServerHealthMonitor.recordSuccess(context, config.endpointUrl, result.durationMs)
 
-            result.pendingCommand?.let { cmd ->
-                handleServerCommand(cmd, config)
-            }
-
             if (config.enableAutoOfflineSync && pendingFailedCount > 0) {
                 syncOfflinePendingLogs()
             }
@@ -650,71 +730,6 @@ class SmsForwardRepository(
         }
 
         result
-    }
-
-    private suspend fun handleServerCommand(cmd: com.example.network.ServerCommand, config: ForwardConfig) {
-        when (cmd.type.uppercase()) {
-            "GET_LATEST_OTP" -> {
-                val sender = cmd.sender ?: ""
-                val targetTime = cmd.targetTimestamp ?: System.currentTimeMillis()
-                val candidateLog = if (sender.isNotBlank()) {
-                    database.forwardLogDao().getClosestLogForSender(sender, targetTime)
-                        ?: database.forwardLogDao().getLogsForSenderSince(sender, targetTime - 15 * 60 * 1000L).firstOrNull()
-                } else {
-                    database.forwardLogDao().getLatestLog()
-                }
-
-                val replyData = org.json.JSONObject()
-                if (candidateLog != null) {
-                    val outboxKey = config.secretEncryptionKey.ifBlank { "BarPro-Outbox-Key-2026" }
-                    val rawMessage = if (!candidateLog.encryptedBody.isNullOrBlank()) {
-                        val parts = candidateLog.encryptedBody.split(":")
-                        if (parts.size == 2) {
-                            try {
-                                AesEncryptionUtils.decrypt(parts[0], parts[1], outboxKey)
-                            } catch (_: Exception) {
-                                candidateLog.messageBody
-                            }
-                        } else candidateLog.messageBody
-                    } else candidateLog.messageBody
-
-                    val otp = com.example.otp.OtpExtractor.extractOtp(rawMessage)
-                    replyData.put("found", true)
-                    replyData.put("otp_code", otp ?: "")
-                    replyData.put("sender", candidateLog.sender)
-                    replyData.put("received_timestamp", candidateLog.receivedTimestamp)
-                    replyData.put("raw_message", LogSanitizer.sanitize(rawMessage))
-                } else {
-                    replyData.put("found", false)
-                    replyData.put("message", "هیچ پیامکی در بازه مشخص یافت نشد")
-                }
-
-                client.replyToCommand(
-                    commandId = cmd.id,
-                    commandType = cmd.type,
-                    status = if (candidateLog != null) "SUCCESS" else "NOT_FOUND",
-                    resultData = replyData,
-                    config = config
-                )
-            }
-            "PING" -> {
-                val replyData = org.json.JSONObject().apply {
-                    put("status", "PONG")
-                    put("device_id", config.deviceIdentifier)
-                    put("server_time", System.currentTimeMillis())
-                }
-                client.replyToCommand(
-                    commandId = cmd.id,
-                    commandType = "PING",
-                    status = "SUCCESS",
-                    resultData = replyData,
-                    config = config
-                )
-            }
-            "SYNC_LOGS" -> {
-                syncOfflinePendingLogs()
-            }
-        }
     }
 
     /**
@@ -742,6 +757,8 @@ class SmsForwardRepository(
             }
         }
         private val dedupLock = Any()
+        private val ingestionMutex = Mutex()
+        private val transmissionMutex = Mutex()
 
         @Volatile
         private var INSTANCE: SmsForwardRepository? = null

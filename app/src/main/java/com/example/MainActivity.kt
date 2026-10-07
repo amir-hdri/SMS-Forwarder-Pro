@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleIncomingNavigation(intent)
 
         setContent {
             MyApplicationTheme {
@@ -113,6 +114,20 @@ class MainActivity : ComponentActivity() {
                     MainAppScreen(viewModel = viewModel)
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingNavigation(intent)
+    }
+
+    private fun handleIncomingNavigation(incomingIntent: android.content.Intent?) {
+        if (incomingIntent == null) return
+        val target = incomingIntent.getStringExtra(com.example.service.ServerHealthNotifier.EXTRA_NAVIGATE_TAB)
+        if (target == com.example.service.ServerHealthNotifier.TAB_SERVER) {
+            viewModel.openServerSettings()
         }
     }
 }
@@ -161,6 +176,15 @@ fun MainAppScreen(viewModel: MainViewModel) {
     var showOtpInquiryDialog by remember { mutableStateOf(false) }
     var showPermissionsDialog by remember { mutableStateOf(false) }
     var showServerSettingsSheet by remember { mutableStateOf(false) }
+    val showServerSettingsFromVm by viewModel.showServerSettings.collectAsState()
+
+    LaunchedEffect(showServerSettingsFromVm) {
+        if (showServerSettingsFromVm) {
+            showServerSettingsSheet = true
+            viewModel.closeServerSettings()
+        }
+    }
+
     var showServerGuideSheet by remember { mutableStateOf(false) }
     var showBackgroundGuideSheet by remember { mutableStateOf(false) }
     var selectedLogForDetail by remember { mutableStateOf<ForwardLog?>(null) }

@@ -19,14 +19,14 @@ enum class ForwardFilterMode {
 data class ForwardConfig(
     @PrimaryKey
     val id: Int = 1, // Single row configuration
-    val isMasterEnabled: Boolean = true,
-    val endpointUrl: String = "https://api.barpro.ir/api/v1/rpa/sms-forwarder",
+    val isMasterEnabled: Boolean = false,
+    val endpointUrl: String = "",
     val authType: AuthType = AuthType.CUSTOM_HEADER,
-    val authHeaderKey: String = "X-Forwarder-Secret",
-    val authHeaderValue: String = "change-me-to-a-secure-random-token",
-    val forwarderSecret: String = "change-me-to-a-secure-random-token", // کلید امنیتی اختصاصی X-Forwarder-Secret
+    val authHeaderKey: String = "X-OTP-Webhook-Token",
+    val authHeaderValue: String = "",
+    val forwarderSecret: String = "",
     val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو با HTTPS و JSON استاندارد کار می‌کند
-    val secretEncryptionKey: String = "sms-forwarder-secure-key-2026",
+    val secretEncryptionKey: String = "",
     val filterMode: ForwardFilterMode = ForwardFilterMode.ALL_MESSAGES,
     val deviceIdentifier: String = "BarPro Terminal 01",
     val includeMetadata: Boolean = true,
@@ -38,17 +38,31 @@ data class ForwardConfig(
     val healthFailureThreshold: Int = 2,
     val notifyOnDisconnect: Boolean = true,
     val enableAutoOfflineSync: Boolean = true,
-    val enableCommandPolling: Boolean = true,
+    val enableCommandPolling: Boolean = false,
     // BarPro Multi-driver and UTCMS automation settings:
-    val driverId: String = "DRV-102938", // کد ملی یا شناسه اختصاصی راننده
-    val driverFullName: String = "راننده ناوگان بارپرو",
-    val driverPhone: String = "09333702137", // شماره سیم‌کارت راننده جهت احراز هویت در وب‌هوک و ردیس
+    val driverId: String = "",
+    val driverFullName: String = "",
+    val driverPhone: String = "", // شماره سیم‌کارت دریافت‌کننده OTP
     val autoExtractOtp: Boolean = true,
     val autoExtractTrackingCode: Boolean = true,
-    val filterUtcmsOnly: Boolean = false, // فیلتر هوشمند پیامک‌ها (فقط بارنامه و OTP)
-    val userConsentGiven: Boolean = true, // تاییدیه و رضایت‌نامه رسمی حریم خصوصی
+    val filterUtcmsOnly: Boolean = true,
+    val userConsentGiven: Boolean = false,
     val enableWorkManagerSync: Boolean = true, // صف‌بندی پس‌زمینه با WorkManager
     // Automatic SMS Fallback when internet is offline/weak:
-    val enableSmsFallback: Boolean = true, // ارسال پیامکی پشتیبان به محض نبود یا قطعی اینترنت
-    val fallbackServerPhoneNumber: String = "09120000000" // شماره سیم‌کارت سرور یا درگاه پیامکی جهت دریافت خودکار کدها
+    val enableSmsFallback: Boolean = false,
+    val fallbackServerPhoneNumber: String = "",
+    /**
+     * Explicit operator acknowledgement that the endpoint is plain HTTP. Defaults to false so a
+     * cleartext endpoint can never be used by accident: the setup screen must show the warning and
+     * the operator must accept it. BarPro currently serves port 80 only, so this is normally on —
+     * and should be turned back off the moment TLS is available.
+     */
+    val allowCleartextTransport: Boolean = false,
+    /** Signed remote-config document URL. Empty disables the no-APK settings channel. */
+    val configManifestUrl: String = "",
+    /** Signed release-manifest URL. Empty disables self-update. */
+    val updateManifestUrl: String = "",
+    val autoUpdateEnabled: Boolean = true,
+    /** Set once the first-run wizard has been completed, so it is not shown again. */
+    val setupCompleted: Boolean = false
 )

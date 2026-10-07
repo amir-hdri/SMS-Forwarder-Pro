@@ -16,7 +16,6 @@
         
         <!-- Exclude internal files and caches -->
         <exclude domain="file" path="." />
-        <exclude domain="cache" path="." />
     </cloud-backup>
     <device-transfer>
         <!-- Exclude sensitive database and credentials from direct device transfers -->
@@ -31,6 +30,5 @@
         <exclude domain="root" path="shared_prefs" />
         
         <exclude domain="file" path="." />
-        <exclude domain="cache" path="." />
     </device-transfer>
 </data-extraction-rules>

@@ -103,15 +103,7 @@ object ServerHealthMonitor {
 
         _healthState.value = _healthState.value.copy(status = ServerHealthStatus.CHECKING)
 
-        val result = client.testEndpoint(
-            endpointUrl = config.endpointUrl,
-            authType = config.authType,
-            authHeaderKey = config.authHeaderKey,
-            authHeaderValue = config.authHeaderValue,
-            isEncryptionEnabled = config.isEncryptionEnabled,
-            secretKey = config.secretEncryptionKey,
-            deviceIdentifier = config.deviceIdentifier
-        )
+        val result = client.checkHealth(config)
 
         if (result.isSuccess) {
             recordSuccess(context, config.endpointUrl, result.durationMs)

@@ -12,6 +12,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ForwardLogDao {
+    @Query("SELECT * FROM forward_logs WHERE messageFingerprint = :fingerprint AND recipientPhone = :phone AND receivedTimestamp >= :since ORDER BY id DESC LIMIT 1")
+    suspend fun findRecentCapture(fingerprint: String, phone: String, since: Long): ForwardLog?
+
+    @Query("UPDATE forward_logs SET encryptedBody = NULL, signature = NULL WHERE receivedTimestamp < :cutoff AND encryptedBody IS NOT NULL")
+    suspend fun clearExpiredPayloads(cutoff: Long): Int
     @Query("SELECT * FROM forward_logs ORDER BY receivedTimestamp DESC")
     fun getAllLogs(): Flow<List<ForwardLog>>
 

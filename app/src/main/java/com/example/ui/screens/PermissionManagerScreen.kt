@@ -39,7 +39,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
@@ -668,7 +668,7 @@ fun PermissionManagerScreen(
                                     contentColor = PaletteGold
                                 )
                             ) {
-                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = PaletteSage)
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = PaletteSage)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("تنظیمات برنامه در اندروید", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }

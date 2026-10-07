@@ -25,9 +25,10 @@ class SmsForwarderApp : Application(), Configuration.Provider {
         }
         try {
             com.example.service.CleanupWorker.schedule(this)
+            com.example.service.MaintenanceWorker.schedule(this)
+            com.example.service.SmsSyncWorker.enqueueBatchSync(this)
         } catch (e: Exception) {
             Log.w("SmsForwarderApp", "Failed to schedule CleanupWorker: ${e.message}")
         }
     }
 }
-

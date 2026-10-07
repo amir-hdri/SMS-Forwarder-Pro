@@ -11,11 +11,11 @@ object LogSanitizer {
     private val IRANIAN_PHONE_REGEX = Regex("""09\d{9}""")
 
     // Regex for strictly 5-digit OTP verification codes surrounded by word boundaries
-    private val FIVE_DIGIT_OTP_REGEX = Regex("""\b\d{5}\b""")
+    private val FIVE_DIGIT_OTP_REGEX = Regex("""(?<!\d)\d{4,8}(?!\d)""")
 
     // Regex for Persian/Arabic digit variants
     private val PERSIAN_ARABIC_PHONE_REGEX = Regex("""(?:09|۰۹|٠٩)[\d\u06F0-\u06F9\u0660-\u0669]{9}""")
-    private val PERSIAN_ARABIC_OTP_REGEX = Regex("""(?<![\d\u06F0-\u06F9\u0660-\u0669])[\d\u06F0-\u06F9\u0660-\u0669]{5}(?![\d\u06F0-\u06F9\u0660-\u0669])""")
+    private val PERSIAN_ARABIC_OTP_REGEX = Regex("""(?<![\d\u06F0-\u06F9\u0660-\u0669])[\d\u06F0-\u06F9\u0660-\u0669]{4,8}(?![\d\u06F0-\u06F9\u0660-\u0669])""")
 
     /**
      * Sanitizes any arbitrary log or payload string by masking 5-digit OTP codes

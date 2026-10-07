@@ -1,6 +1,7 @@
 package com.example.data.model
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
 enum class ForwardStatus {
@@ -42,5 +43,7 @@ data class ForwardLog(
     val retryCount: Int = 0,
     val lastRetryTimestamp: Long? = null,
     val simSlot: String = "SIM 1",
-    val encryptedBody: String? = null // AES-256 encrypted raw payload for outbox transmission without plaintext persistence
+    val encryptedBody: String? = null,
+    @ColumnInfo(defaultValue = "''") val recipientPhone: String = "",
+    @ColumnInfo(defaultValue = "''") val messageFingerprint: String = ""
 )

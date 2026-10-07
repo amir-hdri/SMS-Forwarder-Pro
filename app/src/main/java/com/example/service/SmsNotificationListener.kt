@@ -8,6 +8,9 @@ import com.example.utils.SmsParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.CancellationException
+import android.provider.Telephony
 
 /**
  * Redundant dual-capture NotificationListenerService for Android 11+
@@ -22,11 +25,7 @@ class SmsNotificationListener : NotificationListenerService() {
         if (sbn == null) return
 
         val pkg = sbn.packageName ?: ""
-        val isSmsApp = pkg.contains("messaging", ignoreCase = true) ||
-                pkg.contains("mms", ignoreCase = true) ||
-                pkg == "com.google.android.apps.messaging" ||
-                pkg == "com.samsung.android.messaging" ||
-                pkg == "com.android.mms"
+        val isSmsApp = pkg == Telephony.Sms.getDefaultSmsPackage(applicationContext)
 
         if (!isSmsApp) return
 
@@ -52,10 +51,17 @@ class SmsNotificationListener : NotificationListenerService() {
                         receivedTimestamp = timestamp,
                         simSlot = "Notification Listener"
                     )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.w("SmsNotificationListener", "Capture failed: " + e.javaClass.simpleName)
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        super.onDestroy()
     }
 }

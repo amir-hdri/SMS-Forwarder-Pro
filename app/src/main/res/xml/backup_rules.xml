@@ -14,5 +14,4 @@
     
     <!-- Exclude internal storage files and caches -->
     <exclude domain="file" path="." />
-    <exclude domain="cache" path="." />
 </full-backup-content>

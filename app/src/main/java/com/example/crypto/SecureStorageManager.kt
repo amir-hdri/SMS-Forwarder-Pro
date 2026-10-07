@@ -14,20 +14,30 @@ import java.security.SecureRandom
  */
 class SecureStorageManager private constructor(context: Context) {
 
-    private val prefs: SharedPreferences = try {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            context,
-            PREFS_NAME,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    } catch (e: Throwable) {
-        // Fallback for Robolectric or environments where Android Keystore hardware is unavailable
-        context.getSharedPreferences("${PREFS_NAME}_fallback", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences by lazy {
+        try {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            EncryptedSharedPreferences.create(
+                context,
+                PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (_: Exception) {
+            context.getSharedPreferences(PREFS_NAME + "_fallback", Context.MODE_PRIVATE)
+        }
+    }
+
+    @Synchronized
+    fun getOrCreateOutboxKey(): String {
+        val existing = prefs.getString("outbox_key_v2", null)
+        if (existing != null) return existing
+        val key = AesEncryptionUtils.generateSecureKey(48)
+        check(prefs.edit().putString("outbox_key_v2", key).commit()) { "Cannot persist outbox key" }
+        return key
     }
 
     fun getForwarderSecret(): String {
@@ -35,7 +45,7 @@ class SecureStorageManager private constructor(context: Context) {
     }
 
     fun saveForwarderSecret(secret: String) {
-        prefs.edit().putString(KEY_FORWARDER_SECRET, secret).apply()
+        check(prefs.edit().putString(KEY_FORWARDER_SECRET, secret).commit()) { "Cannot persist webhook secret" }
     }
 
     fun getSecretEncryptionKey(): String {
@@ -43,7 +53,7 @@ class SecureStorageManager private constructor(context: Context) {
     }
 
     fun saveSecretEncryptionKey(key: String) {
-        prefs.edit().putString(KEY_SECRET_ENCRYPTION_KEY, key).apply()
+        check(prefs.edit().putString(KEY_SECRET_ENCRYPTION_KEY, key).commit()) { "Cannot persist encryption key" }
     }
 
     /**
@@ -67,7 +77,7 @@ class SecureStorageManager private constructor(context: Context) {
         val newSalt = ByteArray(length)
         SecureRandom().nextBytes(newSalt)
         val encoded = Base64.encodeToString(newSalt, Base64.NO_WRAP)
-        prefs.edit().putString(KEY_PBKDF2_SALT, encoded).apply()
+        check(prefs.edit().putString(KEY_PBKDF2_SALT, encoded).commit()) { "Cannot persist encryption salt" }
         return newSalt
     }
 

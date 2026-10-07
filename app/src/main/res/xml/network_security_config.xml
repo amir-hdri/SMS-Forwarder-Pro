@@ -1,25 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Transport policy.
+
+  BarPro's nginx currently terminates plain HTTP on port 80 only (the :443 server block is
+  commented out), so a TLS-only client cannot reach it at all. Cleartext is therefore permitted
+  at the platform level, and the real restriction is enforced in code: BarProContract rejects an
+  http:// endpoint whose host is not the one this build is pinned to, so the app will not speak
+  cleartext to an arbitrary server even though the platform would allow it.
+
+  Known cost, accepted deliberately: the shared OTP_WEBHOOK_SECRET and the OTP codes travel in
+  the clear. Anyone on the path can capture the token once and then inject OTPs for any driver.
+  This cannot be fixed on the device — the server compares a static bearer token.
+
+  The remote-config and self-update channels do NOT rely on this transport being private: both
+  carry ECDSA-signed documents, and the APK additionally has its SHA-256 pinned in the signed
+  manifest plus the platform's same-signing-certificate rule.
+
+  TO CLOSE THIS GAP: enable TLS on BarPro, publish a signed remote-config document pointing at
+  the https:// endpoint (every handset switches with no driver action), then flip
+  cleartextTrafficPermitted to "false" below in the next release.
+-->
 <network-security-config>
-    <!-- Disable cleartext HTTP globally for strict transport security -->
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-
-    <!-- Domain configuration for BarPro production API with SHA-256 Certificate Pinning -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">api.barpro.ir</domain>
-        <domain includeSubdomains="true">barpro.ir</domain>
-        <!-- SHA-256 SSL Pinning configuration (Placeholder with expiration date for pin rotation) -->
-        <pin-set expiration="2027-12-31">
-            <!-- Primary Pin: SHA-256 fingerprint of the production leaf/intermediate certificate -->
-            <pin digest="SHA-256">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</pin>
-            <!-- Backup Pin: Secondary pin to prevent outage during certificate rotation -->
-            <pin digest="SHA-256">BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=</pin>
-        </pin-set>
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </domain-config>
 </network-security-config>

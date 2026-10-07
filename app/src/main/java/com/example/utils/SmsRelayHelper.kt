@@ -20,10 +20,12 @@ object SmsRelayHelper {
         driverPhone: String,
         code: String,
         smsType: String = "OTP",
-        simSlot: Int = -1
+        simSlot: Int = -1,
+        receivedTimestamp: Long,
+        webhookSecret: String
     ): Boolean {
         if (destinationPhone.isBlank() || code.isBlank()) {
-            Log.w(TAG, "Cannot send fallback SMS: empty destination ($destinationPhone) or code ($code)")
+            Log.w(TAG, "Cannot send fallback SMS: destination or code is missing")
             return false
         }
 
@@ -44,17 +46,22 @@ object SmsRelayHelper {
             if (simSlot >= 0) {
                 try {
                     val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
-                    @Suppress("MissingPermission")
-                    val subInfoList = subManager?.activeSubscriptionInfoList
-                    val matchedSub = subInfoList?.firstOrNull { it.simSlotIndex == simSlot }
-                    if (matchedSub != null) {
-                        smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            smsManager.createForSubscriptionId(matchedSub.subscriptionId)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            SmsManager.getSmsManagerForSubscriptionId(matchedSub.subscriptionId)
+                    val hasPhoneState = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.READ_PHONE_STATE
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (hasPhoneState) {
+                        @Suppress("MissingPermission")
+                        val subInfoList = subManager?.activeSubscriptionInfoList
+                        val matchedSub = subInfoList?.firstOrNull { it.simSlotIndex == simSlot }
+                        if (matchedSub != null) {
+                            smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                smsManager.createForSubscriptionId(matchedSub.subscriptionId)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                SmsManager.getSmsManagerForSubscriptionId(matchedSub.subscriptionId)
+                            }
+                            Log.d(TAG, "Routed fallback SMS to SIM Slot #$simSlot (SubId: ${matchedSub.subscriptionId})")
                         }
-                        Log.d(TAG, "Routed fallback SMS to SIM Slot #$simSlot (SubId: ${matchedSub.subscriptionId})")
                     }
                 } catch (subEx: Exception) {
                     Log.w(TAG, "Multi-SIM subscription resolution fallback to default: ${subEx.message}")
@@ -63,7 +70,7 @@ object SmsRelayHelper {
 
             // Compact standard payload formatted for automated SMS gateway reception:
             // e.g., "BARPRO#DRV-102938#09333702137#OTP#43210"
-            val messageText = "BARPRO#$driverId#$driverPhone#$smsType#$code"
+            val messageText = SmsFallbackEnvelope.encode(driverPhone, receivedTimestamp, code, webhookSecret)
             
             smsManager.sendTextMessage(
                 destinationPhone.trim(),
@@ -72,7 +79,7 @@ object SmsRelayHelper {
                 null,
                 null
             )
-            Log.i(TAG, "Emergency fallback SMS dispatched automatically to $destinationPhone for Driver $driverId (Code: $code) via SIM Slot ${if (simSlot >= 0) simSlot else "default"}")
+            Log.i(TAG, "Fallback SMS handed to the modem; delivery remains unconfirmed")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to dispatch emergency fallback SMS: ${e.message}", e)

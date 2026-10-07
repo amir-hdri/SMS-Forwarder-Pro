@@ -14,9 +14,11 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.data.model.ForwardStatus
 import com.example.data.repository.SmsForwardRepository
+import com.example.network.BarProContract
 import com.example.utils.LogSanitizer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 
 /**
  * Enterprise WorkManager Worker implementing the Transactional Outbox Pattern for SMS forwarding.
@@ -45,18 +47,17 @@ class SmsSyncWorker(
                 }
 
                 // If already forwarded successfully, complete
-                if (log.status == ForwardStatus.SUCCESS) {
+                if (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.SKIPPED) {
                     return Result.success()
                 }
 
                 // 5-Minute OTP Expiry Guard:
-                // If message is an OTP and more than 5 minutes (300,000 ms) have passed since receipt while offline,
-                // the code is invalid. Mark as FAILED (expired) rather than delivering stale credentials to server.
+                // If message is an OTP and timestamp is expired / outside acceptable clock tolerance,
+                // mark as FAILED (expired) rather than delivering stale credentials to server.
                 val isOtpMessage = log.otpCode != null || log.smsType == com.example.data.model.SmsType.UTCMS_OTP
-                val ageMs = System.currentTimeMillis() - log.receivedTimestamp
-                if (isOtpMessage && ageMs > 5 * 60 * 1000L) {
-                    Log.w(TAG, "OTP message #$logId has exceeded the 5-minute validity window (Age: ${ageMs / 1000}s). Marking as expired.")
-                    repository.updateLogStatus(logId, ForwardStatus.FAILED, "اعتبار کد ۵ دقیقه‌ای به پایان رسیده است (بیش از ۵ دقیقه در حالت آفلاین)")
+                if (isOtpMessage && !BarProContract.isTimestampAcceptable(log.receivedTimestamp)) {
+                    Log.w(TAG, "OTP message #$logId is outside acceptable validity window or clock skew. Marking as expired.")
+                    repository.updateLogStatus(logId, ForwardStatus.FAILED, "اعتبار کد ۵ دقیقه‌ای به پایان رسیده یا ساعت دستگاه نادرست است")
                     return Result.failure()
                 }
 
@@ -78,7 +79,7 @@ class SmsSyncWorker(
                     // Strict Error Classification:
                     // If the server returns HTTP 400 Bad Request or 401 Unauthorized (e.g. invalid secret/payload),
                     // return Result.failure() immediately (DO NOT RETRY).
-                    if (httpCode != null && (httpCode == 400 || httpCode == 401 || httpCode in 400..499)) {
+                    if (!result.isRetryable) {
                         Log.e(TAG, "Non-retryable client error ($httpCode: ${result.errorMessage}). Marking worker as failed immediately.")
                         Result.failure()
                     } else if (httpCode != null && httpCode >= 500) {
@@ -104,6 +105,8 @@ class SmsSyncWorker(
                 val count = repository.syncOfflinePendingLogs()
                 Result.success(workDataOf("synced_count" to count))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: IOException) {
             Log.e(TAG, LogSanitizer.sanitize("IOException during SMS outbox sync: ${e.message}"), e)
             if (runAttemptCount < MAX_RETRIES) {
