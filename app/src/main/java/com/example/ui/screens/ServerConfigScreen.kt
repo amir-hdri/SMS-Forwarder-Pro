@@ -1,13 +1,8 @@
 package com.example.ui.screens
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,48 +14,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Https
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -73,28 +47,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AuthType
 import com.example.data.model.ForwardConfig
-import com.example.ui.theme.Cyan400
-import com.example.ui.theme.Emerald400
-import com.example.ui.theme.Indigo400
-import com.example.ui.theme.Rose400
-import com.example.ui.theme.Sky400
-import com.example.ui.theme.Slate300
-import com.example.ui.theme.Slate400
-import com.example.ui.theme.Slate800
-import com.example.ui.theme.Slate900
-import com.example.ui.theme.Slate950
+import com.example.network.ServerHealthStatus
+import com.example.ui.theme.BarProBg
+import com.example.ui.theme.BarProBorder
+import com.example.ui.theme.BarProBorderCyan
+import com.example.ui.theme.BarProCyan
+import com.example.ui.theme.BarProEmerald
+import com.example.ui.theme.BarProRose
+import com.example.ui.theme.BarProSurface
+import com.example.ui.theme.BarProSurfaceElevated
+import com.example.ui.theme.BarProSurfaceSubtle
+import com.example.ui.theme.BarProTextMuted
+import com.example.ui.theme.BarProTextPrimary
+import com.example.ui.theme.BarProTextSecondary
 import com.example.ui.viewmodel.EncryptionSandboxState
 import com.example.ui.viewmodel.EndpointTestState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerConfigScreen(
     config: ForwardConfig,
@@ -111,355 +84,96 @@ fun ServerConfigScreen(
 ) {
     val context = LocalContext.current
 
-    var url by remember(config) { mutableStateOf(config.endpointUrl) }
-    var authType by remember(config) { mutableStateOf(config.authType) }
-    var authHeaderKey by remember(config) { mutableStateOf(config.authHeaderKey) }
-    var authHeaderValue by remember(config) { mutableStateOf(config.authHeaderValue) }
-    var isEncryptionEnabled by remember(config) { mutableStateOf(config.isEncryptionEnabled) }
-    var secretKey by remember(config) { mutableStateOf(config.secretEncryptionKey) }
-    var deviceId by remember(config) { mutableStateOf(config.deviceIdentifier) }
-    var showForegroundNotification by remember(config) { mutableStateOf(config.showForegroundNotification) }
-    var enableHealthAlertNotification by remember(config) { mutableStateOf(config.enableHealthAlertNotification) }
-    var healthCheckIntervalMinutes by remember(config) { mutableStateOf(config.healthCheckIntervalMinutes) }
-    var healthFailureThreshold by remember(config) { mutableStateOf(config.healthFailureThreshold) }
     var driverId by remember(config) { mutableStateOf(config.driverId) }
     var driverFullName by remember(config) { mutableStateOf(config.driverFullName) }
     var driverPhone by remember(config) { mutableStateOf(config.driverPhone) }
-    var filterUtcmsOnly by remember(config) { mutableStateOf(config.filterUtcmsOnly) }
-    var enableWorkManagerSync by remember(config) { mutableStateOf(config.enableWorkManagerSync) }
-    var enableSmsFallback by remember(config) { mutableStateOf(config.enableSmsFallback) }
-    var fallbackServerPhoneNumber by remember(config) { mutableStateOf(config.fallbackServerPhoneNumber) }
-    var allowCleartextTransport by remember(config) { mutableStateOf(config.allowCleartextTransport) }
 
-    var keyVisible by remember { mutableStateOf(false) }
-    var authDropdownExpanded by remember { mutableStateOf(false) }
-    var isAdvancedExpanded by remember { mutableStateOf(false) }
-    var isSandboxExpanded by remember { mutableStateOf(false) }
-    var sandboxInput by remember { mutableStateOf("تست ارسال پیامک و استخراج OTP") }
-
-    val isHttps = url.trim().startsWith("https://", ignoreCase = true)
+    val isConnected = serverHealthState.status == ServerHealthStatus.CONNECTED
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .background(BarProBg)
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         // ==========================================
-        // 1. MAIN SERVER URL CARD (آدرس سرور)
+        // 1. DRIVER PROFILE CARD (مشخصات راننده)
         // ==========================================
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("driver_profile_card"),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
+                colors = CardDefaults.cardColors(containerColor = BarProSurface)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Slate800, RoundedCornerShape(20.dp))
-                        .padding(16.dp)
+                        .border(1.dp, BarProBorderCyan, RoundedCornerShape(20.dp))
+                        .padding(18.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0x2238BDF8)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Https,
-                                    contentDescription = null,
-                                    tint = Sky400,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "آدرس سرور مقصد",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isHttps) Color(0x2210B981) else Color(0x22F59E0B))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProSurfaceSubtle)
+                                .border(1.dp, BarProBorderCyan, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (isHttps) "امن (HTTPS)" else "ساده (HTTP)",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isHttps) Emerald400 else Color(0xFFF59E0B)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Quick Preset for BarPro RPA Webhook / UTCMS OTP Vault
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0x1A38BDF8))
-                            .border(1.dp, Color(0x3338BDF8), RoundedCornerShape(12.dp))
-                            .clickable {
-                                val rpaUrl = "https://api.barpro.ir/api/v1/otp/sms-forwarder"
-                                val rpaHeaderKey = "X-OTP-Webhook-Token"
-                                val rpaHeaderVal = if (authHeaderValue.isBlank() || authHeaderValue.contains("Bearer")) "change-me-to-a-secure-random-token" else authHeaderValue
-                                url = rpaUrl
-                                authType = AuthType.CUSTOM_HEADER
-                                authHeaderKey = rpaHeaderKey
-                                authHeaderValue = rpaHeaderVal
-                                onSaveConfig(
-                                    config.copy(
-                                        endpointUrl = rpaUrl,
-                                        authType = AuthType.CUSTOM_HEADER,
-                                        authHeaderKey = rpaHeaderKey,
-                                        authHeaderValue = rpaHeaderVal
-                                    )
-                                )
-                                Toast.makeText(context, "الگوی وب‌هوک RPA بارپرو و هدر X-OTP-Webhook-Token اعمال شد", Toast.LENGTH_SHORT).show()
-                            }
-                            .padding(12.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = Sky400,
+                                tint = BarProCyan,
                                 modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "تنظیم خودکار وب‌هوک RPA بارپرو (صندوق OTP)",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Sky400
-                                )
-                                Text(
-                                    text = "/api/v1/otp/sms-forwarder با هدر X-OTP-Webhook-Token (صدور خودکار ۱۷:۳۰ تا ۰۸:۰۰)",
-                                    fontSize = 10.sp,
-                                    color = Slate300
-                                )
-                            }
                         }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = url,
-                        onValueChange = {
-                            url = it
-                            onSaveConfig(config.copy(endpointUrl = it))
-                        },
-                        label = { Text("آدرس وب‌هوک سرور") },
-                        placeholder = { Text("https://example.com/api/sms") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Sky400,
-                            unfocusedBorderColor = Slate800,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Slate950,
-                            unfocusedContainerColor = Slate950
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("server_url_input")
-                    )
-
-                    if (!isHttps && url.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0x1AF59E0B))
-                                .border(1.dp, Color(0x33F59E0B), RoundedCornerShape(10.dp))
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "تأیید اتصال ناامن HTTP (مخصوص بارپرو فعلی)",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFF59E0B)
-                                )
-                                Text(
-                                    text = "سرور بارپرو در حال حاضر بدون HTTPS است؛ برای امکان ارسال به این آدرس فعال شود.",
-                                    fontSize = 10.sp,
-                                    color = Slate300
-                                )
-                            }
-                            Switch(
-                                checked = allowCleartextTransport,
-                                onCheckedChange = {
-                                    allowCleartextTransport = it
-                                    onSaveConfig(config.copy(allowCleartextTransport = it))
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFFF59E0B),
-                                    checkedTrackColor = Color(0x4DF59E0B)
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Buttons for Quick Test
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                onRunTest(
-                                    url,
-                                    authType,
-                                    authHeaderKey,
-                                    authHeaderValue,
-                                    isEncryptionEnabled,
-                                    secretKey
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Sky400, contentColor = Slate950),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("test_endpoint_button")
-                        ) {
-                            if (testState.isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = Slate950,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("تست اتصال", fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = onOpenServerGuide,
-                            colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Cyan400),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(0.9f)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Code,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("راهنما", fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Test Result Inline Box
-                    testState.result?.let { res ->
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Slate950)
-                                .border(
-                                    1.dp,
-                                    if (res.isSuccess) Color(0x4410B981) else Color(0x44F43F5E),
-                                    RoundedCornerShape(10.dp)
-                                )
-                                .padding(10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (res.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
-                                    contentDescription = null,
-                                    tint = if (res.isSuccess) Emerald400 else Rose400,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (res.isSuccess) "پاسخ موفق (${res.durationMs}ms - کد ${res.httpStatusCode ?: 200})" else "خطا: ${res.errorMessage ?: "عدم دسترسی به سرور"}",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (res.isSuccess) Emerald400 else Rose400
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ==========================================
-        // 1.5 DRIVER & FLEET PROFILE (اطلاعات راننده و ناوگان بارپرو)
-        // ==========================================
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Slate800, RoundedCornerShape(20.dp))
-                        .padding(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0x2210B981)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = Emerald400,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
                             Text(
-                                text = "شناسه راننده و ناوگان بارپرو",
+                                text = "مشخصات راننده و ناوگان بارپرو",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = BarProTextPrimary
+                            )
+                            Text(
+                                text = "اطلاعات هویتی جهت ثبت خودکار بارنامه‌ها در سرور",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = BarProTextSecondary
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = driverFullName,
+                        onValueChange = {
+                            driverFullName = it
+                            onSaveConfig(config.copy(driverFullName = it))
+                        },
+                        label = { Text("نام و نام خانوادگی راننده") },
+                        placeholder = { Text("مثال: علی محمدی") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BarProCyan,
+                            unfocusedBorderColor = BarProBorder,
+                            focusedTextColor = BarProTextPrimary,
+                            unfocusedTextColor = BarProTextPrimary,
+                            focusedContainerColor = BarProSurfaceSubtle,
+                            unfocusedContainerColor = BarProSurfaceSubtle
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -469,43 +183,21 @@ fun ServerConfigScreen(
                             driverId = it
                             onSaveConfig(config.copy(driverId = it))
                         },
-                        label = { Text("کد شناسایی / کد ملی راننده") },
-                        placeholder = { Text("DRV-908172 یا 0012345678") },
+                        label = { Text("کد ملی / شناسه راننده") },
+                        placeholder = { Text("مثال: ۰۰۱۲۳۴۵۶۷۸") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Emerald400,
-                            unfocusedBorderColor = Slate800,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Slate950,
-                            unfocusedContainerColor = Slate950
+                            focusedBorderColor = BarProCyan,
+                            unfocusedBorderColor = BarProBorder,
+                            focusedTextColor = BarProTextPrimary,
+                            unfocusedTextColor = BarProTextPrimary,
+                            focusedContainerColor = BarProSurfaceSubtle,
+                            unfocusedContainerColor = BarProSurfaceSubtle
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = driverFullName,
-                        onValueChange = {
-                            driverFullName = it
-                            onSaveConfig(config.copy(driverFullName = it))
-                        },
-                        label = { Text("نام و نام خانوادگی راننده") },
-                        placeholder = { Text("علی محمدی") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Emerald400,
-                            unfocusedBorderColor = Slate800,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Slate950,
-                            unfocusedContainerColor = Slate950
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     OutlinedTextField(
                         value = driverPhone,
@@ -513,177 +205,27 @@ fun ServerConfigScreen(
                             driverPhone = it
                             onSaveConfig(config.copy(driverPhone = it))
                         },
-                        label = { Text("شماره همراه راننده (سیم‌کارت دریافت‌کننده پیامک)") },
-                        placeholder = { Text("09333702137") },
+                        label = { Text("شماره همراه راننده (سیم‌کارت فعال در گوشی)") },
+                        placeholder = { Text("مثال: ۰۹۱۲۳۴۵۶۷۸۹") },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Emerald400,
-                            unfocusedBorderColor = Slate800,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedContainerColor = Slate950,
-                            unfocusedContainerColor = Slate950
+                            focusedBorderColor = BarProCyan,
+                            unfocusedBorderColor = BarProBorder,
+                            focusedTextColor = BarProTextPrimary,
+                            unfocusedTextColor = BarProTextPrimary,
+                            focusedContainerColor = BarProSurfaceSubtle,
+                            unfocusedContainerColor = BarProSurfaceSubtle
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    val normalizedPhonePreview = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
+                    val normalizedPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
                     if (driverPhone.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "فرمت استاندارد وب‌هوک و ردیس: $normalizedPhonePreview",
+                            text = "فرمت شناسایی سامانه: $normalizedPhone",
                             fontSize = 11.sp,
-                            color = if (normalizedPhonePreview.startsWith("09") && normalizedPhonePreview.length == 11) Emerald400 else Rose400
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Switch: Filter UTCMS only
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "فیلتر هوشمند اختصاصی UTCMS و بارنامه",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "فقط پیامک‌های حاوی کد رهگیری، کد بارنامه و رمز OTP فوروارد شوند (کاهش مصرف اینترنت و باتری)",
-                                fontSize = 11.sp,
-                                color = Slate400,
-                                lineHeight = 16.sp
-                            )
-                        }
-
-                        Switch(
-                            checked = filterUtcmsOnly,
-                            onCheckedChange = {
-                                filterUtcmsOnly = it
-                                onSaveConfig(config.copy(filterUtcmsOnly = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Slate950,
-                                checkedTrackColor = Emerald400,
-                                uncheckedThumbColor = Slate400,
-                                uncheckedTrackColor = Slate800
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Switch: WorkManager offline guaranteed sync
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "ارسال تضمینی در پس‌زمینه (WorkManager)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "در صورت قطع موقت اینترنت در جاده، پیامک‌ها در صف ذخیره و بلافاصله پس از اتصال به سرور بارپرو منتقل شوند",
-                                fontSize = 11.sp,
-                                color = Slate400,
-                                lineHeight = 16.sp
-                            )
-                        }
-
-                        Switch(
-                            checked = enableWorkManagerSync,
-                            onCheckedChange = {
-                                enableWorkManagerSync = it
-                                onSaveConfig(config.copy(enableWorkManagerSync = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Slate950,
-                                checkedTrackColor = Emerald400,
-                                uncheckedThumbColor = Slate400,
-                                uncheckedTrackColor = Slate800
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Slate800))
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // SMS Fallback Relay Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "فوروارد پیامکی اضطراری (SMS Fallback)",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "در زمان قطعی کامل اینترنت در جاده، کد ۵ دقیقه‌ای فوراً و خودکار از طریق پیامک به سرور ارسال شود",
-                                fontSize = 11.sp,
-                                color = Slate400,
-                                lineHeight = 16.sp
-                            )
-                        }
-
-                        Switch(
-                            checked = enableSmsFallback,
-                            onCheckedChange = {
-                                enableSmsFallback = it
-                                onSaveConfig(config.copy(enableSmsFallback = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Slate950,
-                                checkedTrackColor = Emerald400,
-                                uncheckedThumbColor = Slate400,
-                                uncheckedTrackColor = Slate800
-                            )
-                        )
-                    }
-
-                    if (enableSmsFallback) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val isPhoneValid = fallbackServerPhoneNumber.isBlank() ||
-                                fallbackServerPhoneNumber.matches(Regex("""^(\+98|0)?9\d{9}$|^[0-9]{4,14}$"""))
-                        OutlinedTextField(
-                            value = fallbackServerPhoneNumber,
-                            onValueChange = {
-                                fallbackServerPhoneNumber = it.trim()
-                                onSaveConfig(config.copy(fallbackServerPhoneNumber = it.trim()))
-                            },
-                            label = { Text("شماره اختصاصی سرور / مودم GSM بارپرو", fontSize = 12.sp, color = Slate400) },
-                            placeholder = { Text("مثال: 09120000000 یا 30000000", fontSize = 11.sp, color = Slate400) },
-                            supportingText = {
-                                if (fallbackServerPhoneNumber.isBlank()) {
-                                    Text("جهت کارکرد فالبک اضطراری، شماره سیم‌کارت سرور یا درگاه پیامک را وارد کنید.", color = Color(0xFFF59E0B), fontSize = 10.sp)
-                                } else if (!isPhoneValid) {
-                                    Text("فرمت شماره تلفن یا خط پیامکی معتبر نیست.", color = Rose400, fontSize = 10.sp)
-                                } else {
-                                    Text("آماده رله خودکار پیامکی به سرور در ۳ تا ۵ ثانیه هنگام قطعی اینترنت.", color = Emerald400, fontSize = 10.sp)
-                                }
-                            },
-                            isError = !isPhoneValid,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Emerald400,
-                                unfocusedBorderColor = Slate800,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            )
+                            color = if (normalizedPhone.startsWith("09") && normalizedPhone.length == 11) BarProEmerald else BarProRose
                         )
                     }
                 }
@@ -691,23 +233,21 @@ fun ServerConfigScreen(
         }
 
         // ==========================================
-        // 2. ENCRYPTION CARD (رمزنگاری)
+        // 2. SERVER CONNECTION STATUS (وضعیت اتصال به سرور بارپرو)
         // ==========================================
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("server_status_card"),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
+                colors = CardDefaults.cardColors(containerColor = BarProSurface)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(
-                            1.dp,
-                            if (isEncryptionEnabled) Color(0x3306B6D4) else Slate800,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .padding(16.dp)
+                        .border(1.dp, BarProBorder, RoundedCornerShape(20.dp))
+                        .padding(18.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -717,485 +257,184 @@ fun ServerConfigScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isEncryptionEnabled) Color(0x2206B6D4) else Slate800),
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BarProSurfaceSubtle)
+                                    .border(1.dp, if (isConnected) BarProEmerald.copy(alpha = 0.4f) else BarProRose.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Lock,
+                                    imageVector = if (isConnected) Icons.Default.CloudDone else Icons.Default.CloudOff,
                                     contentDescription = null,
-                                    tint = if (isEncryptionEnabled) Cyan400 else Slate400,
-                                    modifier = Modifier.size(18.dp)
+                                    tint = if (isConnected) BarProEmerald else BarProRose,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "رمزنگاری اطلاعات (AES-256)",
-                                    fontSize = 14.sp,
+                                    text = "ارتباط با سرور بارپرو",
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = BarProTextPrimary
                                 )
                                 Text(
-                                    text = "ارسال امن محتوا با کلید محرمانه",
-                                    fontSize = 11.sp,
-                                    color = Slate400
+                                    text = "پذیرش خودکار و آنی کدهای اعتبارسنجی بارنامه",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = BarProTextSecondary
                                 )
                             }
                         }
 
-                        Switch(
-                            checked = isEncryptionEnabled,
-                            onCheckedChange = {
-                                isEncryptionEnabled = it
-                                onSaveConfig(config.copy(isEncryptionEnabled = it))
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Slate950,
-                                checkedTrackColor = Cyan400,
-                                uncheckedThumbColor = Slate400,
-                                uncheckedTrackColor = Slate800
-                            )
-                        )
-                    }
-
-                    if (isEncryptionEnabled) {
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedTextField(
-                            value = secretKey,
-                            onValueChange = {
-                                secretKey = it
-                                onSaveConfig(config.copy(secretEncryptionKey = it))
-                            },
-                            label = { Text("کلید اختصاصی رمزنگاری (Secret Key)") },
-                            singleLine = true,
-                            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                Row {
-                                    IconButton(onClick = { keyVisible = !keyVisible }) {
-                                        Icon(
-                                            imageVector = if (keyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = null,
-                                            tint = Slate400
-                                        )
-                                    }
-                                    IconButton(onClick = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("Encryption Key", secretKey)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "کلید کپی شد", Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = null,
-                                            tint = Slate400
-                                        )
-                                    }
-                                }
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Cyan400,
-                                unfocusedBorderColor = Slate800,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Slate950,
-                                unfocusedContainerColor = Slate950
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "کلید باید با سرور همسان باشد",
-                                fontSize = 11.sp,
-                                color = Slate400
-                            )
-
-                            Button(
-                                onClick = {
-                                    val newKey = onGenerateKey()
-                                    secretKey = newKey
-                                    onSaveConfig(config.copy(secretEncryptionKey = newKey))
-                                    Toast.makeText(context, "کلید جدید ایجاد شد", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Cyan400),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("تولید کلید تصادفی", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // ==========================================
-        // 3. AUTHENTICATION CARD (احراز هویت)
-        // ==========================================
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Slate800, RoundedCornerShape(20.dp))
-                        .padding(16.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Live status pill
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x226366F1)),
-                            contentAlignment = Alignment.Center
+                                .background(if (isConnected) BarProEmerald.copy(alpha = 0.15f) else BarProRose.copy(alpha = 0.15f))
+                                .border(1.dp, if (isConnected) BarProEmerald.copy(alpha = 0.4f) else BarProRose.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Key,
-                                contentDescription = null,
-                                tint = Indigo400,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isConnected) BarProEmerald else BarProRose)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isConnected) "آنلاین و متصل" else "قطع ارتباط",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isConnected) BarProEmerald else BarProRose
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "احراز هویت و توکن",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    ExposedDropdownMenuBox(
-                        expanded = authDropdownExpanded,
-                        onExpandedChange = { authDropdownExpanded = it }
+                    Text(
+                        text = "تنظیمات وب‌هوک و امنیت به صورت خودکار و از پیش‌تعیین‌شده توسط بارپرو مدیریت می‌شوند و راننده نیازی به تنظیم هیچ آدرس یا کدی ندارد.",
+                        fontSize = 12.sp,
+                        color = BarProTextSecondary,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Check Health Button
+                    Button(
+                        onClick = onCheckServerHealth,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BarProSurfaceElevated,
+                            contentColor = BarProCyan
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .border(1.dp, BarProBorderCyan, RoundedCornerShape(12.dp))
                     ) {
-                        OutlinedTextField(
-                            value = when (authType) {
-                                AuthType.CUSTOM_HEADER -> if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) "وب‌هوک اتوماسیون بارپرو (X-OTP-Webhook-Token)" else "هدر سفارشی ($authHeaderKey)"
-                                AuthType.BEARER_TOKEN -> "توکن Bearer"
-                                AuthType.API_KEY_HEADER -> "کلید اختصاصی API (هدر X-API-KEY)"
-                                AuthType.NONE -> "بدون احراز هویت"
-                            },
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("نوع احراز هویت") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = authDropdownExpanded) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Indigo400,
-                                unfocusedBorderColor = Slate800,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Slate950,
-                                unfocusedContainerColor = Slate950
-                            ),
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("بررسی مجدد اتصال به سرور بارپرو", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    testState.result?.let { res ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = authDropdownExpanded,
-                            onDismissRequest = { authDropdownExpanded = false },
-                            modifier = Modifier.background(Slate900)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProSurfaceSubtle)
+                                .border(
+                                    1.dp,
+                                    if (res.isSuccess) BarProEmerald.copy(alpha = 0.5f) else BarProRose.copy(alpha = 0.5f),
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .padding(10.dp)
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("وب‌هوک اتوماسیون بارپرو (X-OTP-Webhook-Token)", color = Color.White, fontWeight = FontWeight.Bold) },
-                                onClick = {
-                                    authType = AuthType.CUSTOM_HEADER
-                                    authHeaderKey = "X-OTP-Webhook-Token"
-                                    onSaveConfig(config.copy(authType = AuthType.CUSTOM_HEADER, authHeaderKey = "X-OTP-Webhook-Token", forwarderSecret = authHeaderValue))
-                                    authDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("توکن Bearer", color = Color.White) },
-                                onClick = {
-                                    authType = AuthType.BEARER_TOKEN
-                                    authHeaderKey = "Authorization"
-                                    onSaveConfig(config.copy(authType = AuthType.BEARER_TOKEN, authHeaderKey = "Authorization"))
-                                    authDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("کلید اختصاصی API (X-API-KEY)", color = Color.White) },
-                                onClick = {
-                                    authType = AuthType.API_KEY_HEADER
-                                    authHeaderKey = "X-API-KEY"
-                                    onSaveConfig(config.copy(authType = AuthType.API_KEY_HEADER, authHeaderKey = "X-API-KEY"))
-                                    authDropdownExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("بدون احراز هویت", color = Color.White) },
-                                onClick = {
-                                    authType = AuthType.NONE
-                                    onSaveConfig(config.copy(authType = AuthType.NONE))
-                                    authDropdownExpanded = false
-                                }
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (res.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = if (res.isSuccess) BarProEmerald else BarProRose,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (res.isSuccess) "اتصال با موفقیت تأیید شد (${res.durationMs} میلی‌ثانیه)" else "خطا در اتصال: ${res.errorMessage ?: "سرور در دسترس نیست"}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (res.isSuccess) BarProEmerald else BarProRose
+                                )
+                            }
                         }
-                    }
-
-                    if (authType != AuthType.NONE) {
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = authHeaderValue,
-                            onValueChange = {
-                                authHeaderValue = it
-                                onSaveConfig(
-                                    config.copy(
-                                        authHeaderValue = it,
-                                        forwarderSecret = if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) it else config.forwarderSecret
-                                    )
-                                )
-                            },
-                            label = {
-                                Text(
-                                    if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true))
-                                        "کلید امنیتی وب‌هوک (X-OTP-Webhook-Token)"
-                                    else
-                                        "مقدار توکن / API Key"
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true))
-                                        "change-me-to-a-secure-random-token"
-                                    else
-                                        "Bearer token یا API key"
-                                )
-                            },
-                            supportingText = {
-                                if (authHeaderKey.equals("X-OTP-Webhook-Token", ignoreCase = true)) {
-                                    Text(
-                                        "این مقدار باید با متغیر SMS_FORWARDER_SECRET روی سرور FastAPI یکسان باشد (خطای ۴۰۱ در صورت مغایرت)",
-                                        fontSize = 11.sp,
-                                        color = Sky400
-                                    )
-                                }
-                            },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Indigo400,
-                                unfocusedBorderColor = Slate800,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Slate950,
-                                unfocusedContainerColor = Slate950
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
             }
         }
 
         // ==========================================
-        // 4. ADVANCED SETTINGS (تنظیمات پیشرفته - تاشو)
+        // 3. PRIVACY & SECURITY ASSURANCE (امنیت و حریم خصوصی راننده)
         // ==========================================
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("privacy_security_card"),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
+                colors = CardDefaults.cardColors(containerColor = BarProSurface)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Slate800, RoundedCornerShape(20.dp))
-                        .padding(16.dp)
+                        .border(1.dp, BarProBorder, RoundedCornerShape(20.dp))
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isAdvancedExpanded = !isAdvancedExpanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BarProSurfaceSubtle)
+                            .border(1.dp, BarProBorder, RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0x2210B981)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = null,
-                                    tint = Emerald400,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "تنظیمات پیشرفته و پایش",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-
                         Icon(
-                            imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = Slate400
+                            tint = BarProEmerald,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    AnimatedVisibility(visible = isAdvancedExpanded) {
-                        Column(modifier = Modifier.padding(top = 14.dp)) {
-                            // Device ID
-                            OutlinedTextField(
-                                value = deviceId,
-                                onValueChange = {
-                                    deviceId = it
-                                    onSaveConfig(config.copy(deviceIdentifier = it))
-                                },
-                                label = { Text("شناسه اختصاصی این دستگاه") },
-                                singleLine = true,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Sky400,
-                                    unfocusedBorderColor = Slate800,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    focusedContainerColor = Slate950,
-                                    unfocusedContainerColor = Slate950
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Switch: Background Notification
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "اعلان دائمی سرویس پس‌زمینه",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = "جلوگیری از بسته‌شدن برنامه توسط اندروید",
-                                        fontSize = 11.sp,
-                                        color = Slate400
-                                    )
-                                }
-
-                                Switch(
-                                    checked = showForegroundNotification,
-                                    onCheckedChange = {
-                                        showForegroundNotification = it
-                                        onSaveConfig(config.copy(showForegroundNotification = it))
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Slate950,
-                                        checkedTrackColor = Sky400,
-                                        uncheckedThumbColor = Slate400,
-                                        uncheckedTrackColor = Slate800
-                                    )
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Switch: Disconnect alert
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "هشدار قطعی ارتباط با سرور",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = "نمایش نوتیفیکیشن در صورت قطعی اتصال",
-                                        fontSize = 11.sp,
-                                        color = Slate400
-                                    )
-                                }
-
-                                Switch(
-                                    checked = enableHealthAlertNotification,
-                                    onCheckedChange = {
-                                        enableHealthAlertNotification = it
-                                        onSaveConfig(config.copy(enableHealthAlertNotification = it))
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Slate950,
-                                        checkedTrackColor = Emerald400,
-                                        uncheckedThumbColor = Slate400,
-                                        uncheckedTrackColor = Slate800
-                                    )
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Action buttons
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = onCheckServerHealth,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Emerald400),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("بررسی سلامت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-
-                                Button(
-                                    onClick = onTestDisconnectNotification,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Slate800, contentColor = Rose400),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("تست هشدار", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "حفظ حریم خصوصی و امنیت پیامک‌ها",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = BarProTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "سیستم به صورت هوشمند تنها کدهای اعتبارسنجی بارنامه را فیلتر کرده و هیچ‌گونه پیامک شخصی یا بانکی خوانده یا ارسال نمی‌شود.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BarProTextSecondary,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
         }
 
         item {
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

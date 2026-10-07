@@ -20,10 +20,10 @@ data class ForwardConfig(
     @PrimaryKey
     val id: Int = 1, // Single row configuration
     val isMasterEnabled: Boolean = false,
-    val endpointUrl: String = "",
+    val endpointUrl: String = "https://api.barpro.ir/api/v1/otp/sms-forwarder",
     val authType: AuthType = AuthType.CUSTOM_HEADER,
     val authHeaderKey: String = "X-OTP-Webhook-Token",
-    val authHeaderValue: String = "",
+    val authHeaderValue: String = "barpro-fleet-secure-token",
     val forwarderSecret: String = "",
     val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو با HTTPS و JSON استاندارد کار می‌کند
     val secretEncryptionKey: String = "",

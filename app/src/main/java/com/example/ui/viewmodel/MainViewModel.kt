@@ -52,6 +52,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Navigation trigger from notifications or external intents
     val showServerSettings = MutableStateFlow(false)
+    val showPermissionsDialog = MutableStateFlow(false)
 
     fun openServerSettings() {
         showServerSettings.value = true
@@ -59,6 +60,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeServerSettings() {
         showServerSettings.value = false
+    }
+
+    fun openPermissions() {
+        showPermissionsDialog.value = true
+    }
+
+    fun closePermissions() {
+        showPermissionsDialog.value = false
     }
 
     // Log Filtering & Search

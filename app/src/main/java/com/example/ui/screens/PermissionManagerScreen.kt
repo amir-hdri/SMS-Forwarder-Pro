@@ -143,10 +143,6 @@ fun PermissionManagerScreen(
         permissionsList = PermissionHelper.getAllPermissionsStatus(context)
     }
 
-    // Filter states
-    var selectedCategory by remember { mutableStateOf<PermissionCategory?>(null) }
-    var selectedStatusFilter by remember { mutableStateOf<String>("ALL") } // "ALL", "GRANTED", "DENIED"
-
     // Metrics calculations
     val totalCount = permissionsList.size
     val grantedCount = permissionsList.count { it.isGranted }
@@ -154,17 +150,7 @@ fun PermissionManagerScreen(
     val areAllCriticalGranted = PermissionHelper.areCriticalPermissionsGranted(context)
     val areAllGranted = permissionsList.all { it.isGranted }
     val progress = if (totalCount > 0) grantedCount.toFloat() / totalCount.toFloat() else 1f
-
-    // Filtered items
-    val filteredPermissions = permissionsList.filter { item ->
-        val matchesCategory = (selectedCategory == null) || (item.category == selectedCategory)
-        val matchesStatus = when (selectedStatusFilter) {
-            "GRANTED" -> item.isGranted
-            "DENIED" -> !item.isGranted
-            else -> true
-        }
-        matchesCategory && matchesStatus
-    }
+    val filteredPermissions = permissionsList
 
     Scaffold(
         modifier = modifier
@@ -410,146 +396,7 @@ fun PermissionManagerScreen(
                 }
             }
 
-            // ==============================================================
-            // 2. CATEGORY & STATUS FILTER CHIPS
-            // ==============================================================
-            item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "دسته‌بندی‌های مجوز (SMS، اعلان، پس‌زمینه)",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = PaletteGold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
 
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = selectedCategory == null,
-                                onClick = { selectedCategory = null },
-                                label = { Text("همه دسته‌ها ($totalCount)") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PaletteSage,
-                                    selectedLabelColor = PaletteMidnight,
-                                    selectedLeadingIconColor = PaletteMidnight,
-                                    containerColor = PaletteOceanic,
-                                    labelColor = PaletteGold
-                                ),
-                                shape = RoundedCornerShape(10.dp)
-                            )
-                        }
-
-                        item {
-                            val smsCount = permissionsList.count { it.category == PermissionCategory.SMS }
-                            FilterChip(
-                                selected = selectedCategory == PermissionCategory.SMS,
-                                onClick = { selectedCategory = PermissionCategory.SMS },
-                                label = { Text("پیامک (SMS) ($smsCount)") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PaletteSage,
-                                    selectedLabelColor = PaletteMidnight,
-                                    selectedLeadingIconColor = PaletteMidnight,
-                                    containerColor = PaletteOceanic,
-                                    labelColor = PaletteGold
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("filter_chip_sms")
-                            )
-                        }
-
-                        item {
-                            val notifCount = permissionsList.count { it.category == PermissionCategory.NOTIFICATION }
-                            FilterChip(
-                                selected = selectedCategory == PermissionCategory.NOTIFICATION,
-                                onClick = { selectedCategory = PermissionCategory.NOTIFICATION },
-                                label = { Text("اعلان‌ها (Notification) ($notifCount)") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PaletteSage,
-                                    selectedLabelColor = PaletteMidnight,
-                                    selectedLeadingIconColor = PaletteMidnight,
-                                    containerColor = PaletteOceanic,
-                                    labelColor = PaletteGold
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("filter_chip_notification")
-                            )
-                        }
-
-                        item {
-                            val bgCount = permissionsList.count { it.category == PermissionCategory.BACKGROUND }
-                            FilterChip(
-                                selected = selectedCategory == PermissionCategory.BACKGROUND,
-                                onClick = { selectedCategory = PermissionCategory.BACKGROUND },
-                                label = { Text("پس‌زمینه (Background) ($bgCount)") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.BatteryAlert, contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = PaletteSage,
-                                    selectedLabelColor = PaletteMidnight,
-                                    selectedLeadingIconColor = PaletteMidnight,
-                                    containerColor = PaletteOceanic,
-                                    labelColor = PaletteGold
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.testTag("filter_chip_background")
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Secondary status filter tabs: All vs Granted vs Denied
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(PaletteMidnight)
-                            .border(1.dp, PaletteOceanic, RoundedCornerShape(10.dp))
-                            .padding(4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        StatusFilterButton(
-                            title = "همه",
-                            count = permissionsList.size,
-                            isSelected = selectedStatusFilter == "ALL",
-                            onClick = { selectedStatusFilter = "ALL" },
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatusFilterButton(
-                            title = "تایید شده",
-                            count = grantedCount,
-                            icon = Icons.Default.CheckCircle,
-                            iconColor = PaletteSage,
-                            isSelected = selectedStatusFilter == "GRANTED",
-                            onClick = { selectedStatusFilter = "GRANTED" },
-                            modifier = Modifier.weight(1.1f)
-                        )
-                        StatusFilterButton(
-                            title = "رد شده / اقدام",
-                            count = deniedCount,
-                            icon = Icons.Default.Warning,
-                            iconColor = PaletteCoral,
-                            isSelected = selectedStatusFilter == "DENIED",
-                            onClick = { selectedStatusFilter = "DENIED" },
-                            modifier = Modifier.weight(1.2f)
-                        )
-                    }
-                }
-            }
 
             // ==============================================================
             // 3. ENHANCED PERMISSIONS STATUS LIST WITH MATERIAL 3 ICONS
@@ -757,56 +604,6 @@ private fun MetricTile(
 }
 
 /**
- * Filter tab button for status.
- */
-@Composable
-private fun StatusFilterButton(
-    title: String,
-    count: Int,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    iconColor: Color = PaletteGold
-) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (isSelected) PaletteOceanic else Color.Transparent,
-        animationSpec = tween(200),
-        label = "tabBg"
-    )
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isSelected) iconColor else iconColor.copy(alpha = 0.6f),
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(3.dp))
-            }
-            Text(
-                text = "$title ($count)",
-                fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isSelected) PaletteGold else PaletteGold.copy(alpha = 0.65f)
-            )
-        }
-    }
-}
-
-/**
  * Individual Permission Item Card with UI indicators showing whether it is granted or denied,
  * enhanced with Material 3 status icons (checkmarks for granted, alert icons for denied).
  */
@@ -819,12 +616,6 @@ private fun PermissionStatusCard(
         PermissionCategory.SMS -> Icons.Default.Sms
         PermissionCategory.NOTIFICATION -> if (item.id == "notification_listener") Icons.Default.NotificationsActive else Icons.Default.Notifications
         PermissionCategory.BACKGROUND -> Icons.Default.BatteryAlert
-    }
-
-    val categoryLabel = when (item.category) {
-        PermissionCategory.SMS -> "پیامک"
-        PermissionCategory.NOTIFICATION -> "اعلان"
-        PermissionCategory.BACKGROUND -> "پس‌زمینه"
     }
 
     Card(
@@ -881,25 +672,11 @@ private fun PermissionStatusCard(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    // Category & Requirement Chips
+                    // Requirement Chip
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // Category Badge
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(PaletteMidnight)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = categoryLabel,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PaletteGold
-                            )
-                        }
 
                         // Requirement Badge
                         if (item.isRequired) {

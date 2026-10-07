@@ -82,6 +82,7 @@ import com.example.ui.screens.ServerConfigScreen
 import com.example.ui.screens.ServerGuideSheet
 import com.example.ui.screens.TestSmsDialog
 import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.BarProCyan
 import com.example.ui.theme.PaletteDarkest
 import com.example.ui.theme.PaletteDeep
 import com.example.ui.theme.PaletteLight
@@ -129,6 +130,9 @@ class MainActivity : ComponentActivity() {
         if (target == com.example.service.ServerHealthNotifier.TAB_SERVER) {
             viewModel.openServerSettings()
         }
+        if (incomingIntent.getBooleanExtra(com.example.service.PermissionNotifier.EXTRA_OPEN_PERMISSIONS, false)) {
+            viewModel.openPermissions()
+        }
     }
 }
 
@@ -175,6 +179,15 @@ fun MainAppScreen(viewModel: MainViewModel) {
     var showSimulateDialog by remember { mutableStateOf(false) }
     var showOtpInquiryDialog by remember { mutableStateOf(false) }
     var showPermissionsDialog by remember { mutableStateOf(false) }
+    val showPermissionsFromVm by viewModel.showPermissionsDialog.collectAsState()
+
+    LaunchedEffect(showPermissionsFromVm) {
+        if (showPermissionsFromVm) {
+            showPermissionsDialog = true
+            viewModel.closePermissions()
+        }
+    }
+
     var showServerSettingsSheet by remember { mutableStateOf(false) }
     val showServerSettingsFromVm by viewModel.showServerSettings.collectAsState()
 
@@ -198,36 +211,38 @@ fun MainAppScreen(viewModel: MainViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(PaletteDeep)
-                                .border(1.dp, PaletteMedium, RoundedCornerShape(10.dp))
-                                .padding(4.dp),
+                                .border(1.dp, Color(0xFF06B6D4).copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                .padding(3.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_barpro_logo),
                                 contentDescription = "BarPro Logo",
                                 tint = Color.Unspecified,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(30.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "BarPro",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = PaletteLight
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Forwarder",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PalettePale
-                                )
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Forward",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PalettePale
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "BarPro",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Black,
+                                        color = BarProCyan
+                                    )
+                                }
                             }
                             Text(
                                 text = "وضعیت لحظه‌ای اتصال و عملکرد سامانه",
@@ -376,7 +391,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "تنظیمات پیشرفته سرور و اتصال",
+                        text = "مشخصات راننده و وضعیت سامانه",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PalettePale

@@ -20,10 +20,10 @@ import org.robolectric.annotation.Config
 class ExampleRobolectricTest {
 
     @Test
-    fun `verify app name resource is BarPro Forwarder`() {
+    fun `verify app name resource is Forward BarPro`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("BarPro Forwarder", appName)
+        assertEquals("Forward BarPro", appName)
     }
 
     @Test

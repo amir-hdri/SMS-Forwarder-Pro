@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
+import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -37,36 +35,22 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ElectricBolt
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -81,12 +65,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.utils.PermissionHelper
-import com.example.utils.PermissionItemInfo
-import com.example.utils.PermissionType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -100,17 +78,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.data.model.ForwardConfig
 import com.example.data.model.ForwardLog
 import com.example.network.ServerHealthStatus
-import com.example.ui.theme.PaletteCoral
-import com.example.ui.theme.PaletteGold
-import com.example.ui.theme.PaletteMidnight
-import com.example.ui.theme.PaletteOceanic
-import com.example.ui.theme.PalettePale
-import com.example.ui.theme.PaletteSage
+import com.example.service.PermissionNotifier
+import com.example.ui.theme.BarProAmber
+import com.example.ui.theme.BarProAmberBg
+import com.example.ui.theme.BarProBg
+import com.example.ui.theme.BarProBorder
+import com.example.ui.theme.BarProBorderCyan
+import com.example.ui.theme.BarProCyan
+import com.example.ui.theme.BarProCyanBright
+import com.example.ui.theme.BarProCyanMuted
+import com.example.ui.theme.BarProEmerald
+import com.example.ui.theme.BarProEmeraldBg
+import com.example.ui.theme.BarProRose
+import com.example.ui.theme.BarProRoseBg
+import com.example.ui.theme.BarProSurface
+import com.example.ui.theme.BarProSurfaceElevated
+import com.example.ui.theme.BarProSurfaceSubtle
+import com.example.ui.theme.BarProTextMuted
+import com.example.ui.theme.BarProTextPrimary
+import com.example.ui.theme.BarProTextSecondary
+import com.example.utils.PermissionHelper
+import com.example.utils.PermissionItemInfo
+import com.example.utils.PermissionType
 
 @Composable
 fun DashboardScreen(
@@ -146,7 +142,17 @@ fun DashboardScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                permissionsList = PermissionHelper.getAllPermissionsStatus(context)
+                val updated = PermissionHelper.getAllPermissionsStatus(context)
+                permissionsList = updated
+                val criticalGranted = PermissionHelper.areCriticalPermissionsGranted(context)
+                if (!criticalGranted) {
+                    val missing = updated.firstOrNull { it.isRequired && !it.isGranted }
+                    if (missing != null) {
+                        PermissionNotifier.showMissingPermissionAlert(context, missing.title)
+                    }
+                } else {
+                    PermissionNotifier.clearAlert(context)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -160,7 +166,9 @@ fun DashboardScreen(
     val totalPermissionsCount = permissionsList.size
     val permissionProgress = if (totalPermissionsCount > 0) grantedPermissionsCount.toFloat() / totalPermissionsCount.toFloat() else 1f
 
-    var isChecklistExpanded by remember { mutableStateOf(!isAllPermissionsGranted) }
+    // Checklist of permissions that need to be granted:
+    // Once granted, an item gets a checkmark and is hidden!
+    val ungrantedPermissions = permissionsList.filter { !it.isGranted }
 
     val isWorking = config.isMasterEnabled && isAllPermissionsGranted
     val isConnected = serverHealthState.status == ServerHealthStatus.CONNECTED
@@ -168,13 +176,21 @@ fun DashboardScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
-        permissionsList = PermissionHelper.getAllPermissionsStatus(context)
+        val updated = PermissionHelper.getAllPermissionsStatus(context)
+        permissionsList = updated
+        if (PermissionHelper.areCriticalPermissionsGranted(context)) {
+            PermissionNotifier.clearAlert(context)
+        }
     }
 
     val singlePermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
-        permissionsList = PermissionHelper.getAllPermissionsStatus(context)
+        val updated = PermissionHelper.getAllPermissionsStatus(context)
+        permissionsList = updated
+        if (PermissionHelper.areCriticalPermissionsGranted(context)) {
+            PermissionNotifier.clearAlert(context)
+        }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulseAnimation")
@@ -189,7 +205,7 @@ fun DashboardScreen(
     )
 
     val waveAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.38f,
+        initialValue = 0.35f,
         targetValue = 0.05f,
         animationSpec = infiniteRepeatable(
             animation = tween(1400, easing = FastOutSlowInEasing),
@@ -201,178 +217,294 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(PaletteMidnight)
+            .background(BarProBg)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // ==========================================
-        // 1. PERMISSIONS CHECKLIST & LIVE STATUS
+        // 1. HERO SERVICE CARD (کارت وضعیت اصلی سامانه)
         // ==========================================
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("permissions_checklist_card"),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = PaletteOceanic)
+                .testTag("service_status_indicator_card"),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = BarProSurface)
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(
-                        1.dp,
-                        if (isAllPermissionsGranted) PaletteSage.copy(alpha = 0.6f) else PaletteCoral.copy(alpha = 0.6f),
-                        RoundedCornerShape(22.dp)
-                    )
-                    .padding(18.dp)
-            ) {
-                // Header row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(PaletteMidnight)
-                            .border(
-                                1.dp,
-                                if (isAllPermissionsGranted) PaletteSage else PaletteCoral,
-                                CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isAllPermissionsGranted) Icons.Default.VerifiedUser else Icons.Default.Security,
-                            contentDescription = null,
-                            tint = if (isAllPermissionsGranted) PaletteSage else PaletteCoral,
-                            modifier = Modifier.size(22.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                BarProSurface,
+                                BarProBg
+                            )
                         )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    )
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = if (isWorking) {
+                                listOf(BarProCyan.copy(alpha = 0.6f), BarProBorder)
+                            } else {
+                                listOf(BarProRose.copy(alpha = 0.4f), BarProBorder)
+                            }
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .padding(20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Top row: Switch & Live Badge
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Live Status Badge
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProSurfaceSubtle)
+                                .border(
+                                    1.dp,
+                                    if (isWorking) BarProEmerald.copy(alpha = 0.5f) else BarProRose.copy(alpha = 0.4f),
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
-                            Text(
-                                text = "چک‌لیست مجوزهای سامانه",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = PaletteGold
-                            )
-                            // Live Status Badge
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        if (isAllPermissionsGranted) PaletteSage.copy(alpha = 0.15f) else PaletteCoral.copy(alpha = 0.15f)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isWorking) BarProEmerald else BarProRose)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isWorking) "سامانه آنلاین و فعال" else "سامانه غیرفعال",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isWorking) BarProEmerald else BarProRose
+                            )
+                        }
+
+                        // Master switch
+                        Switch(
+                            checked = config.isMasterEnabled,
+                            onCheckedChange = onToggleMaster,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = BarProBg,
+                                checkedTrackColor = BarProCyan,
+                                uncheckedThumbColor = BarProTextSecondary,
+                                uncheckedTrackColor = BarProSurfaceElevated
+                            ),
+                            modifier = Modifier.testTag("master_switch")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Pulsing Glowing Center Orb with BarPro Logo
+                    Box(
+                        modifier = Modifier.size(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isWorking) {
+                            // Outer ambient cyan glow
+                            Box(
+                                modifier = Modifier
+                                    .size(120.dp)
+                                    .scale(pulseScale)
+                                    .clip(CircleShape)
+                                    .background(BarProCyan.copy(alpha = waveAlpha))
+                            )
+                            // Inner subtle glow
+                            Box(
+                                modifier = Modifier
+                                    .size(95.dp)
+                                    .clip(CircleShape)
+                                    .background(BarProCyan.copy(alpha = 0.15f))
+                            )
+                        }
+
+                        // Center Circle
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(BarProSurfaceElevated, BarProSurface)
                                     )
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = if (isAllPermissionsGranted) "تایید کامل ✅" else "$grantedPermissionsCount از $totalPermissionsCount فعال",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isAllPermissionsGranted) PaletteSage else PaletteCoral
                                 )
+                                .border(
+                                    2.dp,
+                                    if (isWorking) BarProCyan else BarProTextMuted,
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_barpro_logo),
+                                contentDescription = "BarPro Logo",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(54.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Title
+                    Text(
+                        text = if (isWorking) "سامانه فورواردر فعال و آماده دریافت" else "سامانه دریافت پیامک خاموش است",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = BarProTextPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Subtitle
+                    Text(
+                        text = if (isWorking)
+                            "پیامک‌های حاوی کد بارنامه و رمز اعتبارسنجی بلادرنگ به سرور بارپرو مخابره می‌شوند"
+                        else
+                            "برای شروع دریافت و ارسال خودکار کدهای بارنامه، کلید بالا را روشن کنید",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = BarProTextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Driver and Server summary pills
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val driverLabel = if (config.driverFullName.isNotBlank()) config.driverFullName
+                        else if (config.driverPhone.isNotBlank()) config.driverPhone
+                        else "ثبت‌نشده"
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProSurfaceSubtle)
+                                .border(1.dp, BarProBorder, RoundedCornerShape(10.dp))
+                                .clickable { onNavigateToServerConfig() }
+                                .padding(vertical = 8.dp, horizontal = 10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Person, contentDescription = null, tint = BarProCyan, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text("راننده", fontSize = 10.sp, color = BarProTextMuted)
+                                    Text(driverLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BarProTextPrimary, maxLines = 1)
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = if (isAllPermissionsGranted)
-                                "تمام مجوزهای لازم جهت دریافت، فیلتر و فوروارد خودکار پیامک تایید شده‌اند."
-                            else
-                                "برای انتقال خودکار پیامک‌ها به سرور، مجوزهای مشخص‌شده در زیر را تایید کنید.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = PaletteGold.copy(alpha = 0.85f)
-                        )
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProSurfaceSubtle)
+                                .border(1.dp, BarProBorder, RoundedCornerShape(10.dp))
+                                .clickable { onCheckHealthNow() }
+                                .padding(vertical = 8.dp, horizontal = 10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isConnected) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                                    contentDescription = null,
+                                    tint = if (isConnected) BarProEmerald else BarProRose,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text("سرور بارپرو", fontSize = 10.sp, color = BarProTextMuted)
+                                    Text(if (isConnected) "متصل و آنلاین" else "قطع ارتباط", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isConnected) BarProEmerald else BarProRose)
+                                }
+                            }
+                        }
                     }
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Progress Bar
-                LinearProgressIndicator(
-                    progress = { permissionProgress },
+        // ==========================================
+        // 2. PERMISSIONS CHECKLIST (چک‌لیست دسترسی‌ها)
+        // ==========================================
+        // As requested by user:
+        // Shows as a checklist. Once granted, it is checked and NO LONGER SHOWN!
+        // If all granted, shows a compact clean banner.
+        // If any revoked, it reappears and notifies the driver.
+        if (ungrantedPermissions.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("permissions_checklist_card"),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = BarProSurface)
+            ) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = if (isAllPermissionsGranted) PaletteSage else PaletteCoral,
-                    trackColor = PaletteMidnight
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Direct Grant All Action Button (if any critical missing)
-                if (!isAllPermissionsGranted) {
-                    Button(
-                        onClick = {
-                            val runtimeToRequest = PermissionHelper.getRequiredRuntimePermissions()
-                            permissionLauncher.launch(runtimeToRequest)
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = PaletteCoral,
-                            contentColor = PaletteMidnight
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("request_permission_button")
+                        .border(1.dp, BarProRose.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "تایید و اعطای مستقیم تمامی مجوزها",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BarProRoseBg)
+                                .border(1.dp, BarProRose.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                tint = BarProRose,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "چک‌لیست دسترسی‌های موردنیاز",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = BarProTextPrimary
+                            )
+                            Text(
+                                text = "برای انتقال خودکار پیامک‌ها، دسترسی‌های زیر را تایید کنید (پس از تایید پنهان می‌شوند):",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = BarProTextSecondary
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                }
 
-                // Expand / Collapse Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { isChecklistExpanded = !isChecklistExpanded }
-                        .padding(vertical = 4.dp, horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (isChecklistExpanded) "بستن جزئیات چک‌لیست مجوزها" else "مشاهده وضعیت تک‌تک مجوزها ($grantedPermissionsCount/$totalPermissionsCount)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PaletteSage
-                    )
-                    Icon(
-                        imageVector = if (isChecklistExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = PaletteSage,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                // Expandable Items
-                AnimatedVisibility(
-                    visible = isChecklistExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
+                    // Render only ungranted permissions
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        permissionsList.forEach { perm ->
+                        ungrantedPermissions.forEach { perm ->
                             DashboardPermissionRow(
                                 item = perm,
                                 onGrant = {
@@ -390,642 +522,205 @@ fun DashboardScreen(
                                 }
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = onOpenPermissions,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(38.dp)
-                            ) {
-                                Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(14.dp), tint = PaletteSage)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("پنجره کامل راهنما", fontSize = 11.sp, color = PaletteGold)
-                            }
-                            OutlinedButton(
-                                onClick = { PermissionHelper.openAppSettings(context) },
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(38.dp)
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(14.dp), tint = PaletteSage)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("تنظیمات برنامه", fontSize = 11.sp, color = PaletteGold)
-                            }
-                        }
                     }
-                }
-            }
-        }
 
-        // ==========================================
-        // 2. HERO STATUS DISPLAY
-        // ==========================================
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("service_status_indicator_card"),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = PaletteOceanic)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                PaletteOceanic,
-                                PaletteMidnight
-                            )
-                        )
-                    )
-                    .border(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            colors = if (isWorking) {
-                                listOf(PaletteSage.copy(alpha = 0.8f), PaletteOceanic.copy(alpha = 0.45f))
-                            } else {
-                                listOf(PaletteCoral.copy(alpha = 0.45f), PaletteMidnight)
-                            }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Direct "Grant All" Button
+                    Button(
+                        onClick = {
+                            val runtimeToRequest = PermissionHelper.getRequiredRuntimePermissions()
+                            permissionLauncher.launch(runtimeToRequest)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BarProCyan,
+                            contentColor = BarProBg
                         ),
-                        shape = RoundedCornerShape(28.dp)
-                    )
-                    .padding(24.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Top row: Switch & Live Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Live Status Badge
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(PaletteMidnight)
-                                .border(
-                                    1.dp,
-                                    if (isWorking) PaletteSage.copy(alpha = 0.6f) else PaletteCoral.copy(alpha = 0.35f),
-                                    RoundedCornerShape(10.dp)
-                                )
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isWorking) PaletteSage else PaletteCoral)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isWorking) "سامانه آنلاین" else "غیرفعال",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isWorking) PaletteSage else PaletteCoral
-                            )
-                        }
-
-                        // Master switch
-                        Switch(
-                            checked = config.isMasterEnabled,
-                            onCheckedChange = onToggleMaster,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = PaletteMidnight,
-                                checkedTrackColor = PaletteCoral,
-                                uncheckedThumbColor = PaletteGold,
-                                uncheckedTrackColor = PaletteOceanic
-                            ),
-                            modifier = Modifier.testTag("master_switch")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Pulsing Glowing Center Orb with Sage (#70a288), Coral (#d5896f) and Midnight (#031d44)
-                    Box(
-                        modifier = Modifier.size(130.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isWorking) {
-                            // Outer ambient wave (#70a288)
-                            Box(
-                                modifier = Modifier
-                                    .size(130.dp)
-                                    .scale(pulseScale)
-                                    .clip(CircleShape)
-                                    .background(PaletteSage.copy(alpha = waveAlpha))
-                            )
-                            // Inner subtle glow (#dab785)
-                            Box(
-                                modifier = Modifier
-                                    .size(105.dp)
-                                    .clip(CircleShape)
-                                    .background(PaletteGold.copy(alpha = 0.22f))
-                            )
-                        }
-
-                        // Center Circle
-                        Box(
-                            modifier = Modifier
-                                .size(86.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(PaletteOceanic, PaletteMidnight)
-                                    )
-                                )
-                                .border(
-                                    2.dp,
-                                    if (isWorking) PaletteSage else PaletteCoral,
-                                    CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_barpro_logo),
-                                contentDescription = "BarPro Logo",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Title
-                    Text(
-                        text = if (isWorking) "سامانه فعال و متصل است" else "سرویس انتقال خاموش است",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = PaletteGold
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Subtitle
-                    Text(
-                        text = if (isWorking)
-                            "انتقال پیامک‌ها به صورت بلادرنگ و دائمی در پس‌زمینه برقرار است"
-                        else
-                            "برای شروع انتقال خودکار، کلید فعال‌سازی بالای کارت را روشن کنید",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = PaletteGold.copy(alpha = 0.85f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-
-        // ==========================================
-        // 3. CONNECTION & RUNTIME STATUS TILES
-        // ==========================================
-        Text(
-            text = "وضعیت لحظه‌ای ارتباط و کارکرد",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = PaletteGold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-        )
-
-        // Status 0: Permissions Checklist
-        StatusTile(
-            icon = if (isAllPermissionsGranted) Icons.Default.VerifiedUser else Icons.Default.Security,
-            iconColor = if (isAllPermissionsGranted) PaletteSage else PaletteCoral,
-            title = "چک‌لیست مجوزهای سامانه",
-            subtitle = if (isAllPermissionsGranted) "تمام مجوزهای الزامی پیامک و پس‌زمینه تایید شده‌اند" else "برخی مجوزهای الزامی هنوز تایید نشده است",
-            statusText = "$grantedPermissionsCount از $totalPermissionsCount تایید شد",
-            statusColor = if (isAllPermissionsGranted) PaletteSage else PaletteCoral,
-            action = {
-                IconButton(
-                    onClick = onOpenPermissions,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ChevronLeft,
-                        contentDescription = "مشاهده چک‌لیست مجوزها",
-                        tint = PaletteGold,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        )
-
-        // Status 1: Server Connectivity
-        StatusTile(
-            icon = if (isConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-            iconColor = if (isConnected) PaletteSage else PaletteCoral,
-            title = "اتصال به سرور مرکزی",
-            subtitle = if (isConnected) "ارتباط مستقیم با سرور برقرار و پایدار است" else "عدم دسترسی به اینترنت یا سرور",
-            statusText = if (isConnected) "متصل" else "قطع",
-            statusColor = if (isConnected) PaletteSage else PaletteCoral,
-            action = {
-                IconButton(
-                    onClick = onCheckHealthNow,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "بررسی مجدد اتصال",
-                        tint = PaletteGold,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        )
-
-        // Status 2: Waybill Code Extraction Engine
-        StatusTile(
-            icon = Icons.Default.ElectricBolt,
-            iconColor = if (isWorking) PaletteSage else PaletteCoral,
-            title = "دریافت هوشمند کد بارنامه",
-            subtitle = if (isWorking) "گیرنده پیامک فعال و آماده دریافت و استخراج خودکار کدهای بارنامه است" else "گیرنده در حالت غیرفعال قرار دارد",
-            statusText = if (isWorking) "فعال" else "آماده‌باش",
-            statusColor = if (isWorking) PaletteSage else PaletteCoral
-        )
-
-        // Status 3: Background Keep-Alive & Guaranteed Auto Sync
-        StatusTile(
-            icon = Icons.Default.Shield,
-            iconColor = if (isWorking) PaletteSage else PaletteCoral,
-            title = "ارسال خودکار و تضمینی (WorkManager)",
-            subtitle = if (pendingCount > 0)
-                "تعداد $pendingCount پیامک در صف آفلاین؛ به محض برقراری اینترنت به صورت کاملاً خودکار منتقل می‌شوند"
-            else
-                "سرویس فعال است؛ در صورت نبود اینترنت پیامک‌ها ذخیره و با اتصال مجدد شبکه خودکار ارسال می‌گردند",
-            statusText = if (isWorking) (if (pendingCount > 0) "$pendingCount در صف" else "خودکار فعال") else "غیرفعال",
-            statusColor = if (isWorking) (if (pendingCount > 0) PaletteGold else PaletteSage) else PaletteCoral
-        )
-
-        // Status 4: End-to-End Encryption
-        StatusTile(
-            icon = Icons.Default.Lock,
-            iconColor = PaletteGold,
-            title = "رمزنگاری امن داده‌ها",
-            subtitle = "تمام پیام‌ها با کلید اختصاصی و بر بستر امن منتقل می‌شوند",
-            statusText = "امن (AES-256)",
-            statusColor = PaletteGold
-        )
-
-        // Status 5: Driver & Fleet Identification
-        StatusTile(
-            icon = Icons.Default.Person,
-            iconColor = PaletteSage,
-            title = "مشخصات راننده و ناوگان بارپرو",
-            subtitle = "شناسه: ${config.driverId} • ${config.driverFullName} • ${if (config.filterUtcmsOnly) "فیلتر هوشمند UTCMS فعال" else "فوروارد تمام پیامک‌ها"}",
-            statusText = config.driverId,
-            statusColor = PaletteGold
-        )
-
-        // Status 6: Device Environment Security Audit
-        val securityReport = remember { com.example.utils.SecurityUtils.getSecurityReport(context) }
-        StatusTile(
-            icon = Icons.Default.PhoneAndroid,
-            iconColor = if (securityReport.isRooted) PaletteCoral else PaletteSage,
-            title = "ارزیابی امنیت محیط دستگاه",
-            subtitle = securityReport.securityStatusText,
-            statusText = if (securityReport.isRooted) "ریسک امنیتی" else "مورد تایید",
-            statusColor = if (securityReport.isRooted) PaletteCoral else PaletteSage
-        )
-
-        // Status 7: UTCMS Evening OTP Window (17:30 to 08:00)
-        val isEveningWindow = remember { com.example.utils.SmsParser.isEveningOtpWindow() }
-        StatusTile(
-            icon = Icons.Default.NotificationsActive,
-            iconColor = if (isEveningWindow) PaletteSage else PaletteGold,
-            title = "بازه صدور بارنامه شبانه UTCMS",
-            subtitle = if (isEveningWindow)
-                "هم‌اکنون در بازه فعال صدور خودکار شبانه (۱۷:۳۰ تا ۰۸:۰۰ صبح) قرار دارید."
-            else
-                "بازه کاری اتوماسیون بارپرو: ۱۷:۳۰ بعدازظهر تا ۰۸:۰۰ صبح (سیستم در حالت آماده‌باش است)",
-            statusText = if (isEveningWindow) "ساعت پیک صدور" else "آماده‌باش",
-            statusColor = if (isEveningWindow) PaletteSage else PaletteGold
-        )
-
-        // Status 8: 5-Minute OTP Expiry SLA Guarantee
-        StatusTile(
-            icon = Icons.Default.Timer,
-            iconColor = PaletteCoral,
-            title = "محدودیت زمانی ۵ دقیقه‌ای کد",
-            subtitle = "کدهای اعتبارسنجی ارسالی حداکثر ۵ دقیقه معتبر هستند. سیستم به محض دریافت پیامک، با حداقل تاخیر (Fast-Path) کد را مخابره می‌کند.",
-            statusText = "سقف ۵ دقیقه",
-            statusColor = PaletteCoral
-        )
-
-        // Status 9: Automatic Offline SMS Relay
-        StatusTile(
-            icon = Icons.AutoMirrored.Filled.Send,
-            iconColor = PaletteSage,
-            title = "پشتیبان پیامکی خودکار (SMS Fallback)",
-            subtitle = if (config.enableSmsFallback)
-                "در صورت قطعی یا ضعف اینترنت در جاده، کد ۵ دقیقه‌ای به صورت اتوماتیک و بدون دخالت راننده از طریق پیامک به سرور مخابره می‌شود."
-            else
-                "ارسال پیامکی اضطراری غیرفعال است (در تنظیمات سرور قابل فعال‌سازی است).",
-            statusText = if (config.enableSmsFallback) "کاملاً خودکار" else "غیرفعال",
-            statusColor = if (config.enableSmsFallback) PaletteSage else PaletteGold
-        )
-
-        // ==========================================
-        // 4. QUICK ACTIONS & OFFLINE SYNC
-        // ==========================================
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onOpenSimulate,
-                colors = ButtonDefaults.buttonColors(containerColor = PaletteOceanic, contentColor = PaletteGold),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .border(1.dp, PaletteSage.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            ) {
-                Text("تست پیامک", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Button(
-                onClick = onOpenOtpInquiry,
-                colors = ButtonDefaults.buttonColors(containerColor = PaletteOceanic, contentColor = PaletteGold),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1.1f)
-                    .height(44.dp)
-                    .border(1.dp, PaletteSage.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            ) {
-                Text("استعلام کد بارنامه", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Button(
-                onClick = onSyncOfflineLogs,
-                enabled = !isOfflineSyncing,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (pendingCount > 0) PaletteCoral.copy(alpha = 0.2f) else PaletteOceanic,
-                    contentColor = if (pendingCount > 0) PaletteCoral else PalettePale
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1.1f)
-                    .height(44.dp)
-                    .border(
-                        1.dp,
-                        if (pendingCount > 0) PaletteCoral else PaletteOceanic.copy(alpha = 0.5f),
-                        RoundedCornerShape(12.dp)
-                    )
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isOfflineSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = PaletteCoral
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (pendingCount > 0) "ارسال ($pendingCount)" else "همگام خودکار",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        // ==========================================
-        // 5. RECENT SMS ACTIVITY
-        // ==========================================
-        if (recentLogs.isNotEmpty()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "آخرین پیامک‌های پردازش‌شده",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = PaletteGold
-                )
-                Text(
-                    text = "مجموع: $totalCount",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PaletteGold.copy(alpha = 0.7f)
-                )
-            }
-
-            recentLogs.take(5).forEach { log ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { onSelectLog(log) },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = PaletteOceanic)
-                ) {
-                    Column(
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, PaletteSage.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
-                            .padding(12.dp)
+                            .height(44.dp)
+                            .testTag("request_permission_button")
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(if (log.status == com.example.data.model.ForwardStatus.SUCCESS) PaletteSage else PaletteCoral)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = log.sender,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PaletteGold
-                                )
-                            }
-
-                            // SMS Type badge
-                            val typeLabel = when (log.smsType) {
-                                com.example.data.model.SmsType.UTCMS_CONFIRMATION -> "تایید بارنامه"
-                                com.example.data.model.SmsType.UTCMS_OTP -> "کد تایید OTP"
-                                com.example.data.model.SmsType.UTCMS_WARNING -> "هشدار سامانه"
-                                com.example.data.model.SmsType.OTHER -> "پیامک عمومی"
-                            }
-                            val typeColor = when (log.smsType) {
-                                com.example.data.model.SmsType.UTCMS_CONFIRMATION -> PaletteSage
-                                com.example.data.model.SmsType.UTCMS_OTP -> PaletteGold
-                                com.example.data.model.SmsType.UTCMS_WARNING -> PaletteCoral
-                                com.example.data.model.SmsType.OTHER -> PaletteGold.copy(alpha = 0.6f)
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(PaletteMidnight)
-                                    .border(1.dp, typeColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(text = typeLabel, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = typeColor)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
+                        Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = log.messageBody,
+                            text = "تایید و اعطای مستقیم تمامی مجوزها",
                             fontSize = 12.sp,
-                            color = PaletteGold.copy(alpha = 0.9f),
-                            maxLines = 2
+                            fontWeight = FontWeight.Bold
                         )
-
-                        if (log.trackingCode != null || log.otpCode != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                log.trackingCode?.let { code ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(PaletteMidnight)
-                                            .border(1.dp, PaletteSage, RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(text = "کد رهگیری: $code", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PaletteSage)
-                                    }
-                                }
-                                log.otpCode?.let { otp ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(PaletteMidnight)
-                                            .border(1.dp, PaletteGold, RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(text = "کد OTP: $otp", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PaletteGold)
-                                    }
-                                }
-                            }
-                        }
+                    }
+                }
+            }
+        } else {
+            // All permissions granted - Compact confirmation banner
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = BarProSurface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, BarProEmerald.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(BarProEmeraldBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = BarProEmerald,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "تمامی مجوزهای سامانه تایید شده‌اند",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = BarProTextPrimary
+                        )
+                        Text(
+                            text = "سیستم آماده دریافت پیامک و ارسال به سرور بارپرو در پس‌زمینه است",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BarProTextSecondary
+                        )
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun StatusTile(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconColor: Color,
-    title: String,
-    subtitle: String,
-    statusText: String,
-    statusColor: Color,
-    action: (@Composable () -> Unit)? = null
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = PaletteOceanic)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, PaletteSage.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // ==========================================
+        // 4. SUMMARY METRICS CARD (آمار کدهای ارسال‌شده)
+        // ==========================================
+        // As requested by user:
+        // No raw message bodies ("پیام ها") and no category tags ("دسته بندی")!
+        // Only clean high-level operational counts for the driver.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = BarProSurface)
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(PaletteMidnight)
-                    .border(1.dp, PaletteSage.copy(alpha = 0.35f), RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .border(1.dp, BarProBorder, RoundedCornerShape(20.dp))
+                    .padding(16.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconColor,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "آمار کدهای بارنامه مخابره‌شده",
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = PaletteGold
+                        color = BarProTextPrimary
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(PaletteMidnight)
-                            .border(1.dp, statusColor.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
+                    if (pendingCount > 0) {
                         Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "$pendingCount در صف ارسال",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = statusColor
+                            color = BarProAmber
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PaletteGold.copy(alpha = 0.82f),
-                    lineHeight = 18.sp
-                )
-            }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MetricCounterBox(
+                        label = "کل کدهای دریافتی",
+                        count = totalCount,
+                        color = BarProTextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
 
-            if (action != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                action()
+                    MetricCounterBox(
+                        label = "ارسال موفق به سرور",
+                        count = successCount,
+                        color = BarProEmerald,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricCounterBox(
+                        label = "صف معوقه آفلاین",
+                        count = pendingCount,
+                        color = if (pendingCount > 0) BarProAmber else BarProTextMuted,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (pendingCount > 0) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = onSyncOfflineLogs,
+                        enabled = !isOfflineSyncing,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BarProAmberBg,
+                            contentColor = BarProAmber
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                            .border(1.dp, BarProAmber.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("تلاش مجدد برای ارسال کدهای معوقه آفلاین", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun MetricCounterBox(
+    label: String,
+    count: Int,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(BarProSurfaceSubtle)
+            .border(1.dp, BarProBorder, RoundedCornerShape(12.dp))
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = count.toString(),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                color = BarProTextSecondary,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -1035,43 +730,36 @@ private fun DashboardPermissionRow(
     item: PermissionItemInfo,
     onGrant: () -> Unit
 ) {
-    val icon = when (item.id) {
-        "receive_sms", "read_sms" -> Icons.Default.Sms
-        "post_notifications" -> Icons.Default.Notifications
-        "battery_optimization" -> Icons.Default.BatteryAlert
-        "notification_listener" -> Icons.Default.NotificationsActive
-        else -> Icons.Default.Security
-    }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(PaletteMidnight)
-            .border(
-                1.dp,
-                if (item.isGranted) PaletteSage.copy(alpha = 0.35f) else PaletteCoral.copy(alpha = 0.35f),
-                RoundedCornerShape(12.dp)
-            )
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .background(BarProSurfaceSubtle)
+            .border(1.dp, if (item.isRequired) BarProRose.copy(alpha = 0.4f) else BarProBorder, RoundedCornerShape(12.dp))
+            .padding(12.dp)
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
-                    .background(
-                        if (item.isGranted) PaletteSage.copy(alpha = 0.15f) else PaletteCoral.copy(alpha = 0.15f)
-                    ),
+                    .background(BarProSurface)
+                    .border(1.dp, if (item.isRequired) BarProRose.copy(alpha = 0.5f) else BarProBorder, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (item.isGranted) Icons.Default.Check else icon,
+                    imageVector = when (item.id) {
+                        "receive_sms" -> Icons.Default.Sms
+                        "send_sms" -> Icons.Default.Sms
+                        "post_notifications" -> Icons.Default.Notifications
+                        "battery_optimization" -> Icons.Default.BatteryAlert
+                        else -> Icons.Default.Security
+                    },
                     contentDescription = null,
-                    tint = if (item.isGranted) PaletteSage else PaletteCoral,
+                    tint = if (item.isRequired) BarProRose else BarProCyan,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -1079,50 +767,32 @@ private fun DashboardPermissionRow(
             Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = item.title,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PaletteGold
-                    )
-                    Text(
-                        text = if (item.isGranted) "تایید شد ✅" else if (item.isRequired) "الزامی ⚠️" else "اختیاری ℹ️",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (item.isGranted) PaletteSage else if (item.isRequired) PaletteCoral else PaletteGold
-                    )
-                }
+                Text(
+                    text = item.title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BarProTextPrimary
+                )
                 Text(
                     text = item.description,
                     fontSize = 10.sp,
-                    lineHeight = 14.sp,
-                    color = PaletteGold.copy(alpha = 0.7f)
+                    color = BarProTextSecondary,
+                    lineHeight = 14.sp
                 )
             }
 
-            if (!item.isGranted) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onGrant,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (item.isRequired) PaletteCoral else PaletteSage,
-                        contentColor = PaletteMidnight
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
-                ) {
-                    Text(
-                        text = if (item.permissionType == PermissionType.RUNTIME_PERMISSION) "اعطا" else "تنظیم",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+                onClick = onGrant,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (item.isRequired) BarProRose else BarProSurfaceElevated,
+                    contentColor = if (item.isRequired) BarProBg else BarProCyan
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Text("تایید", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -1,189 +1,109 @@
-# Project Directory Structure: BarPro SMS Forwarder & RPA Backend
-# ساختار جامع دایرکتوری و معماری پروژه بارپرو
+# Project Directory Structure: Forward BarPro (Android Client & Backend)
+# ساختار جامع دایرکتوری و معماری پروژه Forward BarPro
 
-این سند ساختار کامل فایل‌ها، ماژول‌ها و وظایف تک‌تک بخش‌های پروژه شامل **اپلیکیشن کلاینت اندروید (BarPro SMS Forwarder)** و **سرویس بک‌اند ابری و اتوماسیون (FastAPI + Redis OTP Vault + Playwright RPA)** را با جزئیات کامل تشریح می‌کند.
+این سند ساختار کامل فایل‌ها، ماژول‌ها و وظایف بخش‌های مختلف پروژه **Forward BarPro** را تشریح می‌کند.
 
 ---
 
 ```
-barpro-sms-forwarder/
+Forward-BarPro/
 │
-├── .build-outputs/                     # خروجی‌های کامپایل‌شده APK و گزارش‌های بیلد
-│   └── app-debug.apk                   # فایل نصبی دیباگ اپلیکیشن اندروید
-├── .env.example                        # فایل نمونه متغیرهای محیطی، کلیدهای محرمانه و تنظیمات سرور
-├── .gitignore                          # قوانین نادیده‌گرفتن فایل‌ها در گیت (Gradle, Python, Pytest)
+├── BarPro_Forwarder_Compatibility_Audit.xlsx # فایل اکسل ممیزی جامع انطباق ۵ برگی با پلتفرم بارپرو
+├── .env.example                              # نمونه متغیرهای محیطی، کلیدهای محرمانه و تنظیمات سرور
+├── .gitignore                                # قوانین نادیده‌گرفتن فایل‌ها در گیت (Gradle, Python, Pytest)
 │
-├── README.md                           # مستند اصلی و معرفی جامع پروژه، قابلیت‌ها، پیش‌نیازها و راهنما
-├── ARCHITECTURE.md                     # معماری جامع فنی، دیاگرام‌های جریان داده، دریافت دوگانه و RPA
-├── API_DOCUMENTATION.md                # مستندات کامل وب‌سرویس‌ها، قراردادهای REST، هدرها و کدهای پاسخ
-├── USER_GUIDE.md                       # راهنمای جامع گام‌به‌گام کاربری برای رانندگان ناوگان و اپراتورهای سرور
-├── PRIVACY_POLICY.md                   # بیانیه سیاست‌های حفظ حریم خصوصی، امنیت و عدم ذخیره پیام‌های شخصی
-├── PROJECT_STRUCTURE.md                # ساختار کامل شاخه‌ها، فایل‌ها و توضیح وظایف هر کامپوننت (همین سند)
+├── README.md                                 # مستند اصلی و معرفی جامع پروژه، قابلیت‌ها، پیش‌نیازها و راهنما
+├── ARCHITECTURE.md                           # معماری جامع فنی، دیاگرام‌های جریان داده و قرارداد BarProContract
+├── API_DOCUMENTATION.md                      # مستندات کامل وب‌سرویس‌ها، قراردادهای REST، هدرها و کدهای پاسخ
+├── USER_GUIDE.md                             # راهنمای جامع گام‌به‌گام کاربری برای رانندگان ناوگان و تیم فنی
+├── PRIVACY_POLICY.md                         # بیانیه سیاست‌های حفظ حریم خصوصی، امنیت و عدم ذخیره پیام‌های شخصی
+├── PROJECT_STRUCTURE.md                      # ساختار کامل شاخه‌ها و فایل‌ها (همین سند)
 │
-├── metadata.json                       # شناسه و پیکربندی پلتفرم AI Studio
-├── settings.gradle.kts                 # پیکربندی پروژه‌ها و مخازن گریدل
-├── build.gradle.kts                    # اسکریپت ریشه بیلد پروژه اندروید
-├── gradle.properties                   # تنظیمات حافظه JVM و فلگ‌های AndroidX
+├── settings.gradle.kts                       # پیکربندی پروژه‌ها و مخازن گریدل
+├── build.gradle.kts                          # اسکریپت ریشه بیلد پروژه اندروید
+├── gradle.properties                         # تنظیمات حافظه JVM و فلگ‌های AndroidX
 │
 ├── gradle/
-│   ├── libs.versions.toml              # کاتالوگ متمرکز نسخه‌ها، کتابخانه‌ها و پلاگین‌های گریدل
-│   └── wrapper/                        # باینری‌ها و تنظیمات Gradle Wrapper
+│   ├── libs.versions.toml                    # کاتالوگ متمرکز نسخه‌ها، کتابخانه‌ها و پلاگین‌های گریدل
+│   └── wrapper/                              # باینری‌ها و تنظیمات Gradle Wrapper
 │
-├── app/                                # ماژول اپلیکیشن اندروید (Client Application)
-│   ├── build.gradle.kts                # وابستگی‌ها و کانفیگ ماژول اپ (Compose, Room, WorkManager, OkHttp)
-│   ├── proguard-rules.pro              # قوانین ProGuard / R8 برای بهینه‌سازی و مینیفای کد
+├── app/                                      # ماژول اپلیکیشن اندروید (Forward BarPro)
+│   ├── build.gradle.kts                      # وابستگی‌ها و کانفیگ ماژول اپ (Compose, Room, WorkManager, OkHttp)
+│   ├── proguard-rules.pro                    # قوانین ProGuard / R8 برای بهینه‌سازی و محافظت کد
 │   │
 │   └── src/
 │       ├── main/
-│       │   ├── AndroidManifest.xml     # مجوزها (SMS, Notif, Network, Boot)، سرویس‌ها و رسیورها
+│       │   ├── AndroidManifest.xml           # مجوزها (SMS, Notif, Network, Boot)، سرویس‌ها و رسیورها
 │       │   │
 │       │   ├── java/com/example/
-│       │   │   ├── MainActivity.kt                 # اکتیویتی اصلی هاست‌کننده کامپوز و ناوبری صفحات
-│       │   │   ├── SmsForwarderApp.kt              # کلاس Application، راه‌اندازی کانال‌های اعلان و لاگ
+│       │   │   ├── MainActivity.kt           # اکتیویتی اصلی هاست‌کننده کامپوز، هدر رسمی Forward BarPro
+│       │   │   ├── SmsForwarderApp.kt        # کلاس Application، کانال‌های اعلان و راه‌اندازی اولیه
 │       │   │   │
-│       │   │   ├── crypto/                         # ماژول امنیت و رمزنگاری پیشرفته کلاینت
-│       │   │   │   ├── AesEncryptionUtils.kt       # رمزنگاری و رمزگشایی متقارن با الگوریتم AES-256-GCM
-│       │   │   │   ├── CryptoEngine.kt             # لایه یکپارچه رمزنگاری محتوا و مدیریت کلیدها
-│       │   │   │   └── SecureStorageManager.kt     # ذخیره امن کلیدها در Android KeyStore و EncryptedSharedPreferences
+│       │   │   ├── crypto/                   # ماژول امنیت و رمزنگاری
+│       │   │   │   ├── AesEncryptionUtils.kt # ابزارهای رمزنگاری متقارن AES-256-GCM
+│       │   │   │   ├── CryptoEngine.kt       # موتور رمزنگاری داده‌ها
+│       │   │   │   └── SecureStorageManager.kt # ذخیره امن در Android KeyStore
 │       │   │   │
-│       │   │   ├── data/                           # لایه داده و پایگاه داده محلی (Data Layer)
-│       │   │   │   ├── local/                      # تعاریف دیتابیس روم و DAOها
-│       │   │   │   │   ├── AppDatabase.kt          # پیکربندی دیتابیس Room و مهاجرت‌ها (Migrations)
-│       │   │   │   │   ├── FilterRuleDao.kt        # عملیات CRUD برای قوانین فیلتر و لیست سفید/سیاه
-│       │   │   │   │   ├── ForwardConfigDao.kt     # دسترسی به آدرس سرور، کلیدهای HMAC و وضعیت سرویس
-│       │   │   │   │   └── ForwardLogDao.kt        # مدیریت تاریخچه پیام‌ها و کوئری صف‌های معوقه آفلاین
-│       │   │   │   │
-│       │   │   │   ├── model/                      # انتیتی‌ها و مدل‌های داده روم (Room Entities)
-│       │   │   │   │   ├── FilterRule.kt           # مدل قوانین فیلتر (پیش‌شماره، کلمات کلیدی، نوع فیلتر)
-│       │   │   │   │   ├── ForwardConfig.kt        # مدل تنظیمات سرور، هدر سکرت، توکن و شناسه راننده
-│       │   │   │   │   └── ForwardLog.kt           # مدل رکوردهای پیامک، وضعیت ارسال، زمان و کدهای استخراجی
-│       │   │   │   │
+│       │   │   ├── data/                     # لایه داده و پایگاه داده محلی (Room)
+│       │   │   │   ├── local/
+│       │   │   │   │   ├── AppDatabase.kt    # دیتابیس روم و جداول تنظیمی
+│       │   │   │   │   ├── ForwardConfigDao.kt # دسترسی به ردیف یکتای ForwardConfig
+│       │   │   │   │   └── ForwardLogDao.kt  # مدیریت تاریخچه پیام‌ها و کوئری صف آفلاین
+│       │   │   │   ├── model/
+│       │   │   │   │   ├── ForwardConfig.kt  # مدل کانفیگ (آدرس بارپرو، توکن، شناسه راننده، تنظیمات پیش‌فرض)
+│       │   │   │   │   └── ForwardLog.kt     # مدل رکوردهای پیامک و وضعیت ارسال
 │       │   │   │   └── repository/
-│       │   │   │       └── SmsForwardRepository.kt # ریپازیتوری مرکزی مدیریت جریان‌های داده (StateFlow)
+│       │   │   │       └── SmsForwardRepository.kt # ریپازیتوری مرکزی مدیریت جریان‌های داده
 │       │   │   │
-│       │   │   ├── network/                        # لایه شبکه و ارتباط با سرور
-│       │   │   │   ├── DeviceStatusHelper.kt       # استخراج وضعیت دستگاه (مدل، باتری، وضعیت شبکه، سیم‌کارت)
-│       │   │   │   ├── ServerHealthMonitor.kt      # پایش مداوم سلامت سرور، اندازه‌گیری پینگ و لتنسی
-│       │   │   │   └── SmsForwarderClient.kt       # کلاینت OkHttp، امضای HMAC-SHA256 و ارسال درخواست‌ها
+│       │   │   ├── network/                  # لایه شبکه و ارتباط با سرور بارپرو
+│       │   │   │   ├── BarProContract.kt     # قرارداد رسمی بارپرو (اندپوینت، هدر توکن، اسکیو ساعت، اعتبارسنجی)
+│       │   │   │   └── SmsForwarderClient.kt # کلاینت OkHttp، ارسال پکت استاندارد بارپرو، پروب سلامت
 │       │   │   │
-│       │   │   ├── otp/                            # ماژول پردازش و استخراج محلی کد
-│       │   │   │   └── OtpExtractor.kt             # الگوریتم‌های هوشمند شناسایی و استخراج کدهای OTP
+│       │   │   ├── receiver/                 # برودکست رسیورهای سیستم‌عامل
+│       │   │   │   ├── BootReceiver.kt       # راه‌اندازی خودکار پس از روشن شدن گوشی راننده
+│       │   │   │   └── SmsReceiver.kt        # دریافت بلادرنگ پیامک‌ها از Telephony.SMS_RECEIVED با WakeLock
 │       │   │   │
-│       │   │   ├── receiver/                       # برودکست رسیورهای سیستم‌عامل اندروید
-│       │   │   │   ├── BootReceiver.kt             # راه‌اندازی خودکار سرویس پس از روشن شدن دستگاه راننده
-│       │   │   │   └── SmsReceiver.kt              # دریافت بلادرنگ پیامک‌ها از Telephony.SMS_RECEIVED
+│       │   │   ├── service/                  # سرویس‌های پس‌زمینه و نوتیفیکیشن
+│       │   │   │   ├── PermissionNotifier.kt # نوتیفیکیشن هشدار فوری در صورت لغو هر مجوز الزامی
+│       │   │   │   ├── SmsForwarderService.kt# سرویس فورگراند با اعلان دائم جهت تضمین عدم بسته شدن
+│       │   │   │   ├── SmsNotificationListener.kt # رسیور کمکی از طریق اعلان در اندروید ۱۱+
+│       │   │   │   └── SmsSyncWorker.kt      # ورکر WorkManager برای صف‌بندی و ارسال پس از اتصال مجدد شبکه
 │       │   │   │
-│       │   │   ├── service/                        # سرویس‌های پس‌زمینه و پردازش ناهمگام
-│       │   │   │   ├── ServerHealthNotifier.kt     # نمایش اعلان‌های سیستمی در صورت بروز اختلال در سرور
-│       │   │   │   ├── SmsForwarderService.kt      # سرویس فورگراند دائم جهت ممانعت از بسته شدن توسط سیستم
-│       │   │   │   ├── SmsNotificationListener.kt  # مسیر پشتیبان دریافت پیامک از نوتیفیکیشن در اندروید ۱۱+
-│       │   │   │   ├── CleanupWorker.kt            # پاک‌سازی دوره‌ای لاگ‌های قدیمی و منقضی‌شده دیتابیس
-│       │   │   │   └── SmsSyncWorker.kt            # ورکر WorkManager با بازتلاش نمایی برای مناطق فاقد آنتن
-│       │   │   │
-│       │   │   ├── ui/                             # رابط کاربری مبتنی بر جت‌پک کامپوز و متریال دیزاین ۳
-│       │   │   │   ├── components/
-│       │   │   │   │   └── StatusBadge.kt          # کامپوننت‌های نشانگر وضعیت ارسال (موفق، ناموفق، در صف)
-│       │   │   │   │
+│       │   │   ├── ui/                       # رابط کاربری اختصاصی راننده (Material 3)
 │       │   │   │   ├── screens/
-│       │   │   │   │   ├── DashboardScreen.kt      # داشبورد اصلی: کلید روشن/خاموش، پایش سلامت، آخرین لاگ‌ها
-│       │   │   │   │   ├── LogsScreen.kt           # تاریخچه کامل پیام‌ها، فیلتر، جستجو و کپی سریع OTP
-│       │   │   │   │   ├── RulesScreen.kt          # تعریف و مدیریت قوانین سرشماره و کلمات کلیدی
-│       │   │   │   │   ├── ServerConfigScreen.kt   # تنظیمات سرور، سوییچ خودکار RPA، کلیدها و شناسه راننده
-│       │   │   │   │   ├── PermissionManagerScreen.kt # مدیریت پیشرفته مجوزها با آیکون‌های تایید و فیلترها
-│       │   │   │   │   ├── PermissionDialog.kt     # دیالوگ تعاملی چک‌لیست اعطای مجوزهای برنامه
-│       │   │   │   │   ├── OtpInquiryDialog.kt     # دیالوگ استعلام سریع و کپی کدهای بارنامه و OTP
-│       │   │   │   │   ├── TestSmsDialog.kt        # دیالوگ شبیه‌ساز ارسال پیامک آزمایشی و ارزیابی پاسخ
-│       │   │   │   │   ├── ServerGuideSheet.kt     # راهنمای کشویی پیکربندی سرور و احراز هویت HMAC
-│       │   │   │   │   └── BackgroundExecutionGuideSheet.kt # راهنمای غیرفعال‌سازی محدودیت باتری در برندهای مختلف
-│       │   │   │   │
-│       │   │   │   ├── theme/                      # تم و تایپوگرافی اختصاصی
-│       │   │   │   │   ├── Color.kt                # پالت رنگ متریال ۳ (اقیانوسی تیره و طلایی لوکس)
-│       │   │   │   │   ├── Theme.kt                # پیکربندی تم تاریک/روشن Compose
-│       │   │   │   │   └── Type.kt                 # تایپوگرافی استاندارد متون و اعداد فارسی
-│       │   │   │   │
+│       │   │   │   │   ├── DashboardScreen.kt # داشبورد راننده: سوییچ بزرگ، لوگوی رسمی، ۳ آمار تمیز
+│       │   │   │   │   ├── PermissionManagerScreen.kt # چک‌لیست هوشمند مجوزها با تیک سبز و مخفی‌سازی
+│       │   │   │   │   └── ServerConfigScreen.kt      # تنظیمات امن و بنر حفظ حریم خصوصی
+│       │   │   │   ├── theme/
+│       │   │   │   │   └── Color.kt          # پالت رنگی رسمی وب‌اپ بارپرو (Slate-950, Cyan-500, Emerald-500)
 │       │   │   │   └── viewmodel/
-│       │   │   │       └── MainViewModel.kt        # ویومدل مرکزی با معماری MVVM و هندلینگ StateFlow
+│       │   │   │       └── MainViewModel.kt  # مدیریت وضعیت داشبورد، مجوزها و ارسال‌ها
 │       │   │   │
-│       │   │   └── utils/                          # توابع کمکی و پردازشی کلاینت
-│       │   │       ├── PermissionHelper.kt         # بررسی وضعیت مجوزها، باتری و هدایت به تنظیمات سیستم
-│       │   │       ├── SecurityUtils.kt            # تشخیص روت بودن، محیط شبیه‌ساز، Debugger و فایل‌های su
-│       │   │       ├── SignatureUtils.kt           # تولید امضای دیجیتال HMAC-SHA256 برای بدنه بسته‌ها
-│       │   │       ├── LogSanitizer.kt             # فیلتر امنیتی ماسک‌کردن شماره موبایل و داده‌های حساس در لاگ‌ها
-│       │   │       ├── SmsParser.kt                # پارسر دقیق عبارات منظم برای UTCMS، سوخت، رهگیری و ارقام فارسی
-│       │   │       └── SmsRelayHelper.kt           # رله پیامک اضطراری به مودم سرور با روتینگ خودکار دو سیم‌کارت
+│       │   │   └── utils/
+│       │   │       ├── LogSanitizer.kt       # ماسک‌کردن شماره‌ها و کدهای محرمانه در لاگ‌ها
+│       │   │       └── SmsParser.kt          # نرمال‌سازی ارقام فارسی و عربی و استخراج OTP
 │       │   │
-│       │   └── res/                            # منابع گرافیکی، آیکون‌ها و رشته‌های متنی
-│       │       ├── drawable/                   # وکتورها، لوگوی اختصاصی BarPro و پیش‌زمینه آیکون
-│       │       ├── mipmap-*/                   # آیکون‌های ادپتیو برای چگالی‌های مختلف صفحه‌نمایش
-│       │       └── values/
-│       │           ├── strings.xml             # نام برنامه و رشته‌های متنی فارسی
-│       │           ├── colors.xml              # کدهای رنگی ثابت
-│       │           └── themes.xml              # تم‌های سیستمی پنجره و Splash Screen
+│       │   └── res/                          # منابع بصری، آیکون‌ها و رشته‌ها
+│       │       ├── drawable/
+│       │       │   ├── ic_barpro_logo.xml    # وکتور رسمی لوگوی بارپرو (کامیون و ۴ خط سرعت)
+│       │       │   ├── ic_barpro_full_logo.xml
+│       │       │   ├── ic_launcher_foreground.xml
+│       │       │   └── ic_launcher_background.xml
+│       │       ├── mipmap-*/                 # آیکون‌های لانچر و مدور WebP در تمامی چگالی‌ها
+│       │       ├── values/
+│       │       │   └── strings.xml           # عنوان رسمی: Forward BarPro
+│       │       └── values-fa/
+│       │           └── strings.xml           # عنوان رسمی فارسی: Forward BarPro
 │       │
-│       └── test/java/com/example/              # تست‌های واحد، روبولکتریک و اسکرین‌شات
-│           ├── AesEncryptionUtilsTest.kt       # تست‌های واحد رمزنگاری و رمزگشایی AES-256-GCM
-│           ├── ExampleUnitTest.kt              # تست‌های ابتدایی JUnit
-│           ├── ExampleRobolectricTest.kt       # تست‌های محلی JVM با Robolectric برای مجوزها و رسیورها
-│           ├── GreetingScreenshotTest.kt       # تست‌های رگرسیون تصویری با Roborazzi
-│           └── SmsParserTest.kt                # تست‌های جامع نرمال‌سازی ارقام فارسی و استخراج رگکس
+│       └── test/                             # ۵۷ آزمون واحد خودکار (۱۰۰٪ Passed)
+│           ├── BarProContractTest.kt         # آزمون‌های قرارداد وب‌هوک و هدرهای بارپرو
+│           ├── SmsParserTest.kt              # آزمون‌های استخراج OTP و ارقام فارسی
+│           ├── ExampleRobolectricTest.kt     # آزمون عنوان برنامه Forward BarPro و استخراج کد
+│           ├── OutboxPolicyTest.kt           # آزمون‌های صف آفلاین و دیتابیس
+│           ├── SignedPayloadTest.kt          # آزمون‌های پکت‌های امضاشده
+│           └── LogSanitizerTest.kt           # آزمون‌های عدم افشای کد و شماره در لاگ
 │
-└── backend/                            # ماژول سرور بک‌اند، صندوق OTP و ورکر اتوماسیون (FastAPI + Redis + RPA)
-    ├── app/
-    │   ├── __init__.py                 # مقداردهی پکیج اصلی پایتون
-    │   ├── main.py                     # نقطه ورود اپلیکیشن FastAPI، هندلرهای خطا و اندپوینت /health
-    │   │
-    │   ├── api/                        # مسیریابی و کنترلرهای وب‌سرویس (API Routers)
-    │   │   ├── __init__.py
-    │   │   └── v1/
-    │   │       ├── __init__.py         # تجمیع روت‌های نگارش ۱
-    │   │       └── endpoints/
-    │   │           ├── __init__.py
-    │   │           └── rpa.py          # وب‌هوک‌های /sms-forwarder و /sms-gateway/webhook برای مودم GSM و پنل‌های پیامک
-    │   │
-    │   ├── automation/                 # موتور اتوماسیون بارنامه با Playwright
-    │   │   ├── __init__.py
-    │   │   └── waybill_enhanced.py     # کلاس EnhancedWaybillManager، پرکردن فرم، تزریق OTP و ثبت بارنامه
-    │   │
-    │   ├── core/                       # پیکربندی‌های مرکزی، لاگ و اتصالات
-    │   │   ├── __init__.py
-    │   │   ├── config.py               # مدیریت متغیرهای محیطی Pydantic Settings (ردیس، تایم‌اوت‌ها، سکرت)
-    │   │   ├── limiter.py              # محدودساز نرخ درخواست (Rate Limiting) برای حفاظت از وب‌هوک
-    │   │   ├── logging.py              # سیستم لاگ امن، ماسک‌کردن شماره موبایل و جلوگیری از نشت OTP
-    │   │   └── redis.py                # مدیریت کانکشن ردیس، کش محلی، صادرکننده و مشترک‌های اختصاصی Pub/Sub
-    │   │
-    │   ├── schemas/                    # مدل‌ها و اسکیمای Pydantic و Dataclass
-    │   │   ├── __init__.py
-    │   │   └── rpa.py                  # اسکیمای SmsForwarderRequest، پاسخ استاندارد کانونی و Enumهای وضعیت
-    │   │
-    │   ├── services/                   # سرویس‌های زیرساختی کسب‌وکار
-    │   │   ├── __init__.py
-    │   │   └── otp_vault.py            # OtpVaultService: نرمال‌سازی ارقام، تفکیک شماره موبایل، استخراج دقیق ۵ رقمی و ثبت در ردیس
-    │   │
-    │   └── workers/                    # ورکرهای پردازش پس‌زمینه
-    │       ├── __init__.py
-    │       ├── arq_worker.py           # پیکربندی ورکر Asynchronous ARQ برای صف وظایف و تسک‌های پس‌زمینه
-    │       └── waybill_worker.py       # ورکر اجرای ماموریت‌های صدور بارنامه به همراه مدیریت شکست و لاگ
-    │
-    └── tests/                          # مجموعه تست‌های خودکار سمت سرور (Pytest)
-        ├── test_foundational_otp.py    # تست‌های پایه نرمال‌سازی ارقام، اعتبارسنجی موبایل و رد شماره‌های نامعتبر
-        ├── test_otp_pipeline.py        # تست پایپ‌لاین کامل استخراج، ذخیره در والت و سابسکرایب Pub/Sub
-        ├── test_sms_forwarder_api.py   # تست اندپوینت وب‌هوک، امضای سکرت، پاسخ کانونی و مدیریت خطاها
-        └── test_staff_verification.py  # تست‌های سناریوی صدور شبانه بارنامه و فرآیند تایید راننده
+└── backend/                                  # ماژول بک‌اند پایتون و اتوماسیون (اختیاری جهت تست محلی)
+    ├── app/                                  # کدهای سرور FastAPI، Redis Vault و Playwright
+    └── tests/                                # تست‌های بک‌اند
 ```
-
----
-
-## تشریح تفصیلی لایه‌های سامانه
-
-### ۱. کلاینت اندروید (`/app`)
-- **دریافت دو مسیره (Dual-Path Zero-Loss Reception)**: از طریق `SmsReceiver` (رویداد سیستمی تله‌فونی با قفل بیداری ۳۵ ثانیه‌ای) و `SmsNotificationListener` (شنونده اعلان‌های سیستمی) جهت تضمین دریافت پیام حتی در شرایط خاموشی صفحه و محدودیت پس‌زمینه اندروید.
-- **مسیر سریع و فالبک اضطراری پیامک (Fast-Path & SMS Fallback)**: پایش بی‌درنگ اتصال شبکه با `ConnectivityManager`؛ ارسال مستقیم اینترنتی با تایم‌اوت ۱.۵ ثانیه و سوئیچ آنی به ارسال پیامک اضطراری به مودم سرور (`SmsRelayHelper`) در صورت قطعی اینترنت با روتینگ خودکار دو سیم‌کارت (`SubscriptionManager`).
-- **پردازش آفلاین و محلی**: استفاده از دیتابیس `Room` برای نگهداری موقت تمام پیام‌ها و قوانین فیلتر؛ همگام‌سازی تضمینی از طریق `WorkManager` با الگوریتم بازتلاش نمایی (`Exponential Backoff`).
-- **امنیت و رمزنگاری داده‌ها**: امضای بدنه با `HMAC-SHA256`، حفاظت کلیدها با `SecureStorageManager` و قابلیت فعال‌سازی رمزنگاری کامل محتوا با `AES-256-GCM`.
-
-### ۲. سرور بک‌اند و صندوق OTP (`/backend`)
-- **وب‌هوک دریافت سریع اینترنتی (`/api/v1/rpa/sms-forwarder`)**: دریافت ایمن پیام‌های ارسالی از فورواردر اندروید راننده، بررسی هدر `X-Forwarder-Secret` با مقایسه زمان‌ثابت (`Constant-Time`) و ممانعت از ارسال بسته‌های حجیم یا فاقد مجوز.
-- **وب‌هوک رله مودم GSM و درگاه‌های پیامکی (`/api/v1/rpa/sms-gateway/webhook`)**: دریافت پیامک‌های اضطراری رانندگان از مودم سخت‌افزاری سرور یا پنل‌های پیامک ایران، پردازش پروتکل `BARPRO#...` و تزریق مستقیم به صندوق OTP.
-- **صندوق هوشمند و امن ردیس (`Redis OTP Vault`)**: ذخیره کد ۵ رقمی استخراج‌شده در کلید اختصاصی با طول عمر ۱۸۰ ثانیه (TTL 180s)، کلید انگشت‌نگاری ممانعت از تکرار (Idempotency) و پخش آنی رویداد روی کانال Pub/Sub برای ورکر در حال انتظار.
-- **موتور اتوماسیون بارنامه (`EnhancedWaybillManager`)**: بازکردن درگاه سامانه بارنامه برخط شهرداری/UTCMS، تکمیل فرم بارنامه، دریافت کد OTP از ردیس در کمتر از چند میلی‌ثانیه و نهایی‌سازی صدور بدون معطلی و با راهبرد Fail-Closed در صورت انقضا.
-

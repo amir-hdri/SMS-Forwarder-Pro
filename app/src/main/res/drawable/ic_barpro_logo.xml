@@ -1,78 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="600"
+    android:viewportHeight="600">
 
-    <!-- Soft Ambient Halo in Warm Sage (#70A288) fading to #04395E -->
     <path
-        android:pathData="M54,54m-30,0a30,30 0,1,1 60,0a30,30 0,1,1 -60,0"
-        android:fillAlpha="0.25">
+        android:pathData="M 591.38 373.32 L 588.74 373.32 L 596.17 337.86 C 597.84 330.43 595.93 318.69 592.33 311.98 L 542.97 223.32 C 539.14 216.61 529.79 211.10 522.12 211.10 L 428.20 211.10 C 420.53 211.10 412.86 217.33 411.42 224.76 L 372.61 406.87 C 370.93 414.30 375.96 420.53 383.62 420.53 L 428.91 420.53 C 433.95 397.04 456.95 378.11 480.43 378.11 C 503.91 378.11 518.77 397.04 513.98 420.53 L 565.02 420.53 C 565.50 420.53 565.73 420.53 566.21 420.53 C 566.45 420.53 566.93 420.53 567.17 420.53 L 581.55 420.53 C 586.58 420.53 591.61 416.45 592.81 411.42 L 599.04 382.43 C 600.00 377.39 596.64 373.32 591.38 373.32 Z M 562.38 309.34 C 561.66 312.94 556.87 316.05 551.60 316.05 L 435.62 316.05 C 430.59 316.05 427.24 311.98 428.20 306.95 L 442.57 239.14 C 443.53 234.11 448.80 230.03 453.83 230.03 L 513.74 230.03 C 518.77 230.03 525.00 233.63 527.64 238.18 L 559.27 294.97 C 561.90 299.04 563.10 305.51 562.38 309.34 Z M 78.11 363.50 L 363.74 363.50 L 354.15 408.31 L 237.46 408.31 L 207.75 379.31 L 74.76 379.31 Z M 376.92 302.16 L 367.33 346.96 L 259.50 346.96 L 230.03 318.21 L 50.08 318.21 L 53.43 302.16 Z M 251.60 256.63 L 24.92 256.63 L 28.27 240.82 L 389.86 240.82 L 380.27 285.62 L 281.31 285.62 Z M 272.45 195.29 L 0.00 195.29 L 3.36 179.47 L 403.04 179.47 L 393.45 224.28 L 302.16 224.28 Z M 272.45 195.29">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:centerX="54"
-                android:centerY="54"
-                android:gradientRadius="30"
-                android:startColor="#70A288"
-                android:endColor="#0004395E"
-                android:type="radial" />
+                android:startX="0"
+                android:startY="0"
+                android:endX="600"
+                android:endY="600"
+                android:startColor="#06B6D1"
+                android:centerColor="#3B82F6"
+                android:endColor="#8B5CF6"
+                android:type="linear" />
         </aapt:attr>
     </path>
-
-    <!-- Speed & Waybill Forward Wind Streaks (#D5896F, #DAB785, #70A288) -->
-    <!-- Streak 1 (Top in Terracotta Coral #D5896F) -->
-    <path
-        android:fillColor="#D5896F"
-        android:pathData="M24,39 H45 L41,43.5 H24 Z" />
-
-    <!-- Streak 2 (Longest central impulse in Champagne Gold #DAB785) -->
-    <path
-        android:fillColor="#DAB785"
-        android:pathData="M20,47 H51 L47,51.5 H20 Z" />
-
-    <!-- Streak 3 (Lower mid stream in Sage Mint #70A288) -->
-    <path
-        android:fillColor="#70A288"
-        android:pathData="M24,55 H46 L42,59.5 H24 Z" />
-
-    <!-- Streak 4 (Base trail in Coral #D5896F) -->
-    <path
-        android:fillColor="#D5896F"
-        android:pathData="M28,63 H42 L39,67.5 H28 Z" />
-
-    <!-- Logistics Hauler Truck Body in Warm Champagne Gold (#DAB785) -->
-    <path
-        android:fillColor="#DAB785"
-        android:pathData="M48,37 L44,67 H53 C53,63.2 56.1,60.1 60,60.1 C63.9,60.1 67,63.2 67,67 H81 C83.8,67 86,64.8 86,62 L85.8,53 C85.8,51.3 85.1,49.6 83.8,48.4 L75,41 C73.7,40 72,39.3 70.3,39.3 H66.5 L64.8,37 H48 Z" />
-
-    <!-- Deep Oceanic Windshield (#031D44) -->
-    <path
-        android:fillColor="#031D44"
-        android:pathData="M52,43 H69.8 C70.9,43 72,43.5 72.8,44.4 L77.5,48.5 C78.2,49.2 78.7,50.1 78.7,51.2 V53.5 H50.5 L52,43 Z" />
-
-    <!-- Waybill / Signal Pulse Chevron on Truck Body Panel (#70A288, #D5896F) -->
-    <path
-        android:fillColor="#70A288"
-        android:pathData="M52,56.5 L56,59 L52,61.5 L53.5,59 Z" />
-    <path
-        android:fillColor="#D5896F"
-        android:pathData="M57,56.5 L61,59 L57,61.5 L58.5,59 Z" />
-
-    <!-- Wheel Assembly (#031D44 and #70A288) -->
-    <path
-        android:fillColor="#031D44"
-        android:pathData="M60,67m-5.5,0a5.5,5.5 0,1,1 11,0a5.5,5.5 0,1,1 -11,0" />
-    <path
-        android:fillColor="#70A288"
-        android:pathData="M60,67m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
-
-    <!-- Forward Laser Waybill Dot & Headlight Indicator (#D5896F) -->
-    <path
-        android:fillColor="#D5896F"
-        android:pathData="M83.5,39m-2.5,0a2.5,2.5 0,1,1 5,0a2.5,2.5 0,1,1 -5,0" />
-    <path
-        android:fillColor="#D5896F"
-        android:pathData="M85.5,58.5 H87 V62 H85.5 Z" />
 </vector>
