@@ -12,16 +12,29 @@ import java.util.regex.Pattern
 object SmsParser {
 
     private val UTCMS_NUMBERS = listOf(
+        "7777000982",
+        "+987777000982",
+        "7777",
+        "+987777",
+        "20007777",
+        "+9820007777",
+        "30001923",
+        "+9830001923",
+        "10008545",
+        "+9810008545",
+        "30002128002150",
+        "+9830002128002150",
+        "50002710040127",
+        "+9850002710040127",
         "10001234",
+        "+9810001234",
         "UTCMS",
         "UT CMS",
-        "+9810001234",
-        "20007777",
-        "30001923",
-        "10008545",
         "BARPRO",
         "BAR PRO",
-        "RMTO"
+        "RMTO",
+        "ircars.vip",
+        "ircars"
     )
 
     private val KNOWN_BANK_SENDERS = setOf(
@@ -63,6 +76,27 @@ object SmsParser {
     }
 
     /**
+     * Checks if a sender matches any known authorized gateway numbers or identifiers.
+     */
+    fun isWhitelistedSender(sender: String): Boolean {
+        if (sender.isBlank()) return false
+        val cleanSender = normalizeDigits(sender).trim().lowercase()
+        val digitsOnly = cleanSender.replace(Regex("""\D"""), "")
+        val allWhitelisted = UTCMS_NUMBERS + remoteSenders
+        return allWhitelisted.any { pattern ->
+            val cleanPattern = normalizeDigits(pattern).trim().lowercase()
+            val patternDigits = cleanPattern.replace(Regex("""\D"""), "")
+            if (patternDigits.isNotBlank()) {
+                digitsOnly == patternDigits ||
+                    (patternDigits.length >= 7 && digitsOnly.endsWith(patternDigits)) ||
+                    (digitsOnly.length >= 7 && patternDigits.endsWith(digitsOnly))
+            } else {
+                cleanSender.contains(cleanPattern)
+            }
+        }
+    }
+
+    /**
      * Checks if a sender is a known bank shortcode/name or a generic promotional advertising sender.
      */
     fun isBankOrAdSender(sender: String): Boolean {
@@ -70,8 +104,8 @@ object SmsParser {
         val cleanSender = normalizeDigits(sender).trim().lowercase()
         val digitsOnly = cleanSender.replace(Regex("""\D"""), "")
 
-        // Never filter authentic BarPro, UTCMS or RMTO senders
-        if (cleanSender.contains("barpro") || cleanSender.contains("utcms") || cleanSender.contains("rmto") || digitsOnly == "10001234") {
+        // Never filter authentic BarPro, UTCMS or RMTO senders, or whitelisted gateway numbers
+        if (isWhitelistedSender(sender) || cleanSender.contains("barpro") || cleanSender.contains("utcms") || cleanSender.contains("rmto") || cleanSender.contains("ircars")) {
             return false
         }
 
@@ -157,9 +191,7 @@ object SmsParser {
             return false
         }
 
-        val normalizedSender = normalizeDigits(phoneNumber).trim()
-        val isSenderMatch = UTCMS_NUMBERS.any { normalizedSender.equals(it, ignoreCase = true) } ||
-                remoteSenders.any { normalizedSender.equals(it, ignoreCase = true) }
+        val isSenderMatch = isWhitelistedSender(phoneNumber)
         val isBodyMatch = normMsg.contains("UTCMS", ignoreCase = true) ||
                 normMsg.contains("بارنامه") ||
                 normMsg.contains("باربرگ") ||
@@ -168,6 +200,8 @@ object SmsParser {
                 normMsg.contains("سهمیه سوخت") ||
                 normMsg.contains("بارپرو") ||
                 normMsg.contains("BarPro", ignoreCase = true) ||
+                normMsg.contains("ircars", ignoreCase = true) ||
+                normMsg.contains("کد ورود") ||
                 remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
 
         return isSenderMatch || isBodyMatch
@@ -280,11 +314,13 @@ object SmsParser {
         }
 
         // Strong contextual validation (Waybill, Transport, Municipal UTCMS, and Fuel quota / Fuel card systems)
-        val hasTransitContext = normMsg.contains("بارنامه") || normMsg.contains("بارپرو") ||
+        val hasTransitContext = isWhitelistedSender(sender) ||
+                normMsg.contains("بارنامه") || normMsg.contains("بارپرو") ||
                 normMsg.contains("UTCMS", ignoreCase = true) || normMsg.contains("راهداری") ||
                 normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده") ||
                 normMsg.contains("سوخت") || normMsg.contains("سهمیه") || normMsg.contains("پیمایش") ||
-                normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل")
+                normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل") ||
+                normMsg.contains("ircars", ignoreCase = true)
 
         val hasStrongOtpKeyword = normMsg.contains("کد تایید بارنامه") ||
                 normMsg.contains("کد تأیید بارنامه") ||

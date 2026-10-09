@@ -95,7 +95,11 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
     }
 
     /** Authenticated storage probe; never inserts a synthetic driver OTP. */
-    suspend fun checkHealth(config: ForwardConfig, clientOverride: OkHttpClient? = null): TransmissionResult = withContext(Dispatchers.IO) {
+    suspend fun checkHealth(
+        config: ForwardConfig,
+        permissions: Map<String, Boolean>? = null,
+        clientOverride: OkHttpClient? = null
+    ): TransmissionResult = withContext(Dispatchers.IO) {
         BarProContract.configurationError(config, requireRecipient = false)?.let {
             return@withContext failure(it)
         }
@@ -103,11 +107,33 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
         if (phone.matches(Regex("09[0-9]{9}"))) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
+        val payload = JSONObject().put("event", "HEALTH_CHECK")
+        if (!permissions.isNullOrEmpty()) {
+            val permJson = JSONObject()
+            permissions.forEach { (k, v) -> permJson.put(k, v) }
+            payload.put("permissions", permJson)
+        }
         post(
-            JSONObject().put("event", "HEALTH_CHECK"), config.copy(maxRetries = 0), "ready",
+            payload, config.copy(maxRetries = 0), "ready",
             extraHeaders = extraHeaders, clientOverride = clientOverride
         )
     }
+
+    /** A read-only query: only the matching signed GSM receipt confirms this test. */
+    suspend fun checkSmsProbeReceipt(config: ForwardConfig, timestamp: Long): TransmissionResult =
+        withContext(Dispatchers.IO) {
+            BarProContract.configurationError(config)?.let { return@withContext failure(it) }
+            val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
+            post(
+                JSONObject().put("event", "SMS_PROBE_STATUS").put("driver_phone", phone)
+                    .put("probe_timestamp", timestamp),
+                config.copy(maxRetries = 0), "probe_received", fastTimeoutMs = 3000,
+                responseMatches = { json ->
+                    json.optString("phone") == phone && json.optLong("probe_timestamp", -1) == timestamp &&
+                        json.optDouble("received_at", 0.0) > 0.0
+                }
+            )
+        }
 
     private suspend fun post(
         payload: JSONObject,
@@ -115,7 +141,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         expectedStatus: String,
         fastTimeoutMs: Long? = null,
         extraHeaders: Map<String, String> = emptyMap(),
-        clientOverride: OkHttpClient? = null
+        clientOverride: OkHttpClient? = null,
+        responseMatches: (JSONObject) -> Boolean = { true }
     ): TransmissionResult {
         val started = System.nanoTime()
         val timeout = fastTimeoutMs?.coerceIn(250, 60_000)
@@ -147,7 +174,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
                     val json = try { JSONObject(responseText) } catch (_: Exception) { null }
                     val accepted = response.isSuccessful && json != null &&
                         json.optBoolean("success", false) && json.optString("status") == expectedStatus &&
-                        (expectedStatus != "success" || json.optBoolean("otp_detected", false))
+                        (expectedStatus != "success" || json.optBoolean("otp_detected", false)) && responseMatches(json)
                     result = TransmissionResult(
                         isSuccess = accepted,
                         httpStatusCode = response.code,

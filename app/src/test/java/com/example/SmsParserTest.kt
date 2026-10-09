@@ -164,5 +164,62 @@ class SmsParserTest {
         val municipalOtp = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد"
         assertEquals("39182", SmsParser.extractOtp(municipalOtp, sender = "UTCMS"))
     }
+
+    @Test
+    fun testWhitelistedGatewaySenders_andPhotoSamples() {
+        // Numbers from user specification and screenshot:
+        // +9830002128002150, +9850002710040127, 20007777, 30001923, 10008545
+        assertFalse(SmsParser.isBankOrAdSender("+9830002128002150"))
+        assertFalse(SmsParser.isBankOrAdSender("30002128002150"))
+        assertFalse(SmsParser.isBankOrAdSender("+9850002710040127"))
+        assertFalse(SmsParser.isBankOrAdSender("50002710040127"))
+        assertFalse(SmsParser.isBankOrAdSender("20007777"))
+        assertFalse(SmsParser.isBankOrAdSender("+9820007777"))
+        assertFalse(SmsParser.isBankOrAdSender("30001923"))
+        assertFalse(SmsParser.isBankOrAdSender("+9830001923"))
+        assertFalse(SmsParser.isBankOrAdSender("10008545"))
+        assertFalse(SmsParser.isBankOrAdSender("+9810008545"))
+
+        assertFalse(SmsParser.isBankOrAdSender("7777000982"))
+        assertFalse(SmsParser.isBankOrAdSender("+987777000982"))
+        assertFalse(SmsParser.isBankOrAdSender("7777"))
+
+        // Verification of isUtcmsSms
+        assertTrue(SmsParser.isUtcmsSms("+9830002128002150", "کد ورود: 48921"))
+        assertTrue(SmsParser.isUtcmsSms("+9850002710040127", "کد ورود: 59123"))
+        assertTrue(SmsParser.isUtcmsSms("randomSender", "ircars.vip کد ورود شما: 71234"))
+        assertTrue(SmsParser.isUtcmsSms("20007777", "کد تایید صدور بارنامه: 98124"))
+        assertTrue(SmsParser.isUtcmsSms("30001923", "کد ورود: 65432"))
+        assertTrue(SmsParser.isUtcmsSms("10008545", "کد تأیید: 12345"))
+        assertTrue(SmsParser.isUtcmsSms("7777000982", "کد ورود: 833282"))
+        assertTrue(SmsParser.isUtcmsSms("+987777000982", "کد ورود: 833282"))
+        assertTrue(SmsParser.isUtcmsSms("7777", "کد ورود: 833282"))
+
+        // Extraction of OTP from messages
+        val msg1 = "کد ورود: 84920"
+        assertEquals("84920", SmsParser.extractOtp(msg1, sender = "+9830002128002150"))
+
+        val msg2 = "ircars.vip کد ورود: 84920"
+        assertEquals("84920", SmsParser.extractOtp(msg2, sender = "+9830002128002150"))
+
+        val msg3 = "کد ورود شما ۵۹۳۸۱ می باشد"
+        assertEquals("59381", SmsParser.extractOtp(msg3, sender = "+9850002710040127"))
+
+        val msg4 = "سامانه بارنامه - کد تایید: ۱۲۳۴۵"
+        assertEquals("12345", SmsParser.extractOtp(msg4, sender = "20007777"))
+
+        val msg5 = "کد ورود: 67890"
+        assertEquals("67890", SmsParser.extractOtp(msg5, sender = "30001923"))
+
+        val msg6 = "کد تایید شما: 13579"
+        assertEquals("13579", SmsParser.extractOtp(msg6, sender = "10008545"))
+
+        // Production real SMS case: 7777000982 / 6-digit OTP
+        val msgReal = "کد ورود: 833282"
+        assertEquals("833282", SmsParser.extractOtp(msgReal, sender = "7777000982"))
+        assertEquals("833282", SmsParser.extractOtp(msgReal, sender = "+987777000982"))
+        assertEquals("463295", SmsParser.extractOtp("کد ورود: 463295", sender = "7777000982"))
+        assertEquals(com.example.data.model.SmsType.UTCMS_OTP, SmsParser.detectSmsType(msgReal, sender = "7777000982"))
+    }
 }
 

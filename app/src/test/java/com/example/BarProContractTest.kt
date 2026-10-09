@@ -136,4 +136,29 @@ class BarProContractTest {
         assertEquals("73921", SmsParser.extractOtp("UTCMS auth code: 73921"))
         assertEquals("42109", SmsParser.extractOtp("کد ثبت سامانه بارنامه: 42109"))
     }
+    @Test fun probeReceiptRequiresExactPhoneTimestampAndPositiveReceiptTime() = runBlocking {
+        val timestamp = System.currentTimeMillis()
+        for ((body, expected) in listOf(
+            """{"success":true,"status":"probe_received","phone":"09120000001","probe_timestamp":$timestamp,"received_at":1800000000.25}""" to true,
+            """{"success":true,"status":"probe_received","phone":"09120000002","probe_timestamp":$timestamp,"received_at":1800000000.25}""" to false,
+            """{"success":true,"status":"probe_received","phone":"09120000001","probe_timestamp":${timestamp - 1},"received_at":1800000000.25}""" to false,
+            """{"success":true,"status":"probe_pending"}""" to false,
+            """{"success":true,"status":"ready"}""" to false,
+            """{"success":true,"status":"probe_received"}""" to false
+        )) {
+            val requests = mutableListOf<Request>()
+            val result = client(body, requests = requests).checkSmsProbeReceipt(config, timestamp)
+            assertEquals(body, expected, result.isSuccess)
+            val request = requests.single()
+            assertEquals("test-secret-32-bytes-for-forwarder", request.header(BarProContract.TOKEN_HEADER))
+            val buffer = Buffer()
+            request.body!!.writeTo(buffer)
+            val payload = JSONObject(buffer.readUtf8())
+            assertEquals("SMS_PROBE_STATUS", payload.getString("event"))
+            assertEquals(timestamp, payload.getLong("probe_timestamp"))
+            assertEquals("09120000001", payload.getString("driver_phone"))
+            assertFalse(payload.has("text"))
+        }
+    }
+
 }

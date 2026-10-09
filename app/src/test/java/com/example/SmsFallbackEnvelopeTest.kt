@@ -16,4 +16,9 @@ class SmsFallbackEnvelopeTest {
     fun trackingNumberCannotBeRelayedAsOtp() {
         SmsFallbackEnvelope.encode("09120000001", 1800000000000, "123456789", "test-webhook-token")
     }
+
+    @Test fun testProbeCodeIsAllowedInEnvelope() {
+        val encoded = SmsFallbackEnvelope.encode("09120000001", 1800000000000, "TEST", "test-webhook-token")
+        assertTrue(encoded.startsWith("BP1#09120000001#1800000000000#TEST#"))
+    }
 }

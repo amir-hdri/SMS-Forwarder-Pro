@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [FilterRule::class, ForwardLog::class, ForwardConfig::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -51,6 +51,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds primarySmsRelayEnabled to support always-on SMS relay to BarPro gateway SIM. */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE app_config ADD COLUMN primarySmsRelayEnabled INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -62,7 +69,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "sms_forwarder_database"
                 )
                     .addCallback(DatabaseCallback(context))
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
@@ -91,6 +98,69 @@ abstract class AppDatabase : RoomDatabase() {
                             matchType = MatchType.CONTAINS,
                             label = "سامانه بارپرو (BarPro)",
                             keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "7777000982",
+                            matchType = MatchType.PREFIX,
+                            label = "سامانه رسمی بارنامه شهری (UTCMS) - ۷۷۷۷۰۰۰۹۸۲",
+                            keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "7777",
+                            matchType = MatchType.PREFIX,
+                            label = "سرشماره ۷۷۷۷ (سامانه بارنامه شهری)",
+                            keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "20007777",
+                            matchType = MatchType.PREFIX,
+                            label = "سامانه رسمی بارنامه (UTCMS) - ۲۰۰۰۷۷۷۷",
+                            keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "30001923",
+                            matchType = MatchType.PREFIX,
+                            label = "سامانه راهداری و حمل‌ونقل - ۳۰۰۰۱۹۲۳",
+                            keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "10008545",
+                            matchType = MatchType.PREFIX,
+                            label = "سامانه اطلاع‌رسانی راهداری - ۱۰۰۰۸۵۴۵",
+                            keywordFilter = "",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "3000",
+                            matchType = MatchType.PREFIX,
+                            label = "سرشماره ۳۰۰۰ (خدماتی و ورود ناوگان)",
+                            keywordFilter = "کد,ورود,تایید,بارنامه",
+                            isEnabled = true
+                        )
+                    )
+                    database.filterRuleDao().insertRule(
+                        FilterRule(
+                            senderPattern = "5000",
+                            matchType = MatchType.PREFIX,
+                            label = "سرشماره ۵۰۰۰ (خدماتی و کد ورود)",
+                            keywordFilter = "کد,ورود,تایید,بارنامه",
                             isEnabled = true
                         )
                     )

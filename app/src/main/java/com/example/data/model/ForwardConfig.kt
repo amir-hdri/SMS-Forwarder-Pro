@@ -48,8 +48,9 @@ data class ForwardConfig(
     val filterUtcmsOnly: Boolean = true,
     val userConsentGiven: Boolean = false,
     val enableWorkManagerSync: Boolean = true, // صف‌بندی پس‌زمینه با WorkManager
-    // Automatic SMS Fallback when internet is offline/weak:
+    // Automatic SMS Fallback / Primary SMS Relay to server:
     val enableSmsFallback: Boolean = false,
+    val primarySmsRelayEnabled: Boolean = true,
     val fallbackServerPhoneNumber: String = "",
     /**
      * Explicit operator acknowledgement that the endpoint is plain HTTP. Defaults to false so a

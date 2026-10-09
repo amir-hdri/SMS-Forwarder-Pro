@@ -31,7 +31,21 @@ data class FilterRule(
             MatchType.EXACT -> {
                 val normalizedSender = cleanSender.replace("[^0-9+]".toRegex(), "")
                 val normalizedPattern = cleanPattern.replace("[^0-9+]".toRegex(), "")
-                if (normalizedSender.isNotEmpty() && normalizedPattern.isNotEmpty()) {
+                val digitsSender = normalizedSender.removePrefix("+").let { d ->
+                    if (d.startsWith("0098")) d.substring(4)
+                    else if (d.startsWith("98") && d.length > 4) d.substring(2)
+                    else d
+                }
+                val digitsPattern = normalizedPattern.removePrefix("+").let { d ->
+                    if (d.startsWith("0098")) d.substring(4)
+                    else if (d.startsWith("98") && d.length > 4) d.substring(2)
+                    else d
+                }
+                if (digitsSender.isNotEmpty() && digitsPattern.isNotEmpty()) {
+                    digitsSender == digitsPattern ||
+                            normalizedSender.equals(normalizedPattern, ignoreCase = true) ||
+                            cleanSender.equals(cleanPattern, ignoreCase = true)
+                } else if (normalizedSender.isNotEmpty() && normalizedPattern.isNotEmpty()) {
                     normalizedSender.equals(normalizedPattern, ignoreCase = true) ||
                             cleanSender.equals(cleanPattern, ignoreCase = true)
                 } else {
@@ -41,7 +55,21 @@ data class FilterRule(
             MatchType.PREFIX -> {
                 val normalizedSender = cleanSender.replace("[^0-9+]".toRegex(), "")
                 val normalizedPattern = cleanPattern.replace("[^0-9+]".toRegex(), "")
-                if (normalizedSender.isNotEmpty() && normalizedPattern.isNotEmpty()) {
+                val digitsSender = normalizedSender.removePrefix("+").let { d ->
+                    if (d.startsWith("0098")) d.substring(4)
+                    else if (d.startsWith("98") && d.length > 4) d.substring(2)
+                    else d
+                }
+                val digitsPattern = normalizedPattern.removePrefix("+").let { d ->
+                    if (d.startsWith("0098")) d.substring(4)
+                    else if (d.startsWith("98") && d.length > 4) d.substring(2)
+                    else d
+                }
+                if (digitsSender.isNotEmpty() && digitsPattern.isNotEmpty()) {
+                    digitsSender.startsWith(digitsPattern) ||
+                            normalizedSender.startsWith(normalizedPattern) ||
+                            cleanSender.startsWith(cleanPattern, ignoreCase = true)
+                } else if (normalizedSender.isNotEmpty() && normalizedPattern.isNotEmpty()) {
                     normalizedSender.startsWith(normalizedPattern) || cleanSender.startsWith(cleanPattern, ignoreCase = true)
                 } else {
                     cleanSender.startsWith(cleanPattern, ignoreCase = true)

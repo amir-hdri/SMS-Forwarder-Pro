@@ -101,9 +101,12 @@ object ServerHealthMonitor {
             return@withContext _healthState.value
         }
 
-        _healthState.value = _healthState.value.copy(status = ServerHealthStatus.CHECKING)
-
-        val result = client.checkHealth(config)
+        val permissions = mapOf(
+            "receive_sms" to com.example.utils.PermissionHelper.isReceiveSmsGranted(context),
+            "send_sms" to com.example.utils.PermissionHelper.isSendSmsGranted(context),
+            "battery_optimization_ignored" to com.example.utils.PermissionHelper.isBatteryOptimizationIgnored(context)
+        )
+        val result = client.checkHealth(config, permissions)
 
         if (result.isSuccess) {
             recordSuccess(context, config.endpointUrl, result.durationMs)

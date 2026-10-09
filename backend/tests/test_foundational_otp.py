@@ -127,11 +127,17 @@ class TestFoundationalOtpInfrastructure(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(otp_vault_service.extract_utcms_otp(msg))
 
     def test_otp_validation_strict(self):
-        self.assertTrue(otp_vault_service.validate_otp("39182"))
+        self.assertTrue(otp_vault_service.validate_otp("39182"))   # 5 digits
+        self.assertTrue(otp_vault_service.validate_otp("833282"))  # 6 digits (UTCMS production)
         self.assertFalse(otp_vault_service.validate_otp("1234"))   # 4 digits
-        self.assertFalse(otp_vault_service.validate_otp("123456")) # 6 digits
+        self.assertFalse(otp_vault_service.validate_otp("1234567")) # 7 digits
         self.assertFalse(otp_vault_service.validate_otp("3918a"))  # non-digit
         self.assertFalse(otp_vault_service.validate_otp(""))
+
+    def test_otp_extraction_real_production_sms(self):
+        msg = "کد ورود: 833282"
+        self.assertEqual(otp_vault_service.extract_utcms_otp(msg, sender="7777000982"), "833282")
+        self.assertEqual(otp_vault_service.extract_utcms_otp("کد ورود: 463295", sender="7777000982"), "463295")
 
     # =========================================================================
     # 4. REDIS STORAGE, PUB/SUB, RACE WINDOW & TIMEOUT TESTS

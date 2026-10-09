@@ -19,3 +19,7 @@ debug.keystore
 *.key
 *.jks
 tools/keys/
+__pycache__/
+*.pyc
+*.pyo
+*.apk

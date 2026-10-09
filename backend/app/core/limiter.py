@@ -58,7 +58,10 @@ except ImportError:
                 except Exception:
                     pass
 
+            import functools
+
             def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+                @functools.wraps(func)
                 async def wrapper(*args: Any, **kwargs: Any) -> Any:
                     req: Optional[Request] = None
                     for arg in args:
@@ -81,8 +84,6 @@ except ImportError:
                         records.append(now)
 
                     return await func(*args, **kwargs)
-                wrapper.__name__ = getattr(func, "__name__", "wrapper")
-                wrapper.__doc__ = getattr(func, "__doc__", "")
                 return wrapper
             return decorator
 

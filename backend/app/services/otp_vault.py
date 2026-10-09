@@ -172,7 +172,7 @@ class OtpVaultService:
         digits_only = re.sub(r"\D", "", normalized)
 
         # Never filter authentic BarPro, UTCMS or RMTO transit senders
-        if "barpro" in normalized or "utcms" in normalized or "rmto" in normalized or digits_only == "10001234":
+        if "barpro" in normalized or "utcms" in normalized or "rmto" in normalized or digits_only in ("10001234", "7777000982", "20007777", "30001923") or digits_only.startswith("7777"):
             return False
 
         # 1. Known bank sender names / English shortcodes
@@ -224,14 +224,13 @@ class OtpVaultService:
     @classmethod
     def extract_utcms_otp(cls, text: str, sender: Optional[str] = None) -> Optional[str]:
         """
-        Extracts EXACTLY 5-DIGIT OTP according to business requirement.
-        Strict Rules:
-        - NEVER returns 4 or 6 digits.
+        Extracts contextual OTP (4 to 8 digits, specifically 5 or 6 digits) according to UTCMS requirements.
+        Rules:
         - Rejects known bank shortcodes and bulk promotional advertising senders.
-        - Requires stronger contextual keywords (e.g., 'کد تایید بارنامه', 'سامانه بارپرو',
-          'کد تایید', 'رمز یکبار مصرف') rather than generic isolated words like 'کد' or 'رمز'.
-        - Does NOT accidentally select 5 digits from an unrelated number (e.g. 123456789).
-        - Safe standalone 5-digit fallback only if transit/waybill context is confirmed.
+        - Requires contextual keywords (e.g., 'کد تایید بارنامه', 'سامانه بارپرو',
+          'کد تایید', 'کد ورود', 'رمز یکبار مصرف', 'کد:').
+        - Does NOT accidentally select digits from an unrelated number (e.g. 123456789).
+        - Safe standalone fallback only if transit/waybill context is confirmed.
         """
         if not text:
             return None
@@ -244,23 +243,30 @@ class OtpVaultService:
         if cls.is_bank_or_ad_content(normalized):
             return None
 
+        # Guard: If message is purely a waybill confirmation without any OTP keyword, reject.
+        if any(w in normalized for w in ("رهگیری", "ردیابی", "شماره بارنامه", "بارنامه شماره", "ثبت شد", "صادر شد", "صادر گردید", "ثبت گردید")):
+            if not any(k in normalized for k in ("کد ورود", "کد تایید", "کد تأیید", "رمز یکبار", "کد اعتبارسنجی", "کد احراز")):
+                return None
+
         # Phase 0: Direct BarPro Emergency Fallback Format (e.g. BARPRO#DRV-102#09333...#OTP#39182)
         if "barpro#" in normalized or (normalized.startswith("barpro") and "#" in normalized):
             for part in normalized.split("#"):
                 clean_part = part.strip()
-                if len(clean_part) == 5 and clean_part.isdigit():
+                if (4 <= len(clean_part) <= 8) and clean_part.isdigit():
                     return clean_part
 
-        # Phase 1: Contextual OTP extraction with strict 5-digit boundary and strong keywords
+        # Phase 1: Contextual OTP extraction with boundary and strong keywords (including simple "کد:")
         context_pattern = (
             r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|سامانه\s*بارنامه|"
             r"کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|"
+            r"رمز\s*عبور|کلمه\s*عبور|"
             r"کد\s*اعتبارسنجی|کد\s*احراز|کد\s*فعالسازی|"
+            r"کد\s*[:=]|کد|"
             r"(?:بارنامه|بارپرو|utcms|سوخت)[^\d]*(?:کد|رمز|otp)|"
             r"(?:کد|رمز|otp)[^\d]*(?:بارنامه|بارپرو|utcms|سوخت)|"
-            r"auth\s*code|verification\s*code)"
-            r"[\s:=،ـ\-_]*"
-            r"(?<!\d)(\d{5})(?!\d)"
+            r"authorization\s*code|auth\s*code|verification\s*code)"
+            r"[^\d]{0,40}"
+            r"(?<!\d)(\d{5,6})(?!\d)"
         )
 
         context_match = re.search(context_pattern, normalized, re.IGNORECASE)
@@ -271,9 +277,9 @@ class OtpVaultService:
 
         # Phase 2: Reverse Contextual Pattern (e.g. "۳۹۱۸۲ :کد تایید شما")
         reverse_context_pattern = (
-            r"(?<!\d)(\d{5})(?!\d)"
-            r"[\s:=،ـ\-_]*"
-            r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|کد\s*ورود|auth\s*code|verification\s*code)"
+            r"(?<!\d)(\d{5,6})(?!\d)"
+            r"[^\d]{0,40}"
+            r"(?:کد\s*تأیید\s*بارنامه|کد\s*تایید\s*بارنامه|سامانه\s*بارپرو|کد\s*تأیید|کد\s*تایید|رمز\s*یکبار\s*مصرف|رمز\s*یکبارمصرف|رمز\s*عبور|کلمه\s*عبور|کد\s*ورود|authorization\s*code|auth\s*code|verification\s*code)"
         )
         reverse_match = re.search(reverse_context_pattern, normalized, re.IGNORECASE)
         if reverse_match:
@@ -281,16 +287,16 @@ class OtpVaultService:
             if cls.validate_otp(code):
                 return code
 
-        # Phase 3: Isolated standalone 5-digit fallback ONLY if transit/fuel/waybill context exists
+        # Phase 3: Isolated standalone fallback ONLY if transit/fuel/waybill context exists
         has_transit_context = any(term in normalized for term in [
             "بارنامه", "بارپرو", "utcms", "راهداری", "شهرداری", "باربرگ",
             "سوخت", "سهمیه", "پیمایش", "کارت سوخت", "نفت گاز", "گازوئیل"
         ])
         if has_transit_context:
             all_numeric_tokens = re.findall(r"(?<!\d)(\d+)(?!\d)", normalized)
-            five_digit_tokens = [tok for tok in all_numeric_tokens if len(tok) == 5]
-            if len(five_digit_tokens) == 1:
-                code = five_digit_tokens[0]
+            candidate_tokens = [tok for tok in all_numeric_tokens if len(tok) in (5, 6)]
+            if len(candidate_tokens) == 1:
+                code = candidate_tokens[0]
                 if cls.validate_otp(code):
                     return code
 
@@ -299,13 +305,12 @@ class OtpVaultService:
     @classmethod
     def validate_otp(cls, code: Optional[str]) -> bool:
         """
-        Strict OTP validation:
-        len(code) == 5 and code.isdigit()
-        Never store or return an invalid OTP.
+        Validates OTP digits and length (strictly 5 or 6 digits in production).
         """
         if not code:
             return False
-        return len(code) == 5 and code.isdigit()
+        clean = str(code).strip()
+        return (len(clean) in (5, 6)) and clean.isdigit()
 
     @classmethod
     def compute_idempotency_fingerprint(
@@ -393,7 +398,7 @@ class OtpVaultService:
                 phone=normalized_phone,
                 extra={"reason": "no_otp_detected", "text_len": len(normalized_text)}
             )
-            return False, normalized_phone, None, False, "No valid 5-digit OTP found in message text."
+            return False, normalized_phone, None, False, "No valid OTP found in message text."
 
         safe_log_otp_event(
             event_type="otp_extracted",

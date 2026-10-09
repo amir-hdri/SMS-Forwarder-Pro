@@ -478,7 +478,32 @@ class SmsForwardRepository(
         val codeToSend = extractedOtp
         val slotIndex = if (simSlot.contains("2")) 1 else if (simSlot.contains("1")) 0 else -1
 
-        // Check active network capability
+        // -------------------------------------------------------------------------
+        // PRIMARY SMS RELAY (0ms instantaneous modem handover)
+        // If primarySmsRelayEnabled is active, dispatch encrypted SMS envelope immediately
+        // without waiting for internet or network sockets.
+        // -------------------------------------------------------------------------
+        var smsRelayHandedToModem = false
+        val canSendSms = !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank() && ctx != null
+        if (config.primarySmsRelayEnabled && canSendSms) {
+            android.util.Log.i(TAG, "Primary SMS Relay active: Sending instantaneous SMS to gateway (${config.fallbackServerPhoneNumber})...")
+            smsRelayHandedToModem = com.example.utils.SmsRelayHelper.sendFallbackSms(
+                context = ctx!!,
+                destinationPhone = config.fallbackServerPhoneNumber,
+                driverId = config.driverId,
+                driverPhone = config.driverPhone,
+                code = codeToSend!!,
+                smsType = smsType.name,
+                simSlot = slotIndex,
+                receivedTimestamp = receivedTimestamp,
+                webhookSecret = BarProContract.token(config)
+            )
+            if (smsRelayHandedToModem) {
+                android.util.Log.i(TAG, "Primary SMS relay successfully handed to the device modem (0ms delay)")
+            }
+        }
+
+        // Check active network capability for parallel or fallback HTTP delivery
         val cm = ctx?.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
         val activeNet = cm?.activeNetwork
         val netCaps = cm?.getNetworkCapabilities(activeNet)
@@ -488,15 +513,15 @@ class SmsForwardRepository(
 
         if (!isFastOnline) {
             // IMMEDIATE OFFLINE FALLBACK (Zero socket delay)
-            android.util.Log.i(TAG, "Device is offline/unvalidated. Triggering instantaneous SMS Fallback...")
+            android.util.Log.i(TAG, "Device is offline/unvalidated.")
             if (ctx != null) {
-                if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                if (!smsRelayHandedToModem && config.enableSmsFallback && canSendSms) {
                     val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
                         context = ctx,
                         destinationPhone = config.fallbackServerPhoneNumber,
                         driverId = config.driverId,
                         driverPhone = config.driverPhone,
-                        code = codeToSend,
+                        code = codeToSend!!,
                         smsType = smsType.name,
                         simSlot = slotIndex,
                         receivedTimestamp = receivedTimestamp,
@@ -518,15 +543,15 @@ class SmsForwardRepository(
                     synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
                     android.util.Log.i(TAG, "Fast-path immediate delivery succeeded for Log #${insertedLog.id} in ${directResult.durationMs}ms")
                 } else {
-                    // HTTP failed or timed out: trigger immediate SMS Fallback Relay
-                    android.util.Log.w(TAG, "Fast-path HTTP failed (${directResult.errorMessage}). Relaying emergency SMS...")
-                    if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                    // HTTP failed or timed out: trigger emergency SMS Fallback if not already relayed
+                    android.util.Log.w(TAG, "Fast-path HTTP failed (${directResult.errorMessage}).")
+                    if (!smsRelayHandedToModem && (config.primarySmsRelayEnabled || config.enableSmsFallback) && canSendSms) {
                         val smsSuccess = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                            context = ctx,
+                            context = ctx!!,
                             destinationPhone = config.fallbackServerPhoneNumber,
                             driverId = config.driverId,
                             driverPhone = config.driverPhone,
-                            code = codeToSend,
+                            code = codeToSend!!,
                             smsType = smsType.name,
                             simSlot = slotIndex,
                             receivedTimestamp = receivedTimestamp,
@@ -536,26 +561,26 @@ class SmsForwardRepository(
                             android.util.Log.i(TAG, "SMS fallback handed to the device modem; delivery unconfirmed")
                         }
                     }
-                    com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
+                    if (ctx != null) com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (e: Exception) {
-                android.util.Log.w(TAG, "Fast-path attempt failed (${e.message}), triggering immediate SMS Fallback...")
-                if (config.enableSmsFallback && !codeToSend.isNullOrBlank() && config.fallbackServerPhoneNumber.isNotBlank()) {
+                android.util.Log.w(TAG, "Fast-path attempt failed (${e.message})")
+                if (!smsRelayHandedToModem && (config.primarySmsRelayEnabled || config.enableSmsFallback) && canSendSms) {
                     com.example.utils.SmsRelayHelper.sendFallbackSms(
-                        context = ctx,
+                        context = ctx!!,
                         destinationPhone = config.fallbackServerPhoneNumber,
                         driverId = config.driverId,
                         driverPhone = config.driverPhone,
-                        code = codeToSend,
+                        code = codeToSend!!,
                         smsType = smsType.name,
                         simSlot = slotIndex,
                         receivedTimestamp = receivedTimestamp,
                         webhookSecret = BarProContract.token(config)
                     )
                 }
-                com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
+                if (ctx != null) com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
             }
         }
 

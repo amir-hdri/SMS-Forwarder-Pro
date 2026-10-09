@@ -154,9 +154,12 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(otp_vault_service.extract_utcms_otp("کد تایید شما: ۱۲۳۴ می باشد"))
         self.assertIsNone(otp_vault_service.extract_utcms_otp("Code: 1234"))
 
-        # 6-digit number: MUST BE REJECTED
-        self.assertIsNone(otp_vault_service.extract_utcms_otp("کد تایید شما: ۱۲۳۴۵۶ می باشد"))
-        self.assertIsNone(otp_vault_service.extract_utcms_otp("Code: 123456"))
+        # 6-digit number: MUST BE ACCEPTED (UTCMS production format)
+        self.assertEqual(otp_vault_service.extract_utcms_otp("کد تایید شما: ۱۲۳۴۵۶ می باشد"), "123456")
+        self.assertEqual(otp_vault_service.extract_utcms_otp("کد ورود: 833282", sender="7777000982"), "833282")
+
+        # 7-digit number: MUST BE REJECTED
+        self.assertIsNone(otp_vault_service.extract_utcms_otp("کد تایید شما: ۱۲۳۴۵۶۷ می باشد"))
 
         # Multiple numbers (waybill number 6-digit + OTP 5-digit)
         msg_multi = "بارنامه شماره ۹۸۷۶۵۴ صادر شد. کد تایید: ۴۵۲۱۰"

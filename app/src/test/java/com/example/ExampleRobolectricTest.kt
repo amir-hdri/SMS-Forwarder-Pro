@@ -80,6 +80,34 @@ class ExampleRobolectricTest {
             isEnabled = true
         )
         assertTrue(prefixRule.matches("20008492", "کد ورود: 948102"))
+        assertTrue(prefixRule.matches("+9820008492", "کد ورود: 948102"))
+
+        val utcmsRule = FilterRule(
+            senderPattern = "20007777",
+            matchType = MatchType.EXACT,
+            label = "سامانه رسمی بارنامه",
+            isEnabled = true
+        )
+        assertTrue(utcmsRule.matches("20007777", "کد تایید ۱۲۳۴۵"))
+        assertTrue(utcmsRule.matches("+9820007777", "کد تایید ۱۲۳۴۵"))
+
+        val gateway3000 = FilterRule(
+            senderPattern = "3000",
+            matchType = MatchType.PREFIX,
+            label = "سرشماره ۳۰۰۰",
+            keywordFilter = "کد,ورود,تایید",
+            isEnabled = true
+        )
+        assertTrue(gateway3000.matches("+9830002128002150", "کد ورود: 81920"))
+
+        val gateway5000 = FilterRule(
+            senderPattern = "5000",
+            matchType = MatchType.PREFIX,
+            label = "سرشماره ۵۰۰۰",
+            keywordFilter = "کد,ورود,تایید",
+            isEnabled = true
+        )
+        assertTrue(gateway5000.matches("+9850002710040127", "کد ورود به سیستم 48192"))
     }
 
     @Test
