@@ -72,7 +72,7 @@
 | **سرویس وب بک‌اند** | Python 3.11+ & FastAPI | مسیر `/api/v1/otp/sms-forwarder` |
 | **صندوق و توزیع رویداد** | Redis 7 (In-Memory Vault & Pub/Sub) | ذخیره‌سازی کلید با TTL و توزیع رویداد بلادرنگ |
 | **اتوماسیون مرورگر و وب** | Playwright (Async Python) | کنترل بدون سر (Headless) پرتال UTCMS و تزریق خودکار فرم |
-| **تست‌های خودکار** | JUnit, Robolectric, Roborazzi | snapshot ۲۰۲۶-۱۰-۱۰: ۷۸ آزمون در هر فلور (`driver` و `hub`)، ۰ خطا |
+| **تست‌های خودکار** | JUnit, Robolectric, Roborazzi | snapshot ۲۰۲۶-۱۰-۱۱: ۸۶ آزمون در هر فلور (`driver` و `hub`)، ۰ خطا (۱۷۲ کل) |
 
 ---
 
