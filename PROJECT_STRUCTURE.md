@@ -97,7 +97,7 @@ Forward-BarPro/
 │       │       └── values-fa/
 │       │           └── strings.xml           # عنوان رسمی فارسی: Forward BarPro
 │       │
-│       └── test/                             # آزمون‌های واحد (snapshot ۲۰۲۶-۱۰-۱۰: ۸۰ در هر فلور)
+│       └── test/                             # آزمون‌های واحد (snapshot ۲۰۲۶-۱۰-۱۰: ۸۲ در هر فلور، ۱۶۴ کل)
 │           ├── BarProContractTest.kt         # آزمون‌های قرارداد وب‌هوک و هدرهای بارپرو
 │           ├── SmsParserTest.kt              # آزمون‌های استخراج OTP و ارقام فارسی
 │           ├── ExampleRobolectricTest.kt     # آزمون عنوان برنامه Forward BarPro و استخراج کد

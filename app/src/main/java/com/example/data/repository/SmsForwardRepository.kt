@@ -557,8 +557,12 @@ class SmsForwardRepository(
             configuredIrancell = config.hubIrancellPhoneNumber
         )
 
+        // Resolve driver phone: prioritize configured phone, then device SIM MSISDN
+        val resolvedDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
+            .ifBlank { if (ctx != null) com.example.utils.CarrierDetector.detectPhoneNumberFromDevice(ctx) else "" }
+
         val hubRoute = com.example.utils.CarrierDetector.resolveRoute(
-            driverPhone = if (config.driverPhone.isNotBlank()) config.driverPhone else sender,
+            driverPhone = resolvedDriverPhone,
             hubMciNumber = hubNumbers.mci,
             hubIrancellNumber = hubNumbers.irancell,
             context = ctx
@@ -566,18 +570,21 @@ class SmsForwardRepository(
         val primaryHubNumber = if (hubRoute.primaryNumber.isNotBlank()) hubRoute.primaryNumber else config.fallbackServerPhoneNumber
         val failoverHubNumber = hubRoute.failoverNumber
 
-        val driverPhoneToUse = config.driverPhone.ifBlank { sender }
-        val canSendSms = !codeToSend.isNullOrBlank() && (primaryHubNumber.isNotBlank() || config.fallbackServerPhoneNumber.isNotBlank()) && ctx != null
+        val isDriverPhoneValid = resolvedDriverPhone.matches(Regex("09[0-9]{9}"))
+        val canSendSms = !codeToSend.isNullOrBlank() &&
+            isDriverPhoneValid &&
+            (primaryHubNumber.isNotBlank() || config.fallbackServerPhoneNumber.isNotBlank()) &&
+            ctx != null
 
         val dispatchSmsToHub: () -> Boolean = {
-            if (ctx == null || codeToSend.isNullOrBlank() || primaryHubNumber.isBlank()) {
+            if (!canSendSms || primaryHubNumber.isBlank()) {
                 false
             } else {
                 var sent = com.example.utils.SmsRelayHelper.sendFallbackSms(
                     context = ctx,
                     destinationPhone = primaryHubNumber,
                     driverId = config.driverId,
-                    driverPhone = driverPhoneToUse,
+                    driverPhone = resolvedDriverPhone,
                     code = codeToSend,
                     smsType = smsType.name,
                     simSlot = slotIndex,
@@ -590,7 +597,7 @@ class SmsForwardRepository(
                         context = ctx,
                         destinationPhone = failoverHubNumber,
                         driverId = config.driverId,
-                        driverPhone = driverPhoneToUse,
+                        driverPhone = resolvedDriverPhone,
                         code = codeToSend,
                         smsType = smsType.name,
                         simSlot = slotIndex,

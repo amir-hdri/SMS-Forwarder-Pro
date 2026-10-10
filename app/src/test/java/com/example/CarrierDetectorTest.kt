@@ -54,6 +54,38 @@ class CarrierDetectorTest {
         assertEquals(mciHub, route.failoverNumber)
     }
 
+    @Test
+    fun testResolveRouteDefaultsToMciWhenDriverCarrierUnknown() {
+        val mciHub = "09120000001"
+        val irancellHub = "09350000001"
+
+        // Unrecognized carrier prefix -> Defaults to MCI (Hamrah-e Aval) due to superior Iranian road coverage
+        val unknownRoute = CarrierDetector.resolveRoute("09501234567", mciHub, irancellHub)
+        assertEquals(mciHub, unknownRoute.primaryNumber)
+        assertEquals(irancellHub, unknownRoute.failoverNumber)
+
+        val emptyRoute = CarrierDetector.resolveRoute("", mciHub, irancellHub)
+        assertEquals(mciHub, emptyRoute.primaryNumber)
+        assertEquals(irancellHub, emptyRoute.failoverNumber)
+    }
+
+    @Test
+    fun testResolveRouteAutoSwapsSwappedHubFields() {
+        // Operator accidentally swapped the input fields: put Irancell in mci slot and MCI in irancell slot
+        val swappedSlotMci = "09350000001"
+        val swappedSlotIrancell = "09120000001"
+
+        // MCI driver must still get the actual MCI number as primary
+        val mciRoute = CarrierDetector.resolveRoute("09129999999", swappedSlotMci, swappedSlotIrancell)
+        assertEquals("09120000001", mciRoute.primaryNumber)
+        assertEquals("09350000001", mciRoute.failoverNumber)
+
+        // Irancell driver must still get the actual Irancell number as primary
+        val irancellRoute = CarrierDetector.resolveRoute("09359999999", swappedSlotMci, swappedSlotIrancell)
+        assertEquals("09350000001", irancellRoute.primaryNumber)
+        assertEquals("09120000001", irancellRoute.failoverNumber)
+    }
+
     // ---------------------------------------------------------------------
     // Hub number resolution (regression guard).
     //

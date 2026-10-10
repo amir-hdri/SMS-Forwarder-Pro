@@ -137,6 +137,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
 
     fun resolveGatewayUrl(endpointUrl: String): String {
         val trimmed = endpointUrl.trim().trimEnd('/')
+        if (trimmed.isBlank()) return "https://api.barpro.ir" + BarProContract.GATEWAY_PATH
         val base = if (trimmed.substringAfterLast('/').matches(Regex("09[0-9]{9}"))) {
             trimmed.substringBeforeLast('/')
         } else {
@@ -147,7 +148,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
             base.endsWith("/sms-forwarder") -> base.substringBeforeLast("/sms-forwarder") + "/sms-gateway"
             base.endsWith("/webhook") -> base.substringBeforeLast("/webhook") + "/sms-gateway"
             base.endsWith("/api/v1/otp") -> "$base/sms-gateway"
-            else -> "$base/sms-gateway"
+            base.contains("/api/v1/otp") -> "$base/sms-gateway"
+            else -> "$base/api/v1/otp/sms-gateway"
         }
     }
 

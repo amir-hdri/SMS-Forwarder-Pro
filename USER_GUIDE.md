@@ -138,7 +138,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 ./gradlew testDriverDebugUnitTest testHubDebugUnitTest
 ```
 
-* snapshot ۲۰۲۶-۱۰-۱۰: هر فلور `tests=80 failures=0 errors=0`. این عدد یک snapshot است؛ مقدار
+* snapshot ۲۰۲۶-۱۰-۱۰: هر فلور `tests=82 failures=0 errors=0` (۱۶۴ آزمون کل). این عدد یک snapshot است؛ مقدار
   معتبر را از خروجی همان اجرا گزارش کنید.
 * `BarProContractTest` (قرارداد وب‌هوک و مسیرها)، `SmsParserTest` (استخراج کد فارسی/انگلیسی)،
   `CarrierDetectorTest` (تشخیص اپراتور + حل شماره‌های هاب + تضمین تمایز failover از primary)،

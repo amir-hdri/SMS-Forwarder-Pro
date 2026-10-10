@@ -84,6 +84,22 @@ object CarrierDetector {
     }
 
     /**
+     * Attempts to read the device's own mobile phone number from the hardware SIM / TelephonyManager
+     * as a zero-configuration fallback when [driverPhone] has not yet been saved in config.
+     */
+    @Suppress("DEPRECATION")
+    fun detectPhoneNumberFromDevice(context: Context): String {
+        return try {
+            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val line1 = tm?.line1Number ?: ""
+            val norm = SmsParser.normalizePhoneNumber(line1)
+            if (norm.matches(Regex("09[0-9]{9}"))) norm else ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
      * Reconciles build-time Hub defaults with operator-entered configuration.
      *
      * Precedence per leg: a non-blank build default wins (fleet-provisioned APK), otherwise the
@@ -103,9 +119,11 @@ object CarrierDetector {
 
     /**
      * Resolves the optimal Hub SIM destination:
+     * - Auto-detects and aligns the actual carrier of the Hub SIMs even if the operator swapped the fields.
      * - If Driver is MCI -> Hub MCI is primary, Hub Irancell is failover.
      * - If Driver is Irancell/RighTel -> Hub Irancell is primary, Hub MCI is failover.
-     * - If only one is configured, uses that for both.
+     * - If Driver carrier is UNKNOWN -> Defaults to Hub MCI as primary (Hamrah-e Aval provides widest Iranian highway coverage).
+     * - If only one Hub number is configured, uses that for both.
      */
     fun resolveRoute(
         driverPhone: String,
@@ -118,15 +136,30 @@ object CarrierDetector {
             carrier = detectCarrierFromDevice(context)
         }
 
-        val cleanMci = hubMciNumber.trim()
-        val cleanIrancell = hubIrancellNumber.trim()
+        val rawMci = hubMciNumber.trim()
+        val rawIrancell = hubIrancellNumber.trim()
+
+        // Operator mistake tolerance: If the operator swapped the two fields,
+        // align them by detected carrier.
+        val cleanMci: String
+        val cleanIrancell: String
+        if (detectCarrierFromPhone(rawMci) == MobileCarrier.IRANCELL &&
+            detectCarrierFromPhone(rawIrancell) == MobileCarrier.MCI
+        ) {
+            cleanMci = rawIrancell
+            cleanIrancell = rawMci
+        } else {
+            cleanMci = rawMci
+            cleanIrancell = rawIrancell
+        }
 
         return when {
             cleanMci.isNotBlank() && cleanIrancell.isNotBlank() -> {
-                if (carrier == MobileCarrier.MCI) {
-                    HubTargetRoute(primaryNumber = cleanMci, failoverNumber = cleanIrancell, carrier = carrier)
-                } else {
+                if (carrier == MobileCarrier.IRANCELL || carrier == MobileCarrier.RIGHTEL) {
                     HubTargetRoute(primaryNumber = cleanIrancell, failoverNumber = cleanMci, carrier = carrier)
+                } else {
+                    // MCI or UNKNOWN: Hamrah-e Aval (MCI) is primary due to extensive intercity road coverage
+                    HubTargetRoute(primaryNumber = cleanMci, failoverNumber = cleanIrancell, carrier = carrier)
                 }
             }
             cleanMci.isNotBlank() -> HubTargetRoute(primaryNumber = cleanMci, failoverNumber = cleanMci, carrier = carrier)

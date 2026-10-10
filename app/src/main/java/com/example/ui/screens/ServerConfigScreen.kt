@@ -747,7 +747,14 @@ fun ServerConfigScreen(
                             onClick = {
                                 permissionRevision++
                                 val normDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
-                                if (fallbackServerPhoneNumber.isBlank()) {
+                                val hubRoute = com.example.utils.CarrierDetector.resolveRoute(
+                                    driverPhone = normDriverPhone,
+                                    hubMciNumber = fallbackServerPhoneNumber,
+                                    hubIrancellNumber = hubIrancellPhoneNumber,
+                                    context = context
+                                )
+                                val destination = if (hubRoute.primaryNumber.isNotBlank()) hubRoute.primaryNumber else fallbackServerPhoneNumber.ifBlank { hubIrancellPhoneNumber }
+                                if (destination.isBlank()) {
                                     testSmsProbeMessage = "ابتدا شماره سیم‌کارت درگاه سرور را در بالا وارد کنید."
                                 } else if (!normDriverPhone.matches(Regex("09[0-9]{9}"))) {
                                     testSmsProbeMessage = "ابتدا شماره سیم‌کارت راننده را به صورت ۱۱ رقمی (۰۹...) وارد کنید."
@@ -757,7 +764,7 @@ fun ServerConfigScreen(
                                     val timestamp = System.currentTimeMillis()
                                     val ok = com.example.utils.SmsRelayHelper.sendFallbackSms(
                                         context = context,
-                                        destinationPhone = fallbackServerPhoneNumber,
+                                        destinationPhone = destination,
                                         driverId = config.driverId,
                                         driverPhone = normDriverPhone,
                                         code = "TEST",
