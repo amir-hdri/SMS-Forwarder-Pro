@@ -80,7 +80,9 @@ Forward-BarPro/
 │       │   │   │       └── MainViewModel.kt  # مدیریت وضعیت داشبورد، مجوزها و ارسال‌ها
 │       │   │   │
 │       │   │   └── utils/
+│       │   │       ├── CarrierDetector.kt     # تشخیص اپراتور راننده + حل شماره‌های هاب و مسیر primary/failover
 │       │   │       ├── LogSanitizer.kt       # ماسک‌کردن شماره‌ها و کدهای محرمانه در لاگ‌ها
+│       │   │       ├── SmsFallbackEnvelope.kt # ساخت/تجزیه/بررسی پاکت امضاشده BP1# (مقایسه زمان‌ثابت)
 │       │   │       └── SmsParser.kt          # نرمال‌سازی ارقام فارسی و عربی و استخراج OTP
 │       │   │
 │       │   └── res/                          # منابع بصری، آیکون‌ها و رشته‌ها
@@ -95,7 +97,7 @@ Forward-BarPro/
 │       │       └── values-fa/
 │       │           └── strings.xml           # عنوان رسمی فارسی: Forward BarPro
 │       │
-│       └── test/                             # ۵۷ آزمون واحد خودکار (۱۰۰٪ Passed)
+│       └── test/                             # آزمون‌های واحد (snapshot ۲۰۲۶-۱۰-۱۰: ۸۰ در هر فلور)
 │           ├── BarProContractTest.kt         # آزمون‌های قرارداد وب‌هوک و هدرهای بارپرو
 │           ├── SmsParserTest.kt              # آزمون‌های استخراج OTP و ارقام فارسی
 │           ├── ExampleRobolectricTest.kt     # آزمون عنوان برنامه Forward BarPro و استخراج کد

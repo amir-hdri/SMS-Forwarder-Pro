@@ -125,6 +125,7 @@ fun ServerConfigScreen(
     var driverPhone by remember(config) { mutableStateOf(config.driverPhone) }
     var primarySmsRelayEnabled by remember(config) { mutableStateOf(config.primarySmsRelayEnabled) }
     var fallbackServerPhoneNumber by remember(config) { mutableStateOf(config.fallbackServerPhoneNumber) }
+    var hubIrancellPhoneNumber by remember(config) { mutableStateOf(config.hubIrancellPhoneNumber) }
     var endpointUrl by remember(config) { mutableStateOf(config.endpointUrl) }
     var authHeaderValue by remember(config) { mutableStateOf(config.authHeaderValue) }
     var allowCleartextTransport by remember(config) { mutableStateOf(config.allowCleartextTransport) }
@@ -501,7 +502,7 @@ fun ServerConfigScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "با فعال‌سازی این حالت، به محض دریافت پیامک از سرشماره‌های راهداری (۲۰۰۰۷۷۷۷ و...)، کد OTP با قالب امن BP1#... مستقیماً با پیامک به درگاه سرور فرستاده می‌شود. این مسیر به اینترنت گوشی نیاز ندارد؛ تحویل به آنتن‌دهی، اعتبار سیم‌کارت و دسترسی درگاه بستگی دارد. امضای BP1 اصالت پیام را کنترل می‌کند و متن آن رمزنگاری نشده است.",
+                        text = "با فعال‌سازی این حالت، به محض دریافت پیامک از سرشماره‌های راهداری (۷۷۷۷۰۰۰۹۸۲، ۲۰۰۰۷۷۷۷ و...)، کد OTP با قالب امن BP1#... مستقیماً با پیامک به گوشی هاب دفتر فرستاده می‌شود. این مسیر به اینترنت گوشی نیاز ندارد؛ تحویل به آنتن‌دهی، اعتبار سیم‌کارت و دسترسی گوشی هاب بستگی دارد. امضای BP1 اصالت پیام را کنترل می‌کند و متن آن رمزنگاری نشده است. برای مسیر درون‌شبکه‌ای (همراه اول→همراه اول، ایرانسل→ایرانسل) و فیل‌اور خودکار، هر دو شماره سیم‌کارت هاب را پر کنید.",
                         fontSize = 12.sp,
                         color = BarProTextSecondary,
                         lineHeight = 18.sp
@@ -515,9 +516,42 @@ fun ServerConfigScreen(
                             fallbackServerPhoneNumber = it
                             onSaveConfig(config.copy(fallbackServerPhoneNumber = it))
                         },
-                        label = { Text("شماره سیم‌کارت درگاه سرور (دفتر)") },
+                        label = { Text("شماره سیم‌کارت ۱ هاب — همراه اول") },
                         placeholder = { Text("مثال: ۰۹۱۲۳۴۵۶۷۸۹") },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BarProCyan,
+                            unfocusedBorderColor = BarProBorder,
+                            focusedTextColor = BarProTextPrimary,
+                            unfocusedTextColor = BarProTextPrimary,
+                            focusedContainerColor = BarProSurfaceSubtle,
+                            unfocusedContainerColor = BarProSurfaceSubtle
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = hubIrancellPhoneNumber,
+                        onValueChange = {
+                            hubIrancellPhoneNumber = it
+                            onSaveConfig(config.copy(hubIrancellPhoneNumber = it))
+                        },
+                        label = { Text("شماره سیم‌کارت ۲ هاب — ایرانسل (اختیاری)") },
+                        placeholder = { Text("مثال: ۰۹۳۵۱۲۳۴۵۶۷") },
+                        singleLine = true,
+                        supportingText = {
+                            Text(
+                                text = if (hubIrancellPhoneNumber.isBlank())
+                                    "خالی بماند: ارسال تک‌شماره بدون فیل‌اور. با تکمیل آن، پیامک راننده ایرانسلی مستقیم به سیم‌کارت ایرانسل هاب (درون‌شبکه) می‌رود و در صورت خطا روی سیم‌کارت دیگر فیل‌اور می‌شود."
+                                else
+                                    "فعال: مسیر درون‌شبکه‌ای و فیل‌اور خودکار بین دو سیم‌کارت هاب برقرار است.",
+                                fontSize = 11.sp,
+                                color = BarProTextSecondary,
+                                lineHeight = 16.sp
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = BarProCyan,
                             unfocusedBorderColor = BarProBorder,
@@ -712,8 +746,11 @@ fun ServerConfigScreen(
                             enabled = !probeRunning,
                             onClick = {
                                 permissionRevision++
+                                val normDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
                                 if (fallbackServerPhoneNumber.isBlank()) {
                                     testSmsProbeMessage = "ابتدا شماره سیم‌کارت درگاه سرور را در بالا وارد کنید."
+                                } else if (!normDriverPhone.matches(Regex("09[0-9]{9}"))) {
+                                    testSmsProbeMessage = "ابتدا شماره سیم‌کارت راننده را به صورت ۱۱ رقمی (۰۹...) وارد کنید."
                                 } else if (!com.example.utils.PermissionHelper.isSendSmsGranted(context)) {
                                     testSmsProbeMessage = "ابتدا مجوز ارسال پیامک (SEND_SMS) را اعطا کنید."
                                 } else {
@@ -722,7 +759,7 @@ fun ServerConfigScreen(
                                         context = context,
                                         destinationPhone = fallbackServerPhoneNumber,
                                         driverId = config.driverId,
-                                        driverPhone = config.driverPhone,
+                                        driverPhone = normDriverPhone,
                                         code = "TEST",
                                         smsType = "TEST",
                                         simSlot = -1,
@@ -926,7 +963,7 @@ fun ServerConfigScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "سرور بارپرو در حال حاضر بدون HTTPS (روی پورت ۸۰) کار می‌کند؛ برای امکان ارسال به این آدرس باید این گزینه فعال باشد.",
+                                        text = "ترنسپورت سرور بارپرو روی HTTP پورت ۸۰ تعیین شده است؛ برای امکان ارسال به این آدرس باید این گزینه فعال باشد. امضای BP1 اصالت پیام را تضمین می‌کند، ولی توکن و کد روی شبکه رمزنگاری نمی‌شوند.",
                                         fontSize = 11.sp,
                                         color = BarProTextSecondary,
                                         lineHeight = 16.sp

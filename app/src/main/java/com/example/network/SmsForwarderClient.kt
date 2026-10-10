@@ -135,6 +135,59 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
             )
         }
 
+    fun resolveGatewayUrl(endpointUrl: String): String {
+        val trimmed = endpointUrl.trim().trimEnd('/')
+        val base = if (trimmed.substringAfterLast('/').matches(Regex("09[0-9]{9}"))) {
+            trimmed.substringBeforeLast('/')
+        } else {
+            trimmed
+        }
+        return when {
+            base.endsWith("/sms-gateway") -> base
+            base.endsWith("/sms-forwarder") -> base.substringBeforeLast("/sms-forwarder") + "/sms-gateway"
+            base.endsWith("/webhook") -> base.substringBeforeLast("/webhook") + "/sms-gateway"
+            base.endsWith("/api/v1/otp") -> "$base/sms-gateway"
+            else -> "$base/sms-gateway"
+        }
+    }
+
+    /** Relays a signed BP1#... envelope received on the Hub to /api/v1/otp/sms-gateway */
+    suspend fun relayGatewaySms(
+        sender: String,
+        envelopeText: String,
+        config: ForwardConfig,
+        fastTimeoutMs: Long? = null,
+        clientOverride: OkHttpClient? = null
+    ): TransmissionResult = withContext(Dispatchers.IO) {
+        val token = BarProContract.token(config)
+        if (token.isBlank()) return@withContext failure("توکن وب‌هوک تنظیم نشده است.")
+        val parsed = com.example.utils.SmsFallbackEnvelope.parse(envelopeText)
+            ?: return@withContext failure("قالب پکت پیامک امضاشده معتبر نیست.")
+
+        val targetUrl = resolveGatewayUrl(config.endpointUrl)
+        val normSender = com.example.utils.SmsParser.normalizePhoneNumber(sender)
+        val fromPhone = if (normSender.matches(Regex("09[0-9]{9}"))) normSender else parsed.phone
+        val payload = JSONObject().apply {
+            put("from", fromPhone)
+            put("text", envelopeText.trim())
+        }
+        val extraHeaders = mutableMapOf<String, String>()
+        if (config.deviceIdentifier.isNotBlank()) {
+            extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
+        }
+
+        val gatewayConfig = config.copy(endpointUrl = targetUrl)
+        post(
+            payload,
+            gatewayConfig,
+            expectedStatus = "success",
+            fastTimeoutMs = fastTimeoutMs,
+            extraHeaders = extraHeaders,
+            clientOverride = clientOverride,
+            responseMatches = { json -> json.optBoolean("success", false) }
+        ).copy(smsType = SmsType.UTCMS_OTP, otpCode = parsed.code)
+    }
+
     private suspend fun post(
         payload: JSONObject,
         config: ForwardConfig,

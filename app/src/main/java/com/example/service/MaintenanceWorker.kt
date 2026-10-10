@@ -44,6 +44,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                         filterUtcmsOnly = fetchResult.snapshot.filterUtcmsOnly ?: config.filterUtcmsOnly,
                         enableSmsFallback = fetchResult.snapshot.enableSmsFallback ?: config.enableSmsFallback,
                         fallbackServerPhoneNumber = fetchResult.snapshot.fallbackServerPhoneNumber ?: config.fallbackServerPhoneNumber,
+                        hubIrancellPhoneNumber = fetchResult.snapshot.hubIrancellPhoneNumber ?: config.hubIrancellPhoneNumber,
                         timeoutSeconds = fetchResult.snapshot.timeoutSeconds ?: config.timeoutSeconds,
                         maxRetries = fetchResult.snapshot.maxRetries ?: config.maxRetries,
                         healthCheckIntervalMinutes = fetchResult.snapshot.healthCheckIntervalMinutes ?: config.healthCheckIntervalMinutes

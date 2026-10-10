@@ -9,6 +9,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object BarProContract {
     const val PATH = "/api/v1/otp/sms-forwarder"
     const val WEBHOOK_ALIAS_PATH = "/api/v1/otp/webhook"
+    const val GATEWAY_PATH = "/api/v1/otp/sms-gateway"
     const val TOKEN_HEADER = "X-OTP-Webhook-Token"
     const val DRIVER_PHONE_HEADER = "X-Driver-Phone"
     const val DEVICE_ID_HEADER = "X-Device-Id"
@@ -23,13 +24,13 @@ object BarProContract {
     }
 
     fun isPathValid(encodedPath: String): Boolean {
-        if (encodedPath in setOf(PATH, WEBHOOK_ALIAS_PATH)) return true
+        if (encodedPath in setOf(PATH, WEBHOOK_ALIAS_PATH, GATEWAY_PATH)) return true
         val segments = encodedPath.trim('/').split('/')
         if (segments.size == 5 &&
             segments[0] == "api" &&
             segments[1] == "v1" &&
             segments[2] == "otp" &&
-            (segments[3] == "sms-forwarder" || segments[3] == "webhook")
+            (segments[3] == "sms-forwarder" || segments[3] == "webhook" || segments[3] == "sms-gateway")
         ) {
             val phone = SmsParser.normalizePhoneNumber(segments[4])
             return phone.matches(Regex("09[0-9]{9}"))
@@ -65,13 +66,13 @@ object BarProContract {
         if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.fragment != null)
             return "آدرس وب‌هوک نباید شامل نام کاربری، رمز یا فرگمنت باشد."
         if (!isPathValid(url.encodedPath))
-            return "مسیر وب‌هوک بارپرو باید $PATH یا $WEBHOOK_ALIAS_PATH باشد."
+            return "مسیر وب‌هوک بارپرو باید $PATH ، $WEBHOOK_ALIAS_PATH یا $GATEWAY_PATH باشد."
         if (token(config).isBlank() || token(config) == "change-me-to-a-secure-random-token")
             return "کلید OTP_WEBHOOK_SECRET سرور را وارد کنید."
         if (token(config).any { it.code !in 33..126 })
             return "کلید وب‌هوک باید فقط از نویسه‌های قابل چاپ انگلیسی و بدون فاصله تشکیل شده باشد."
         if (config.isEncryptionEnabled)
-            return "بارپرو JSON را روی HTTPS می‌پذیرد؛ رمزنگاری سفارشی بدنه پشتیبانی نمی‌شود."
+            return "بارپرو بدنه JSON استاندارد را می‌پذیرد؛ رمزنگاری سفارشی بدنه پشتیبانی نمی‌شود."
         if (requireRecipient && !SmsParser.normalizePhoneNumber(config.driverPhone).matches(Regex("09[0-9]{9}")))
             return "شماره سیم‌کارت دریافت‌کننده OTP راننده را وارد کنید."
         return null

@@ -36,6 +36,31 @@ android {
     buildConfigField("String", "DEFAULT_ENDPOINT_URL", "\"$defaultEndpoint\"")
     buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$defaultConfigUrl\"")
     buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$defaultUpdateUrl\"")
+    buildConfigField("String", "APP_ROLE", "\"COMMON\"")
+    buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
+    buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
+  }
+
+  flavorDimensions += "role"
+  productFlavors {
+    create("driver") {
+      dimension = "role"
+      applicationIdSuffix = ".driver"
+      versionNameSuffix = "-driver"
+      buildConfigField("String", "APP_ROLE", "\"DRIVER\"")
+      val hubMci = providers.gradleProperty("BARPRO_HUB_PHONE_MCI").orNull ?: ""
+      val hubIrancell = providers.gradleProperty("BARPRO_HUB_PHONE_IRANCELL").orNull ?: ""
+      buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"$hubMci\"")
+      buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"$hubIrancell\"")
+    }
+    create("hub") {
+      dimension = "role"
+      applicationIdSuffix = ".hub"
+      versionNameSuffix = "-hub"
+      buildConfigField("String", "APP_ROLE", "\"HUB\"")
+      buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
+      buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
+    }
   }
 
   val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
@@ -79,6 +104,37 @@ android {
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
+  }
+}
+
+// Operator-facing artifact names, produced by the build itself rather than a manual copy after
+// `assemble*`, so the filenames quoted in the deployment SOP are reproducible from the Gradle
+// command alone. AGP 9 removed the old `applicationVariants`/`outputFileName` hook, so this reads
+// the variant's APK artifact and copies it under the distribution name.
+androidComponents {
+  onVariants { variant ->
+    val distributionName = when {
+      variant.name.startsWith("driver") -> "Forward-BarPro-Driver"
+      variant.name.startsWith("hub") -> "Forward-BarPro-Hub"
+      else -> null
+    }
+    if (distributionName != null) {
+      val variantTaskName = variant.name.replaceFirstChar { it.uppercaseChar() }
+      val targetFileName = "$distributionName-${variant.name}.apk"
+      val apkDirectory = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.APK)
+      val copyTask = tasks.register<Copy>("copy${variantTaskName}DistributionApk") {
+        group = "distribution"
+        description = "Copies the ${variant.name} APK to outputs/distribution/$targetFileName"
+        from(apkDirectory) { include("*.apk") }
+        // Deliberately not outputs/apk: that directory is owned by AGP's own APK-listing tasks,
+        // and writing into it makes Gradle reject the build for an undeclared task dependency.
+        into(layout.buildDirectory.dir("outputs/distribution"))
+        rename { targetFileName }
+        duplicatesStrategy = DuplicatesStrategy.INCLUDE
+      }
+      tasks.matching { it.name == "assemble$variantTaskName" }
+        .configureEach { finalizedBy(copyTask) }
+    }
   }
 }
 

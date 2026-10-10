@@ -34,6 +34,8 @@ data class RemoteConfigSnapshot(
     val filterUtcmsOnly: Boolean? = null,
     val enableSmsFallback: Boolean? = null,
     val fallbackServerPhoneNumber: String? = null,
+    /** Second Hub SIM (Irancell) enabling on-net carrier matching and SIM failover. */
+    val hubIrancellPhoneNumber: String? = null,
     /** Below this versionCode the app refuses to forward and demands an update. 0 disables the gate. */
     val minSupportedVersionCode: Int = 0,
     /** Shown verbatim to the operator in the app; never used for control flow. */
@@ -98,6 +100,7 @@ object RemoteConfig {
             filterUtcmsOnly = optionalBoolean(payload, "filterUtcmsOnly"),
             enableSmsFallback = optionalBoolean(payload, "enableSmsFallback"),
             fallbackServerPhoneNumber = optionalPhone(payload, "fallbackServerPhoneNumber"),
+            hubIrancellPhoneNumber = optionalPhone(payload, "hubIrancellPhoneNumber"),
             minSupportedVersionCode = optionalInt(payload, "minSupportedVersionCode", 0, 1_000_000) ?: 0,
             operatorMessageFa = optionalText(payload, "operatorMessageFa", MAX_MESSAGE_LENGTH),
             updateManifestUrl = optionalEndpoint(payload, "updateManifestUrl", requireWebhookPath = false)

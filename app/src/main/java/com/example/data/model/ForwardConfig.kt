@@ -25,7 +25,7 @@ data class ForwardConfig(
     val authHeaderKey: String = "X-OTP-Webhook-Token",
     val authHeaderValue: String = "barpro-fleet-secure-token",
     val forwarderSecret: String = "",
-    val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو با HTTPS و JSON استاندارد کار می‌کند
+    val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو بدنه JSON استاندارد می‌پذیرد
     val secretEncryptionKey: String = "",
     val filterMode: ForwardFilterMode = ForwardFilterMode.ALL_MESSAGES,
     val deviceIdentifier: String = "BarPro Terminal 01",
@@ -51,12 +51,26 @@ data class ForwardConfig(
     // Automatic SMS Fallback / Primary SMS Relay to server:
     val enableSmsFallback: Boolean = false,
     val primarySmsRelayEnabled: Boolean = true,
+    /**
+     * Hub SIM that receives the relayed `BP1#...` envelope. Historically the single "server gateway"
+     * number; it is now the MCI (همراه اول) leg of the two-SIM Hub so carrier-matched delivery has a
+     * concrete primary. Still the only mandatory number — an Irancell leg is optional.
+     */
     val fallbackServerPhoneNumber: String = "",
     /**
-     * Explicit operator acknowledgement that the endpoint is plain HTTP. Defaults to false so a
-     * cleartext endpoint can never be used by accident: the setup screen must show the warning and
-     * the operator must accept it. BarPro currently serves port 80 only, so this is normally on —
-     * and should be turned back off the moment TLS is available.
+     * Second Hub SIM (ایرانسل). When set, [com.example.utils.CarrierDetector.resolveRoute] can send
+     * on-net (MCI→MCI, Irancell→Irancell) and fail over to the other SIM. Left blank the relay still
+     * works, but degrades to single-number delivery with no failover.
+     */
+    val hubIrancellPhoneNumber: String = "",
+    /**
+     * Explicit operator acknowledgement that the endpoint is plain HTTP.
+     *
+     * HTTP on port 80 is the chosen transport for the BarPro deployment, so this is normally on in
+     * production. It still defaults to false so a cleartext endpoint can never be reached by a
+     * typo: the setup screen must show the warning and the operator must accept it. The `BP1#...`
+     * envelope stays HMAC-authenticated either way, but the webhook token and the OTP are not
+     * encrypted in transit — restricting network access to the gateway is part of the design.
      */
     val allowCleartextTransport: Boolean = false,
     /** Signed remote-config document URL. Empty disables the no-APK settings channel. */

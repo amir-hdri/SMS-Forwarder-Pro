@@ -4,6 +4,7 @@ import android.app.Application
 import com.example.data.model.ForwardConfig
 import com.example.network.BarProContract
 import com.example.network.SmsForwarderClient
+import com.example.utils.SmsFallbackEnvelope
 import com.example.utils.SmsParser
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
@@ -58,6 +59,9 @@ class BarProContractTest {
         assertNull(BarProContract.configurationError(pathConfig))
         val webhookAliasConfig = config.copy(endpointUrl = "https://barpro.test/api/v1/otp/webhook/09120000001")
         assertNull(BarProContract.configurationError(webhookAliasConfig))
+        val gatewayConfig = config.copy(endpointUrl = "https://barpro.test/api/v1/otp/sms-gateway", driverPhone = "")
+        assertNull(BarProContract.configurationError(gatewayConfig, requireRecipient = false))
+        assertTrue(BarProContract.isPathValid("/api/v1/otp/sms-gateway"))
         val invalidPhonePath = config.copy(endpointUrl = "https://barpro.test/api/v1/otp/sms-forwarder/12345")
         assertNotNull(BarProContract.configurationError(invalidPhonePath))
     }
@@ -161,4 +165,48 @@ class BarProContractTest {
         }
     }
 
+    @Test fun testRelayGatewaySmsDispatchesToSmsGatewayEndpoint() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val envelope = SmsFallbackEnvelope.encode("09120000001", 1800000000000, "54321", config.authHeaderValue)
+        val result = client("""{"success":true,"status":"success","otp_detected":true,"is_duplicate":false}""", requests = requests)
+            .relayGatewaySms(sender = "09120000001", envelopeText = envelope, config = config)
+
+        assertTrue(result.isSuccess)
+        val request = requests.single()
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", request.url.toString())
+        assertEquals(config.authHeaderValue, request.header(BarProContract.TOKEN_HEADER))
+
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+        val json = JSONObject(buffer.readUtf8())
+        assertEquals("09120000001", json.getString("from"))
+        assertEquals(envelope, json.getString("text"))
+        assertEquals("54321", result.otpCode)
+    }
+
+    @Test fun testResolveGatewayUrlHandlesStandardAndPathBasedEndpoints() {
+        val c = client("{}")
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp/sms-forwarder"))
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp/sms-forwarder/09120000001"))
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp/webhook/09120000001"))
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp/webhook"))
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp/sms-gateway"))
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/api/v1/otp"))
+    }
+
+    @Test fun testRelayGatewaySmsNormalizesInternationalSenderNumber() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val envelope = SmsFallbackEnvelope.encode("09120000001", 1800000000000, "54321", config.authHeaderValue)
+        val pathConfig = config.copy(endpointUrl = "https://barpro.test/api/v1/otp/sms-forwarder/09120000001")
+        val result = client("""{"success":true,"status":"success","otp_detected":true,"is_duplicate":false}""", requests = requests)
+            .relayGatewaySms(sender = "+989120000001", envelopeText = envelope, config = pathConfig)
+
+        assertTrue(result.isSuccess)
+        val request = requests.single()
+        assertEquals("https://barpro.test/api/v1/otp/sms-gateway", request.url.toString())
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+        val json = JSONObject(buffer.readUtf8())
+        assertEquals("09120000001", json.getString("from"))
+    }
 }

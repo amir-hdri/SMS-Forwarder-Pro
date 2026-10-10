@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [FilterRule::class, ForwardLog::class, ForwardConfig::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -58,6 +58,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Adds the second Hub SIM (Irancell) so carrier-matched on-net relay and SIM failover have a
+         * real destination. Existing installs keep working on the single
+         * `fallbackServerPhoneNumber` leg until the operator fills this in.
+         */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE app_config ADD COLUMN hubIrancellPhoneNumber TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -69,7 +80,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "sms_forwarder_database"
                 )
                     .addCallback(DatabaseCallback(context))
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
