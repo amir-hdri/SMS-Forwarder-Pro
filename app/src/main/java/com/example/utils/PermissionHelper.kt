@@ -57,6 +57,13 @@ object PermissionHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    fun isReadPhoneStateGranted(context: Context): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_PHONE_STATE
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isPostNotificationGranted(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -130,6 +137,19 @@ object PermissionHelper {
                 isRequired = false,
                 permissionType = PermissionType.RUNTIME_PERMISSION,
                 manifestPermission = Manifest.permission.SEND_SMS,
+                category = PermissionCategory.SMS
+            )
+        )
+
+        list.add(
+            PermissionItemInfo(
+                id = "read_phone_state",
+                title = "خواندن وضعیت سیم‌کارت (READ_PHONE_STATE)",
+                description = "انتخاب خودکار سیم‌کارت هم‌شبکه برای فال‌بک پیامکی و تشخیص خودکار شماره راننده (اختیاری در صورت فعال‌سازی فال‌بک).",
+                isGranted = isReadPhoneStateGranted(context),
+                isRequired = false,
+                permissionType = PermissionType.RUNTIME_PERMISSION,
+                manifestPermission = Manifest.permission.READ_PHONE_STATE,
                 category = PermissionCategory.SMS
             )
         )

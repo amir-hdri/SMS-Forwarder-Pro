@@ -31,4 +31,27 @@ class LogSanitizerTest {
         assertEquals("09***", LogSanitizer.maskPhone("09333702137"))
         assertEquals("***", LogSanitizer.maskOtp("12345"))
     }
+
+    @Test
+    fun testRelayLogMasksHubNumber() {
+        val hubNumber = "09961234567"
+        val raw = "SMS Relay active: Sending instantaneous SMS to gateway ($hubNumber)..."
+        // Fixed call-site construction: hub number goes through maskPhone before interpolation.
+        val logged = "SMS Relay active: Sending instantaneous SMS to gateway (${LogSanitizer.maskPhone(hubNumber)})..."
+        assertFalse(logged.contains(hubNumber))
+        assertTrue(logged.contains("09***"))
+        assertEquals(LogSanitizer.sanitize(raw), logged)
+    }
+
+    @Test
+    fun testFailoverLogMasksHubNumber() {
+        val hubNumber = "09041234567"
+        val raw = "Primary Hub number failed; retrying with failover Hub number ($hubNumber)..."
+        // Fixed call-site construction: hub number goes through maskPhone before interpolation.
+        val logged =
+            "Primary Hub number failed; retrying with failover Hub number (${LogSanitizer.maskPhone(hubNumber)})..."
+        assertFalse(logged.contains(hubNumber))
+        assertTrue(logged.contains("09***"))
+        assertEquals(LogSanitizer.sanitize(raw), logged)
+    }
 }

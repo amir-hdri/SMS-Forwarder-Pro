@@ -16,6 +16,10 @@
          actually enables that fallback, so a normal install never asks for it. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- READ_PHONE_STATE backs multi-SIM subscription resolution (SmsRelayHelper) and driver-phone
+         auto-detect via line1Number (CarrierDetector); requested lazily when the operator enables
+         the SMS fallback/relay, same as SEND_SMS above. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Self-update without an app store.

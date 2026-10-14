@@ -4,9 +4,13 @@
 
   BarPro's nginx currently terminates plain HTTP on port 80 only (the :443 server block is
   commented out), so a TLS-only client cannot reach it at all. Cleartext is therefore permitted
-  at the platform level, and the real restriction is enforced in code: BarProContract rejects an
-  http:// endpoint whose host is not the one this build is pinned to, so the app will not speak
-  cleartext to an arbitrary server even though the platform would allow it.
+  at the platform level, and the only checks enforced in code are in
+  BarProContract.configurationError: it requires the allowCleartextTransport flag for an
+  http:// endpoint, rejects userinfo/fragment, validates only the path (isPathValid),
+  requires a non-default printable token, rejects custom body encryption, and requires a
+  recipient number — it never validates the host, so the app will speak cleartext to any
+  host with a valid path once the flag is on, and the DEFAULT_ENDPOINT_URL build field
+  is never read in main source.
 
   Known cost, accepted deliberately: the shared OTP_WEBHOOK_SECRET and the OTP codes travel in
   the clear. Anyone on the path can capture the token once and then inject OTPs for any driver.

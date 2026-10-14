@@ -600,7 +600,7 @@ class SmsForwardRepository(
                     webhookSecret = BarProContract.token(config)
                 )
                 if (!sent && failoverHubNumber.isNotBlank() && failoverHubNumber != primaryHubNumber) {
-                    android.util.Log.w(TAG, "Primary Hub number failed; retrying with failover Hub number ($failoverHubNumber)...")
+                    android.util.Log.w(TAG, "Primary Hub number failed; retrying with failover Hub number (${LogSanitizer.maskPhone(failoverHubNumber)})...")
                     sent = com.example.utils.SmsRelayHelper.sendFallbackSms(
                         context = ctx,
                         destinationPhone = failoverHubNumber,
@@ -619,7 +619,7 @@ class SmsForwardRepository(
 
         val shouldSendSmsRelay = (config.primarySmsRelayEnabled || isDriverApp) && canSendSms
         if (shouldSendSmsRelay && !isRelay) {
-            android.util.Log.i(TAG, "SMS Relay active: Sending instantaneous SMS to gateway ($primaryHubNumber)...")
+            android.util.Log.i(TAG, "SMS Relay active: Sending instantaneous SMS to gateway (${LogSanitizer.maskPhone(primaryHubNumber)})...")
             smsRelayHandedToModem = dispatchSmsToHub()
             if (smsRelayHandedToModem) {
                 android.util.Log.i(TAG, "Primary SMS relay successfully handed to the device modem (0ms delay)")
