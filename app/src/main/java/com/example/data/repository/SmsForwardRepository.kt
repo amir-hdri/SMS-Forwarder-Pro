@@ -153,7 +153,11 @@ class SmsForwardRepository(
         authHeaderValue: String,
         isEncryptionEnabled: Boolean,
         secretKey: String,
-        deviceIdentifier: String
+        deviceIdentifier: String,
+        allowCleartextTransport: Boolean = false,
+        driverPhone: String = "",
+        fallbackServerPhoneNumber: String = "",
+        hubIrancellPhoneNumber: String = ""
     ): TransmissionResult {
         val result = client.testEndpoint(
             endpointUrl = url,
@@ -162,7 +166,11 @@ class SmsForwardRepository(
             authHeaderValue = authHeaderValue,
             isEncryptionEnabled = isEncryptionEnabled,
             secretKey = secretKey,
-            deviceIdentifier = deviceIdentifier
+            deviceIdentifier = deviceIdentifier,
+            allowCleartextTransport = allowCleartextTransport,
+            driverPhone = driverPhone,
+            fallbackServerPhoneNumber = fallbackServerPhoneNumber,
+            hubIrancellPhoneNumber = hubIrancellPhoneNumber
         )
 
         if (result.isSuccess) {

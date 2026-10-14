@@ -257,20 +257,31 @@ object SmsParser {
     }
 
     /**
-     * Normalizes Iranian mobile phone numbers to the canonical 11-digit format starting with 09 (e.g. 09333702137).
+     * Normalizes Iranian mobile phone numbers to the canonical 11-digit format starting with 09 (e.g. 09303653432).
+     * Handles Persian/Arabic numerals, spaces, hyphens, and international prefixes (+98 / 0098).
      */
     fun normalizePhoneNumber(rawPhone: String): String {
         if (rawPhone.isBlank()) return ""
         val normalizedDigits = normalizeDigits(rawPhone)
         var digits = normalizedDigits.replace(Regex("""\D"""), "")
-        if (digits.startsWith("0098")) {
-            digits = "0" + digits.substring(4)
-        } else if (digits.startsWith("98")) {
-            digits = "0" + digits.substring(2)
-        } else if (!digits.startsWith("0") && digits.length == 10) {
+        if (digits.startsWith("0098") && digits.length >= 14) {
+            val rem = digits.substring(4)
+            digits = if (rem.startsWith("0")) rem else "0$rem"
+        } else if (digits.startsWith("98") && digits.length >= 12) {
+            val rem = digits.substring(2)
+            digits = if (rem.startsWith("0")) rem else "0$rem"
+        } else if (!digits.startsWith("0") && digits.length == 10 && digits.startsWith("9")) {
             digits = "0$digits"
         }
         return digits
+    }
+
+    /**
+     * Validates if the given raw phone number normalizes to an 11-digit Iranian mobile number.
+     */
+    fun isValidIranianMobile(rawPhone: String): Boolean {
+        val norm = normalizePhoneNumber(rawPhone)
+        return norm.matches(Regex("""09\d{9}"""))
     }
 
     /**

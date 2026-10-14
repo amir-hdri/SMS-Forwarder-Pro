@@ -99,7 +99,13 @@ class BarProContractTest {
         assertTrue(result.isSuccess)
         val buffer = Buffer()
         requests.single().body!!.writeTo(buffer)
-        assertEquals("""{"event":"HEALTH_CHECK"}""", buffer.readUtf8())
+        val bodyStr = buffer.readUtf8()
+        assertTrue(bodyStr.contains("\"event\":\"HEALTH_CHECK\""))
+        assertFalse(bodyStr.contains("\"code\""))
+        assertFalse(bodyStr.contains("\"driver_phone\""))
+        assertFalse(bodyStr.contains("\"phone\""))
+        assertFalse(bodyStr.contains("\"otp\""))
+        assertFalse(bodyStr.contains("\"text\""))
     }
 
     @Test fun staleSmsNeverReachesNetwork() = runBlocking {

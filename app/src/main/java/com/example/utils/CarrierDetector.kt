@@ -7,6 +7,18 @@ enum class MobileCarrier {
     MCI,       // همراه اول (Hamrah-e Aval)
     IRANCELL,  // ایرانسل (MTN Irancell)
     RIGHTEL,   // رایتل (RighTel)
+    TALIYA,    // تالیا (Taliya)
+    TKC,       // تله‌کیش (TeleKish / TKC)
+    SPADAN,    // اسپادان (Spadan / MTCE)
+    SHATEL,    // شاتل موبایل (Shatel Mobile)
+    SAMANTEL,  // سامانتل (SamanTel)
+    LOTUSTEL,  // لوتوس‌تل (Lotus Tel)
+    APTEL,     // آپتل (Aptel)
+    FANAP,     // فناپ موبایل (Fanap Mobile)
+    ARIANTEL,  // آرین‌تل (ArianTel)
+    SMARTCOMM, // هوشمند امین (Smartcomm)
+    HIWEB,     // های‌وب (HiWeb)
+    TOSAN,     // همراه هوشمند آینده - توسن (Tosan)
     UNKNOWN
 }
 
@@ -34,30 +46,8 @@ data class HubNumbers(
 
 object CarrierDetector {
 
-    private val MCI_PREFIXES = listOf(
-        "0910", "0911", "0912", "0913", "0914", "0915", "0916", "0917", "0918", "0919",
-        "0990", "0991", "0992", "0993", "0994", "0996"
-    )
-
-    private val IRANCELL_PREFIXES = listOf(
-        "0930", "0933", "0935", "0936", "0937", "0938", "0939",
-        "0900", "0901", "0902", "0903", "0904", "0905", "0941"
-    )
-
-    private val RIGHTEL_PREFIXES = listOf(
-        "0920", "0921", "0922", "0923"
-    )
-
     fun detectCarrierFromPhone(phoneNumber: String): MobileCarrier {
-        val norm = SmsParser.normalizePhoneNumber(phoneNumber)
-        if (norm.length < 4) return MobileCarrier.UNKNOWN
-        val prefix = norm.take(4)
-        return when {
-            MCI_PREFIXES.contains(prefix) -> MobileCarrier.MCI
-            IRANCELL_PREFIXES.contains(prefix) -> MobileCarrier.IRANCELL
-            RIGHTEL_PREFIXES.contains(prefix) -> MobileCarrier.RIGHTEL
-            else -> MobileCarrier.UNKNOWN
-        }
+        return CarrierRoutingTable.detectCarrier(phoneNumber)
     }
 
     fun detectCarrierFromDevice(context: Context): MobileCarrier {
@@ -131,7 +121,8 @@ object CarrierDetector {
         hubIrancellNumber: String,
         context: Context? = null
     ): HubTargetRoute {
-        var carrier = detectCarrierFromPhone(driverPhone)
+        val resolution = CarrierRoutingTable.resolveRoute(driverPhone)
+        var carrier = resolution.detectedCarrier
         if (carrier == MobileCarrier.UNKNOWN && context != null) {
             carrier = detectCarrierFromDevice(context)
         }
@@ -139,26 +130,45 @@ object CarrierDetector {
         val rawMci = hubMciNumber.trim()
         val rawIrancell = hubIrancellNumber.trim()
 
+        val normMci = SmsParser.normalizePhoneNumber(rawMci)
+        val normIrancell = SmsParser.normalizePhoneNumber(rawIrancell)
+        val validMci = if (normMci.isNotBlank()) normMci else rawMci
+        val validIrancell = if (normIrancell.isNotBlank()) normIrancell else rawIrancell
+
         // Operator mistake tolerance: If the operator swapped the two fields,
         // align them by detected carrier.
         val cleanMci: String
         val cleanIrancell: String
-        if (detectCarrierFromPhone(rawMci) == MobileCarrier.IRANCELL &&
-            detectCarrierFromPhone(rawIrancell) == MobileCarrier.MCI
+        if (detectCarrierFromPhone(validMci) == MobileCarrier.IRANCELL &&
+            detectCarrierFromPhone(validIrancell) == MobileCarrier.MCI
         ) {
-            cleanMci = rawIrancell
-            cleanIrancell = rawMci
+            cleanMci = validIrancell
+            cleanIrancell = validMci
         } else {
-            cleanMci = rawMci
-            cleanIrancell = rawIrancell
+            cleanMci = validMci
+            cleanIrancell = validIrancell
+        }
+
+        val targetHubCarrier = if (carrier == resolution.detectedCarrier) {
+            resolution.targetHubCarrier
+        } else {
+            // Overridden by device context
+            when (carrier) {
+                MobileCarrier.IRANCELL, MobileCarrier.RIGHTEL, MobileCarrier.SHATEL,
+                MobileCarrier.SAMANTEL, MobileCarrier.FANAP, MobileCarrier.ARIANTEL,
+                MobileCarrier.SMARTCOMM, MobileCarrier.HIWEB, MobileCarrier.TOSAN -> MobileCarrier.IRANCELL
+                MobileCarrier.MCI, MobileCarrier.TALIYA, MobileCarrier.TKC,
+                MobileCarrier.SPADAN, MobileCarrier.LOTUSTEL, MobileCarrier.APTEL -> MobileCarrier.MCI
+                else -> resolution.targetHubCarrier
+            }
         }
 
         return when {
             cleanMci.isNotBlank() && cleanIrancell.isNotBlank() -> {
-                if (carrier == MobileCarrier.IRANCELL || carrier == MobileCarrier.RIGHTEL) {
+                if (targetHubCarrier == MobileCarrier.IRANCELL) {
                     HubTargetRoute(primaryNumber = cleanIrancell, failoverNumber = cleanMci, carrier = carrier)
                 } else {
-                    // MCI or UNKNOWN: Hamrah-e Aval (MCI) is primary due to extensive intercity road coverage
+                    // MCI or default: Hamrah-e Aval (MCI) is primary due to extensive intercity road coverage
                     HubTargetRoute(primaryNumber = cleanMci, failoverNumber = cleanIrancell, carrier = carrier)
                 }
             }

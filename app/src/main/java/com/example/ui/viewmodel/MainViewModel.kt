@@ -230,10 +230,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         authHeaderKey: String,
         authHeaderValue: String,
         isEncryptionEnabled: Boolean,
-        secretKey: String
+        secretKey: String,
+        allowCleartextTransport: Boolean? = null
     ) {
         viewModelScope.launch {
             _endpointTestState.value = EndpointTestState(isLoading = true, result = null)
+            val current = config.value
+            val cleartext = allowCleartextTransport ?: current.allowCleartextTransport
             val result = repository.testEndpoint(
                 url = url,
                 authType = authType,
@@ -241,7 +244,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 authHeaderValue = authHeaderValue,
                 isEncryptionEnabled = isEncryptionEnabled,
                 secretKey = secretKey,
-                deviceIdentifier = config.value.deviceIdentifier
+                deviceIdentifier = current.deviceIdentifier,
+                allowCleartextTransport = cleartext,
+                driverPhone = current.driverPhone,
+                fallbackServerPhoneNumber = current.fallbackServerPhoneNumber,
+                hubIrancellPhoneNumber = current.hubIrancellPhoneNumber
             )
             _endpointTestState.value = EndpointTestState(isLoading = false, result = result)
         }

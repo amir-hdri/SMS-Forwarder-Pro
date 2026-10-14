@@ -88,6 +88,12 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         if (phone.isNotBlank()) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
 
+        val isHubRole = com.example.BuildConfig.APP_ROLE == "HUB"
+        if (isHubRole) {
+            extraHeaders["X-App-Role"] = "HUB"
+            payload.put("app_role", "HUB")
+        }
+
         post(
             payload, config, expectedStatus = "success",
             fastTimeoutMs = fastTimeoutMs, extraHeaders = extraHeaders, clientOverride = clientOverride
@@ -107,7 +113,21 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
         if (phone.matches(Regex("09[0-9]{9}"))) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
+        
+        val isHubRole = com.example.BuildConfig.APP_ROLE == "HUB"
         val payload = JSONObject().put("event", "HEALTH_CHECK")
+        if (isHubRole) {
+            extraHeaders["X-App-Role"] = "HUB"
+            payload.put("app_role", "HUB")
+            val hubNums = org.json.JSONArray()
+            val mci = SmsParser.normalizePhoneNumber(config.fallbackServerPhoneNumber)
+            val irancell = SmsParser.normalizePhoneNumber(config.hubIrancellPhoneNumber)
+            if (mci.isNotBlank()) hubNums.put(mci)
+            if (irancell.isNotBlank()) hubNums.put(irancell)
+            if (hubNums.length() > 0) {
+                payload.put("hub_numbers", hubNums)
+            }
+        }
         if (!permissions.isNullOrEmpty()) {
             val permJson = JSONObject()
             permissions.forEach { (k, v) -> permJson.put(k, v) }
@@ -289,11 +309,15 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
 
     suspend fun testEndpoint(
         endpointUrl: String, authType: AuthType, authHeaderKey: String, authHeaderValue: String,
-        isEncryptionEnabled: Boolean, secretKey: String, deviceIdentifier: String
+        isEncryptionEnabled: Boolean, secretKey: String, deviceIdentifier: String,
+        allowCleartextTransport: Boolean = false, driverPhone: String = "",
+        fallbackServerPhoneNumber: String = "", hubIrancellPhoneNumber: String = ""
     ): TransmissionResult = checkHealth(ForwardConfig(
         endpointUrl = endpointUrl, authType = authType, authHeaderKey = authHeaderKey,
         authHeaderValue = authHeaderValue, forwarderSecret = authHeaderValue,
-        isEncryptionEnabled = isEncryptionEnabled, deviceIdentifier = deviceIdentifier
+        isEncryptionEnabled = isEncryptionEnabled, deviceIdentifier = deviceIdentifier,
+        allowCleartextTransport = allowCleartextTransport, driverPhone = driverPhone,
+        fallbackServerPhoneNumber = fallbackServerPhoneNumber, hubIrancellPhoneNumber = hubIrancellPhoneNumber
     ))
 
     suspend fun sendOtpInquiryResponse(

@@ -31,6 +31,61 @@ class CarrierDetectorTest {
     }
 
     @Test
+    fun testDetectTaliyaAndTkcPrefixes() {
+        assertEquals(MobileCarrier.TALIYA, CarrierDetector.detectCarrierFromPhone("09321234567"))
+        assertEquals(MobileCarrier.TKC, CarrierDetector.detectCarrierFromPhone("09341234567"))
+        assertEquals(MobileCarrier.TKC, CarrierDetector.detectCarrierFromPhone("09347612345"))
+    }
+
+    @Test
+    fun testDetectMvnoPrefixes() {
+        assertEquals(MobileCarrier.SHATEL, CarrierDetector.detectCarrierFromPhone("09981234567"))
+        assertEquals(MobileCarrier.LOTUSTEL, CarrierDetector.detectCarrierFromPhone("09990123456"))
+        assertEquals(MobileCarrier.APTEL, CarrierDetector.detectCarrierFromPhone("09991123456"))
+        assertEquals(MobileCarrier.APTEL, CarrierDetector.detectCarrierFromPhone("09993123456"))
+        assertEquals(MobileCarrier.SAMANTEL, CarrierDetector.detectCarrierFromPhone("09999123456"))
+        assertEquals(MobileCarrier.SAMANTEL, CarrierDetector.detectCarrierFromPhone("09995123456"))
+        assertEquals(MobileCarrier.FANAP, CarrierDetector.detectCarrierFromPhone("09992123456"))
+        assertEquals(MobileCarrier.ARIANTEL, CarrierDetector.detectCarrierFromPhone("09998123456"))
+        assertEquals(MobileCarrier.SMARTCOMM, CarrierDetector.detectCarrierFromPhone("09988123456"))
+        assertEquals(MobileCarrier.TOSAN, CarrierDetector.detectCarrierFromPhone("09989123456"))
+        assertEquals(MobileCarrier.SPADAN, CarrierDetector.detectCarrierFromPhone("09311234567"))
+        assertEquals(MobileCarrier.MCI, CarrierDetector.detectCarrierFromPhone("09951234567"))
+        assertEquals(MobileCarrier.MCI, CarrierDetector.detectCarrierFromPhone("09971234567"))
+    }
+
+    @Test
+    fun testResolveRouteForMvnosAndHostNetworks() {
+        val mciHub = "09120000001"
+        val irancellHub = "09350000001"
+
+        // LotusTel (MCI host) -> primary MCI Hub
+        val lotusRoute = CarrierDetector.resolveRoute("09990123456", mciHub, irancellHub)
+        assertEquals(mciHub, lotusRoute.primaryNumber)
+        assertEquals(irancellHub, lotusRoute.failoverNumber)
+
+        // Aptel (MCI host) -> primary MCI Hub
+        val aptelRoute = CarrierDetector.resolveRoute("09991123456", mciHub, irancellHub)
+        assertEquals(mciHub, aptelRoute.primaryNumber)
+        assertEquals(irancellHub, aptelRoute.failoverNumber)
+
+        // Shatel Mobile -> primary Irancell Hub
+        val shatelRoute = CarrierDetector.resolveRoute("09981234567", mciHub, irancellHub)
+        assertEquals(irancellHub, shatelRoute.primaryNumber)
+        assertEquals(mciHub, shatelRoute.failoverNumber)
+
+        // SamanTel -> primary Irancell Hub
+        val samanRoute = CarrierDetector.resolveRoute("09999123456", mciHub, irancellHub)
+        assertEquals(irancellHub, samanRoute.primaryNumber)
+        assertEquals(mciHub, samanRoute.failoverNumber)
+
+        // Talia -> primary MCI Hub
+        val taliyaRoute = CarrierDetector.resolveRoute("09321234567", mciHub, irancellHub)
+        assertEquals(mciHub, taliyaRoute.primaryNumber)
+        assertEquals(irancellHub, taliyaRoute.failoverNumber)
+    }
+
+    @Test
     fun testResolveRoutePrefersSameCarrier() {
         val mciHub = "09120000001"
         val irancellHub = "09350000001"

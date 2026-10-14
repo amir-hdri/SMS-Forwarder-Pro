@@ -92,7 +92,7 @@ fun ServerConfigScreen(
     testState: EndpointTestState,
     cryptoSandboxState: EncryptionSandboxState,
     onSaveConfig: (ForwardConfig) -> Unit,
-    onRunTest: (url: String, authType: AuthType, authHeaderKey: String, authHeaderValue: String, isEnc: Boolean, secretKey: String) -> Unit,
+    onRunTest: (url: String, authType: AuthType, authHeaderKey: String, authHeaderValue: String, isEnc: Boolean, secretKey: String, allowCleartext: Boolean) -> Unit,
     onCheckServerHealth: () -> Unit,
     onTestDisconnectNotification: () -> Unit,
     onTestCryptoSandbox: (plaintext: String, secretKey: String) -> Unit,
@@ -144,7 +144,8 @@ fun ServerConfigScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BarProBg)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .testTag("server_config_lazy_column"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -266,7 +267,9 @@ fun ServerConfigScreen(
                             focusedContainerColor = BarProSurfaceSubtle,
                             unfocusedContainerColor = BarProSurfaceSubtle
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("driver_phone_input")
                     )
 
                     val normalizedPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
@@ -527,7 +530,9 @@ fun ServerConfigScreen(
                             focusedContainerColor = BarProSurfaceSubtle,
                             unfocusedContainerColor = BarProSurfaceSubtle
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("hub_mci_input")
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -560,7 +565,9 @@ fun ServerConfigScreen(
                             focusedContainerColor = BarProSurfaceSubtle,
                             unfocusedContainerColor = BarProSurfaceSubtle
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("hub_irancell_input")
                     )
                 }
             }
@@ -890,7 +897,8 @@ fun ServerConfigScreen(
                         }
 
                         IconButton(
-                            onClick = { showAdvancedSettings = !showAdvancedSettings }
+                            onClick = { showAdvancedSettings = !showAdvancedSettings },
+                            modifier = Modifier.testTag("toggle_advanced_settings")
                         ) {
                             Icon(
                                 imageVector = if (showAdvancedSettings) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -1041,7 +1049,8 @@ fun ServerConfigScreen(
                                         config.authHeaderKey,
                                         authHeaderValue,
                                         config.isEncryptionEnabled,
-                                        config.secretEncryptionKey
+                                        config.secretEncryptionKey,
+                                        allowCleartextTransport
                                     )
                                 },
                                 colors = ButtonDefaults.buttonColors(

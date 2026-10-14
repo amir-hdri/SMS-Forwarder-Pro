@@ -409,8 +409,8 @@ fun MainAppScreen(viewModel: MainViewModel) {
                     testState = endpointTestState,
                     cryptoSandboxState = cryptoSandboxState,
                     onSaveConfig = { viewModel.updateConfig(it) },
-                    onRunTest = { url, authType, key, value, isEnc, secret ->
-                        viewModel.runEndpointTest(url, authType, key, value, isEnc, secret)
+                    onRunTest = { url, authType, key, value, isEnc, secret, allowCleartext ->
+                        viewModel.runEndpointTest(url, authType, key, value, isEnc, secret, allowCleartext)
                     },
                     onCheckServerHealth = { viewModel.checkServerHealthNow() },
                     onTestDisconnectNotification = { viewModel.triggerTestDisconnectAlert() },

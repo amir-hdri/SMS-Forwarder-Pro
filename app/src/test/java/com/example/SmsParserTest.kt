@@ -71,18 +71,37 @@ class SmsParserTest {
 
     @Test
     fun testNormalizePhoneNumber_allFormats() {
-        // International with +
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("+989333702137"))
-        // International without +
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("989333702137"))
-        // International with 00
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("00989333702137"))
-        // 10 digits without leading zero
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("9333702137"))
         // Standard 11 digits
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("09333702137"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("09303653432"))
+        // International with + and spaces
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("+98 930 365 3432"))
+        // International without spaces
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("+989303653432"))
+        // International with 00
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("00989303653432"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("0098 930 365 3432"))
+        // Formatted with spaces and hyphens
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("0930 365 3432"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("0930-365-3432"))
         // Persian digits
-        assertEquals("09333702137", SmsParser.normalizePhoneNumber("۰۹۳۳۳۷۰۲۱۳۷"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("۰۹۳۰۳۶۵۳۴۳۲"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber(" ۰۹۳۰ ۳۶۵ ۳۴۳۲ "))
+        // Arabic digits
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("٠٩٣٠٣٦٥٣٤٣٢"))
+        // 10 digits without leading zero
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("9303653432"))
+        // Edge cases: +98 and 0098 with leading zero (common user mistakes)
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("+98 0930 365 3432"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("+9809303653432"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("009809303653432"))
+        assertEquals("09303653432", SmsParser.normalizePhoneNumber("0098 0930 365 3432"))
+
+        // Validation
+        assertTrue(SmsParser.isValidIranianMobile("09303653432"))
+        assertTrue(SmsParser.isValidIranianMobile("+98 930 365 3432"))
+        assertTrue(SmsParser.isValidIranianMobile("۰۹۳۰۳۶۵۳۴۳۲"))
+        assertFalse(SmsParser.isValidIranianMobile("12345"))
+        assertFalse(SmsParser.isValidIranianMobile(""))
     }
 
     @Test
