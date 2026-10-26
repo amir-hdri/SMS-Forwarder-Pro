@@ -13,6 +13,7 @@ import java.security.SecureRandom
  * protecting them from physical extraction, adb backup, or rooted device snooping.
  */
 class SecureStorageManager private constructor(context: Context) {
+    private var encryptedStorageAvailable = false
 
     private val prefs: SharedPreferences by lazy {
         try {
@@ -25,10 +26,23 @@ class SecureStorageManager private constructor(context: Context) {
                 masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
+            ).also { encryptedStorageAvailable = true }
         } catch (_: Exception) {
             context.getSharedPreferences(PREFS_NAME + "_fallback", Context.MODE_PRIVATE)
         }
+    }
+
+    /** Enrollment never falls back to plaintext secret storage if Keystore is unavailable. */
+    fun savePendingEnrollment(document: String?) {
+        val storage = prefs
+        check(encryptedStorageAvailable) { "Secure enrollment storage unavailable" }
+        check(storage.edit().putString("pending_driver_enrollment_v1", document).commit())
+    }
+
+    fun getPendingEnrollment(): String? {
+        val storage = prefs
+        if (!encryptedStorageAvailable) return null
+        return storage.getString("pending_driver_enrollment_v1", null)
     }
 
     @Synchronized

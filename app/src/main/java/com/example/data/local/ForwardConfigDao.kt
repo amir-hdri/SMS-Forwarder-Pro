@@ -19,6 +19,9 @@ interface ForwardConfigDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(config: ForwardConfig)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDefaultIfAbsent(config: ForwardConfig): Long
+
     @Update
     suspend fun updateConfig(config: ForwardConfig)
 }

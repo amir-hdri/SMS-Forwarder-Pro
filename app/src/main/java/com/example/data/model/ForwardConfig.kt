@@ -20,10 +20,10 @@ data class ForwardConfig(
     @PrimaryKey
     val id: Int = 1, // Single row configuration
     val isMasterEnabled: Boolean = false,
-    val endpointUrl: String = "https://api.barpro.ir/api/v1/otp/sms-forwarder",
+    val endpointUrl: String = "http://87.107.160.251/api/v1/otp/sms-forwarder",
     val authType: AuthType = AuthType.CUSTOM_HEADER,
     val authHeaderKey: String = "X-OTP-Webhook-Token",
-    val authHeaderValue: String = "barpro-fleet-secure-token",
+    val authHeaderValue: String = "",
     val forwarderSecret: String = "",
     val isEncryptionEnabled: Boolean = false, // وب‌هوک اتوماسیون بارپرو بدنه JSON استاندارد می‌پذیرد
     val secretEncryptionKey: String = "",
@@ -56,13 +56,13 @@ data class ForwardConfig(
      * number; it is now the MCI (همراه اول) leg of the two-SIM Hub so carrier-matched delivery has a
      * concrete primary. Still the only mandatory number — an Irancell leg is optional.
      */
-    val fallbackServerPhoneNumber: String = "",
+    val fallbackServerPhoneNumber: String = "09966567754",
     /**
      * Second Hub SIM (ایرانسل). When set, [com.example.utils.CarrierDetector.resolveRoute] can send
      * on-net (MCI→MCI, Irancell→Irancell) and fail over to the other SIM. Left blank the relay still
      * works, but degrades to single-number delivery with no failover.
      */
-    val hubIrancellPhoneNumber: String = "",
+    val hubIrancellPhoneNumber: String = "09047119812",
     /**
      * Explicit operator acknowledgement that the endpoint is plain HTTP.
      *

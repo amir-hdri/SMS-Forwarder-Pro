@@ -43,6 +43,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         (application as? SmsForwarderApp)?.repository
             ?: SmsForwardRepository.getInstance(application)
 
+    private val enrollment by lazy {
+        val storage = com.example.crypto.SecureStorageManager.getInstance(application)
+        val preferences = application.getSharedPreferences("barpro_device_identity", android.content.Context.MODE_PRIVATE)
+        val client = com.example.enrollment.EnrollmentClient()
+        com.example.enrollment.EnrollmentManager(
+            defaultEndpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl },
+            role = com.example.BuildConfig.APP_ROLE,
+            deviceId = {
+                preferences.getString("enrollment_device_id", null) ?: java.util.UUID.randomUUID().toString().also {
+                    check(preferences.edit().putString("enrollment_device_id", it).commit())
+                }
+            },
+            redeem = { link, id -> client.redeem(link, id) },
+            getConfig = { repository.getConfig() }, saveConfig = { repository.saveConfig(it) },
+            stage = { storage.savePendingEnrollment(it) }, loadStage = { storage.getPendingEnrollment() },
+            permissionsGranted = { com.example.utils.PermissionHelper.areForwardingPermissionsGranted(application) },
+            onActivated = {
+                repository.performHeartbeatAndCommandPoll()
+                SmsForwarderService.startService(application)
+            }
+        )
+    }
+    val enrollmentStatus get() = enrollment.status
+
+    fun activateFromLink(value: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.receive(value) }
+    }
+
+    fun refreshEnrollmentPermissions() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.resume() }
+    }
+
     val rules: StateFlow<List<FilterRule>> = repository.allRules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -157,11 +189,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleMasterSwitch(enabled: Boolean) {
         viewModelScope.launch {
             val current = config.value
+            if (enabled && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(getApplication())) {
+                openPermissions()
+                return@launch
+            }
             // This explicit switch is the user's opt-in to forwarding.
             val updated = current.copy(isMasterEnabled = enabled, userConsentGiven = enabled)
             repository.saveConfig(updated)
 
-            if (enabled && updated.showForegroundNotification) {
+            if (enabled) {
                 SmsForwarderService.startService(getApplication())
             } else {
                 SmsForwarderService.stopService(getApplication())

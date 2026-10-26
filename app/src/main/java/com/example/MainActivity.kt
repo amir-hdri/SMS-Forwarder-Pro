@@ -124,8 +124,14 @@ class MainActivity : ComponentActivity() {
         handleIncomingNavigation(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshEnrollmentPermissions()
+    }
+
     private fun handleIncomingNavigation(incomingIntent: android.content.Intent?) {
         if (incomingIntent == null) return
+        com.example.enrollment.EnrollmentIntentRouter.consume(incomingIntent, viewModel::activateFromLink)
         val target = incomingIntent.getStringExtra(com.example.service.ServerHealthNotifier.EXTRA_NAVIGATE_TAB)
         if (target == com.example.service.ServerHealthNotifier.TAB_SERVER) {
             viewModel.openServerSettings()
@@ -157,16 +163,37 @@ fun MainAppScreen(viewModel: MainViewModel) {
     val isOtpInquiryLoading by viewModel.isOtpInquiryLoading.collectAsState()
     val isOfflineSyncing by viewModel.isOfflineSyncing.collectAsState()
     val offlineSyncMessage by viewModel.offlineSyncMessage.collectAsState()
+    val enrollmentStatus by viewModel.enrollmentStatus.collectAsState()
 
     val context = LocalContext.current
+    var requestingPermissions by remember { mutableStateOf(false) }
     val initialPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ -> }
+    ) { _ ->
+        requestingPermissions = false
+        viewModel.refreshEnrollmentPermissions()
+    }
 
     LaunchedEffect(Unit) {
         if (!com.example.utils.PermissionHelper.areCriticalPermissionsGranted(context)) {
+            requestingPermissions = true
             initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
         }
+    }
+
+    LaunchedEffect(enrollmentStatus) {
+        if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS && !requestingPermissions) {
+            requestingPermissions = true
+            initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+        }
+        val message = when (enrollmentStatus) {
+            com.example.enrollment.EnrollmentStatus.ACTIVATING -> "در حال فعال‌سازی امن از پنل بارپرو…"
+            com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> "برای فعال‌سازی، مجوز دریافت و ارسال پیامک را تأیید کنید."
+            com.example.enrollment.EnrollmentStatus.ACTIVE -> "فعال‌سازی انجام شد؛ تأیید دریافت پیامک سلامت را در پنل بارپرو ببینید."
+            com.example.enrollment.EnrollmentStatus.FAILED -> "فعال‌سازی انجام نشد. از پنل بارپرو لینک تازه بگیرید؛ تنظیمات قبلی حفظ شد."
+            else -> null
+        }
+        message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
     }
 
     LaunchedEffect(offlineSyncMessage) {
@@ -227,25 +254,26 @@ fun MainAppScreen(viewModel: MainViewModel) {
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
+                            val isHubApp = com.example.BuildConfig.APP_ROLE == "HUB"
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "Forward",
+                                        text = if (isHubApp) "Forwarder" else "Forward",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = PalettePale
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "BarPro",
+                                        text = if (isHubApp) "Hub" else "BarPro",
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Black,
-                                        color = BarProCyan
+                                        color = if (isHubApp) com.example.ui.theme.BarProEmerald else BarProCyan
                                     )
                                 }
                             }
                             Text(
-                                text = "وضعیت لحظه‌ای اتصال و عملکرد سامانه",
+                                text = if (isHubApp) "فورواردر هاب — وضعیت اتصال به سرور" else "وضعیت لحظه‌ای اتصال و عملکرد سامانه",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = PalettePale.copy(alpha = 0.8f)
                             )
@@ -280,11 +308,29 @@ fun MainAppScreen(viewModel: MainViewModel) {
             )
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            if (enrollmentStatus != com.example.enrollment.EnrollmentStatus.IDLE) {
+                Card(modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("enrollment_status")) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(text = when (enrollmentStatus) {
+                            com.example.enrollment.EnrollmentStatus.ACTIVATING -> "در حال فعال‌سازی از پنل بارپرو…"
+                            com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> "برای فعال‌سازی، مجوز دریافت و ارسال پیامک لازم است."
+                            com.example.enrollment.EnrollmentStatus.ACTIVE -> "فعال‌سازی انجام شد؛ وضعیت دریافت سلامت را در پنل بارپرو ببینید."
+                            else -> "فعال‌سازی انجام نشد؛ لینک تازه را از پنل بارپرو باز کنید."
+                        })
+                        if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS) {
+                            Button(onClick = {
+                                requestingPermissions = true
+                                initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+                            }) { Text("تأیید مجوزهای پیامک") }
+                        }
+                    }
+                }
+            }
             DashboardScreen(
                 config = config,
                 serverHealthState = serverHealthState,

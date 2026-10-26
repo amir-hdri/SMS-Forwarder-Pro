@@ -16,7 +16,7 @@ object SmsFallbackEnvelope {
     fun encode(phone: String, timestamp: Long, code: String, secret: String): String {
         val recipient = SmsParser.normalizePhoneNumber(phone)
         require(recipient.matches(Regex("09[0-9]{9}")))
-        require(code.matches(Regex("([0-9]{4,8}|TEST)")))
+        require(code.matches(Regex("([0-9]{4,8}|TEST|HEALTH_CHECK)")))
         require(timestamp > 0 && secret.isNotBlank())
         val payload = "BP1#" + recipient + "#" + timestamp + "#" + code
         val mac = Mac.getInstance("HmacSHA256")
@@ -36,7 +36,7 @@ object SmsFallbackEnvelope {
         val ts = parts[2].toLongOrNull() ?: return null
         if (ts <= 0) return null
         val code = parts[3]
-        if (!code.matches(Regex("([0-9]{4,8}|TEST)"))) return null
+        if (!code.matches(Regex("([0-9]{4,8}|TEST|HEALTH_CHECK)"))) return null
         val signature = parts[4].lowercase()
         if (signature.length != 32 || !signature.matches(Regex("[0-9a-f]{32}"))) return null
         return ParsedEnvelope(phone, ts, code, signature)
@@ -57,6 +57,24 @@ object SmsFallbackEnvelope {
         val expected = mac.doFinal(payload.toByteArray(Charsets.US_ASCII))
             .take(16).joinToString("") { "%02x".format(it) }
         return constantTimeEquals(expected, envelope.signature.lowercase())
+    }
+
+    fun deriveDriverKey(sharedSecret: String, phone: String): String {
+        require(sharedSecret.isNotBlank())
+        val normalized = SmsParser.normalizePhoneNumber(phone)
+        require(normalized.matches(Regex("09[0-9]{9}")))
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(sharedSecret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return mac.doFinal("barpro-driver-v1:$normalized".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    /** Evaluate both constant-time signatures, including legacy fleet Drivers during migration. */
+    fun verifyForHub(envelope: ParsedEnvelope, sharedSecret: String): Boolean {
+        if (sharedSecret.isBlank()) return false
+        val legacy = verify(envelope, sharedSecret)
+        val scoped = verify(envelope, deriveDriverKey(sharedSecret, envelope.phone))
+        return legacy or scoped
     }
 
     /**

@@ -5,6 +5,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SmsFallbackEnvelopeTest {
+    @Test fun driverScopedKeyHasStableVectorAndAcceptsBothRelayGenerations() {
+        val shared = "test-webhook-token"
+        val scoped = SmsFallbackEnvelope.deriveDriverKey(shared, "+989120000001")
+        assertEquals("1ab25da5190e1ff5d5b8d4650deae8c4ee3a5f28f088bf05d6a72e403bb705a8", scoped)
+        for (key in listOf(shared, scoped)) {
+            val parsed = SmsFallbackEnvelope.parse(SmsFallbackEnvelope.encode("09120000001", 1800000000000, "54321", key))!!
+            assertTrue(SmsFallbackEnvelope.verifyForHub(parsed, shared))
+            assertFalse(SmsFallbackEnvelope.verifyForHub(parsed.copy(phone = "09120000002"), shared))
+        }
+        assertFalse(SmsFallbackEnvelope.verifyForHub(
+            SmsFallbackEnvelope.parse(SmsFallbackEnvelope.encode("09120000001", 1800000000000, "54321", scoped))!!, ""))
+    }
+
+    @Test fun authenticatedHealthFitsOneSmsAndIsNeverAnOtp() {
+        val encoded = SmsFallbackEnvelope.encode("09120000001", 1800000000000, "HEALTH_CHECK", "test-key")
+        assertTrue(encoded.length < 160)
+        val parsed = SmsFallbackEnvelope.parse(encoded)!!
+        assertEquals("HEALTH_CHECK", parsed.code)
+        assertTrue(SmsFallbackEnvelope.verify(parsed, "test-key"))
+        assertNull(com.example.utils.SmsParser.extractOtp(encoded))
+    }
+
     @Test fun compactEnvelopeMatchesServerHmacVector() {
         val encoded = SmsFallbackEnvelope.encode("+989120000001", 1800000000000, "12345", "test-webhook-token")
         assertEquals("BP1#09120000001#1800000000000#12345#5cbfbbba7709a8a98c9e1eb96666416c", encoded)

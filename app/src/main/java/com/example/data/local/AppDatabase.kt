@@ -98,8 +98,9 @@ abstract class AppDatabase : RoomDatabase() {
                 CoroutineScope(Dispatchers.IO).launch {
                     val database = getDatabase(context)
                     // Pre-populate with default config
-                    database.forwardConfigDao().insertOrUpdate(
-                        ForwardConfig()
+                    // Enrollment can finish while this callback runs; defaults must not replace it.
+                    database.forwardConfigDao().insertDefaultIfAbsent(
+                        ForwardConfig(allowCleartextTransport = true)
                     )
 
                     // Pre-populate with helpful filter rules for BarPro, logistics, and OTPs

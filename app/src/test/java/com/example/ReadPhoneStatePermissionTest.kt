@@ -65,10 +65,9 @@ class ReadPhoneStatePermissionTest {
                 "singlePermissionLauncher path can request it",
             item!!.permissionType == PermissionType.RUNTIME_PERMISSION
         )
-        // Same lazy/optional precedent as SEND_SMS: requested where the SMS
-        // fallback/relay is enabled, never as an install-time critical permission.
+        // Carrier/SIM discovery remains optional; enrollment supplies the authorized phone.
         assertFalse(
-            "READ_PHONE_STATE must be optional (isRequired=false), same as SEND_SMS precedent",
+            "READ_PHONE_STATE must be optional (isRequired=false)",
             item.isRequired
         )
         assertTrue(
@@ -93,14 +92,14 @@ class ReadPhoneStatePermissionTest {
     }
 
     @Test
-    fun `READ_PHONE_STATE stays lazy like SEND_SMS - not in critical required set`() {        val required = PermissionHelper.getRequiredRuntimePermissions().toList()
-        assertFalse(
-            "SEND_SMS precedent: optional relay permission must not be in getRequiredRuntimePermissions. Found: $required",
-            required.contains(Manifest.permission.SEND_SMS)
+    fun `READ_PHONE_STATE stays optional while GSM Driver requires SEND_SMS`() {
+        val required = PermissionHelper.getRequiredRuntimePermissions().toList()
+        assertTrue(
+            "SEND_SMS is required only for GSM Driver. Found: $required",
+            required.contains(Manifest.permission.SEND_SMS) == (BuildConfig.APP_ROLE == "DRIVER")
         )
         assertFalse(
-            "READ_PHONE_STATE must stay lazy like SEND_SMS (requested where fallback/relay " +
-                "is enabled), not in getRequiredRuntimePermissions. Found: $required",
+            "READ_PHONE_STATE stays optional and outside getRequiredRuntimePermissions. Found: $required",
             required.contains(Manifest.permission.READ_PHONE_STATE)
         )
     }

@@ -22,7 +22,8 @@ object SmsRelayHelper {
         smsType: String = "OTP",
         simSlot: Int = -1,
         receivedTimestamp: Long,
-        webhookSecret: String
+        webhookSecret: String,
+        subscriptionId: Int = -1
     ): Boolean {
         if (destinationPhone.isBlank() || code.isBlank()) {
             Log.w(TAG, "Cannot send fallback SMS: destination or code is missing")
@@ -43,7 +44,14 @@ object SmsRelayHelper {
             }
 
             // Multi-SIM support: if simSlot is provided, route through the designated subscription
-            if (simSlot >= 0) {
+            if (subscriptionId >= 0) {
+                smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    smsManager.createForSubscriptionId(subscriptionId)
+                } else {
+                    @Suppress("DEPRECATION")
+                    SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
+                }
+            } else if (simSlot >= 0) {
                 try {
                     val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
                     val hasPhoneState = androidx.core.content.ContextCompat.checkSelfPermission(

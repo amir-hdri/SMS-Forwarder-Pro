@@ -21,11 +21,11 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         val config = repository.getConfig()
         if (config.isMasterEnabled && config.userConsentGiven) {
             SmsSyncWorker.enqueueBatchSync(applicationContext)
-            if (config.enableHealthAlertNotification) repository.checkServerHealth(applicationContext)
+            repository.performHeartbeatAndCommandPoll()
         }
 
         // Periodic Remote Config check (safe overlay, no driver intervention)
-        if (config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val client = com.example.update.RemoteConfigClient(com.example.BuildConfig.CONFIG_PUBLIC_KEY)
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
@@ -71,7 +71,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Self-Update check
-        if (config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
                 val updateManager = com.example.update.AppUpdateManager(

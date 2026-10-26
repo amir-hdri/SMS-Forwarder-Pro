@@ -98,14 +98,19 @@ object PermissionHelper {
     }
 
     fun areCriticalPermissionsGranted(context: Context): Boolean {
-        return isReceiveSmsGranted(context) &&
-                isPostNotificationGranted(context)
+        return areForwardingPermissionsGranted(context) && isPostNotificationGranted(context)
     }
+
+    fun areForwardingPermissionsGranted(context: Context): Boolean =
+        com.example.enrollment.EnrollmentContract.permissionsAllowActivation(
+            com.example.BuildConfig.APP_ROLE, isReceiveSmsGranted(context), isSendSmsGranted(context)
+        )
 
     fun getRequiredRuntimePermissions(): Array<String> {
         val permissions = mutableListOf(
             Manifest.permission.RECEIVE_SMS
         )
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER") permissions.add(Manifest.permission.SEND_SMS)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -132,9 +137,9 @@ object PermissionHelper {
             PermissionItemInfo(
                 id = "send_sms",
                 title = "ارسال پیامک پشتیبان اضطراری (SEND_SMS)",
-                description = "ارسال خودکار کد به سرور در زمان قطعی کامل اینترنت (اختیاری در صورت فعال‌سازی فال‌بک).",
+                description = "ارسال کد و وضعیت سلامت راننده با پیامک به هاب بارپرو؛ برای برنامه راننده ضروری است.",
                 isGranted = isSendSmsGranted(context),
-                isRequired = false,
+                isRequired = com.example.BuildConfig.APP_ROLE == "DRIVER",
                 permissionType = PermissionType.RUNTIME_PERMISSION,
                 manifestPermission = Manifest.permission.SEND_SMS,
                 category = PermissionCategory.SMS

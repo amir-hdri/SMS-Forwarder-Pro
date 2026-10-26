@@ -16,6 +16,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class DatabaseMigrationTest {
+    @Test fun delayedFirstRunSeedCannotOverwriteActivation() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        try {
+            val dao = database.forwardConfigDao()
+            val enrolled = com.example.data.model.ForwardConfig(driverPhone = "09120000001", setupCompleted = true, isMasterEnabled = true)
+            dao.insertOrUpdate(enrolled)
+            assertEquals(-1L, dao.insertDefaultIfAbsent(com.example.data.model.ForwardConfig(allowCleartextTransport = true)))
+            assertEquals(enrolled, dao.getConfig())
+        } finally { database.close() }
+    }
 
     /**
      * Seeds a legacy database from a preserved schema snapshot and stamps its version, so Room

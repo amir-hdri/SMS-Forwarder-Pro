@@ -362,9 +362,14 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    val isHubApp = com.example.BuildConfig.APP_ROLE == "HUB"
                     // Title
                     Text(
-                        text = if (isWorking) "سامانه فورواردر فعال و آماده دریافت" else "سامانه دریافت پیامک خاموش است",
+                        text = if (isWorking) {
+                            if (isHubApp) "سامانه فورواردر هاب فعال و آماده دریافت" else "سامانه فورواردر فعال و آماده دریافت"
+                        } else {
+                            if (isHubApp) "سامانه فورواردر هاب خاموش است" else "سامانه دریافت پیامک خاموش است"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = BarProTextPrimary

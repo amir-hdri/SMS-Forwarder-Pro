@@ -79,11 +79,21 @@ object CarrierDetector {
      */
     @Suppress("DEPRECATION")
     fun detectPhoneNumberFromDevice(context: Context): String {
+        val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.Manifest.permission.READ_PHONE_NUMBERS
+        } else {
+            android.Manifest.permission.READ_PHONE_STATE
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, permission) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) return ""
         return try {
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             val line1 = tm?.line1Number ?: ""
             val norm = SmsParser.normalizePhoneNumber(line1)
             if (norm.matches(Regex("09[0-9]{9}"))) norm else ""
+        } catch (_: SecurityException) {
+            // A permission can be revoked between the check and the framework call.
+            ""
         } catch (_: Exception) {
             ""
         }

@@ -128,7 +128,7 @@ object ServerHealthMonitor {
             while (isActive) {
                 val config = configProvider()
                 if (config.isMasterEnabled) {
-                    if (config.enableHealthAlertNotification) {
+                    if (com.example.BuildConfig.APP_ROLE != "DRIVER") {
                         performHealthPing(context, config, client)
                     }
                     try {

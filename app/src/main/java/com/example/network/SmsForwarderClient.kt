@@ -207,7 +207,10 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
             extraHeaders = extraHeaders,
             clientOverride = clientOverride,
             responseMatches = { json -> json.optBoolean("success", false) }
-        ).copy(smsType = SmsType.UTCMS_OTP, otpCode = parsed.code)
+        ).copy(
+            smsType = if (parsed.code == "HEALTH_CHECK") SmsType.OTHER else SmsType.UTCMS_OTP,
+            otpCode = if (parsed.code == "HEALTH_CHECK") null else parsed.code
+        )
     }
 
     private suspend fun post(

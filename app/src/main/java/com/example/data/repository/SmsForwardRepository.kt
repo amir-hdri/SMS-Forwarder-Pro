@@ -138,6 +138,13 @@ class SmsForwardRepository(
 
     suspend fun checkServerHealth(context: Context): ServerHealthState {
         val config = getConfig()
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
+            sendDriverLiveness(context, config)
+            return serverHealthState.value.copy(
+                status = com.example.network.ServerHealthStatus.UNKNOWN,
+                lastErrorMessage = "تأیید دریافت پیامک سلامت را در پنل بارپرو بررسی کنید."
+            )
+        }
         return ServerHealthMonitor.performHealthPing(context, config, client)
     }
 
@@ -215,6 +222,7 @@ class SmsForwardRepository(
         val earlyStopReason = when {
             updateStore?.blockedByMandatoryUpdate == true -> "ارسال پیامک به دلیل نیاز به به‌روزرسانی ضروری متوقف شده است."
             !config.isMasterEnabled || !config.userConsentGiven -> "ارسال پیامک غیرفعال است."
+            appContext != null && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext) -> "مجوزهای لازم پیامک داده نشده است."
             log.status == ForwardStatus.SKIPPED -> "این پیامک برای ارسال مجاز نیست."
             !BarProContract.isTimestampAcceptable(log.receivedTimestamp) -> "اعتبار OTP به پایان رسیده یا ساعت دستگاه نادرست است."
             log.recipientPhone.isBlank() -> "گیرنده این پیامک قدیمی ثبت نشده؛ ارسال امن ممکن نیست."
@@ -247,6 +255,37 @@ class SmsForwardRepository(
 
         val activeRules = database.filterRuleDao().getActiveRules()
         val matchedRule = activeRules.firstOrNull { it.label == log.matchedRuleLabel || it.matches(log.sender, rawMessage) }
+
+        // A Driver retries the original signed GSM identity; it never falls through to HTTP.
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
+            val context = appContext
+            val code = if (!isRelay) com.example.utils.SmsParser.extractOtp(rawMessage, log.sender) else null
+            if (context == null || code == null) {
+                updateLogStatus(logId, ForwardStatus.SKIPPED, "این پیامک برای رله GSM راننده معتبر نیست.")
+                return@withContext TransmissionResult(false, null, null, "رله GSM معتبر نیست", "", false, 0)
+            }
+            val hubs = com.example.enrollment.EnrollmentContract.hubNumbers(config,
+                com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
+            val route = com.example.utils.CarrierDetector.resolveRoute(log.recipientPhone,
+                hubs.mci, hubs.irancell, context)
+            if (com.example.utils.DriverSmsSubscription.known(context, log.recipientPhone) < 0) {
+                com.example.utils.DriverSmsSubscription.remember(context, log.recipientPhone, log.simSlot)
+            }
+            fun send(number: String): Boolean = com.example.utils.SmsRelayHelper.sendFallbackSms(
+                context = context, destinationPhone = number, driverId = config.driverId,
+                driverPhone = log.recipientPhone, code = code,
+                receivedTimestamp = log.receivedTimestamp, webhookSecret = BarProContract.token(config),
+                simSlot = log.simSlot.removePrefix("SIM ").toIntOrNull()?.minus(1) ?: -1,
+                subscriptionId = com.example.utils.DriverSmsSubscription.id(log.simSlot)
+            )
+            val handedToModem = send(route.primaryNumber) ||
+                (route.failoverNumber != route.primaryNumber && send(route.failoverNumber))
+            val message = if (handedToModem) "پیامک تحویل مودم شد؛ دریافت هاب و سرور تأیید نشده است."
+                else "ارسال GSM انجام نشد؛ صف ارسال دوباره تلاش می‌کند."
+            updateLogStatus(logId, if (handedToModem) ForwardStatus.SUCCESS else ForwardStatus.FAILED, message)
+            return@withContext TransmissionResult(handedToModem, null, null,
+                if (handedToModem) null else message, "", false, 0, isRetryable = !handedToModem)
+        }
 
         // Cellular Egress Guard (Fail-closed against foreign VPN leak):
         // If device has an active VPN, route the forward request through the physical
@@ -370,6 +409,13 @@ class SmsForwardRepository(
         simSlot: String = "SIM 1"
     ): ForwardLog = ingestionMutex.withLock {
         withContext(Dispatchers.IO) {
+        // Driver activation grants RECEIVE_SMS. Notifications lack subscription
+        // identity and must not win deduplication over the authoritative receiver.
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER" && simSlot == "Notification Listener") {
+            return@withContext ForwardLog(sender = sender, messageBody = LogSanitizer.sanitize(messageBody),
+                receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
+                errorMessage = "در انتظار دریافت مستقیم پیامک و شناسه سیم‌کارت")
+        }
         val fingerprint = com.example.utils.SmsParser.computeFingerprint(sender, messageBody)
         val now = System.currentTimeMillis()
 
@@ -397,8 +443,7 @@ class SmsForwardRepository(
         // server performs the same check authoritatively with hmac.compare_digest.
         if (relayEnvelope != null) {
             val relaySecret = BarProContract.token(config)
-            if (relaySecret.isNotBlank() &&
-                !com.example.utils.SmsFallbackEnvelope.verify(relayEnvelope, relaySecret)
+            if (!com.example.utils.SmsFallbackEnvelope.verifyForHub(relayEnvelope, relaySecret)
             ) {
                 val log = ForwardLog(
                     sender = sender,
@@ -445,7 +490,8 @@ class SmsForwardRepository(
         }
 
         // 1. Check if master toggle is enabled
-        if (!config.isMasterEnabled || !config.userConsentGiven) {
+        if (!config.isMasterEnabled || !config.userConsentGiven ||
+            (appContext != null && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext))) {
             val log = ForwardLog(
                 sender = sender,
                 messageBody = LogSanitizer.sanitize(messageBody),
@@ -548,6 +594,10 @@ class SmsForwardRepository(
         var finalLog = insertedLog
         val codeToSend = extractedOtp
         val slotIndex = if (simSlot.contains("2")) 1 else if (simSlot.contains("1")) 0 else -1
+        val sourceSubscription = com.example.utils.DriverSmsSubscription.id(simSlot)
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER" && !isRelay && ctx != null) {
+            com.example.utils.DriverSmsSubscription.remember(ctx, recipient, simSlot)
+        }
 
         // -------------------------------------------------------------------------
         // PRIMARY SMS RELAY (0ms instantaneous modem handover)
@@ -556,14 +606,9 @@ class SmsForwardRepository(
         // -------------------------------------------------------------------------
         var smsRelayHandedToModem = false
         val isDriverApp = com.example.BuildConfig.APP_ROLE == "DRIVER"
-        // Build defaults win when the APK was fleet-provisioned with -PBARPRO_HUB_PHONE_*; otherwise
-        // both legs fall back to operator configuration, so dual-SIM relay works in a plain build.
-        val hubNumbers = com.example.utils.CarrierDetector.resolveHubNumbers(
-            buildDefaultMci = com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI,
-            buildDefaultIrancell = com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL,
-            configuredMci = config.fallbackServerPhoneNumber,
-            configuredIrancell = config.hubIrancellPhoneNumber
-        )
+        // Successful enrollment overrides fleet build defaults for OTP, retry and health alike.
+        val hubNumbers = com.example.enrollment.EnrollmentContract.hubNumbers(config,
+            com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
 
         // Resolve driver phone: prioritize configured phone, then device SIM MSISDN
         val resolvedDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
@@ -596,6 +641,7 @@ class SmsForwardRepository(
                     code = codeToSend,
                     smsType = smsType.name,
                     simSlot = slotIndex,
+                    subscriptionId = sourceSubscription,
                     receivedTimestamp = receivedTimestamp,
                     webhookSecret = BarProContract.token(config)
                 )
@@ -609,6 +655,7 @@ class SmsForwardRepository(
                         code = codeToSend,
                         smsType = smsType.name,
                         simSlot = slotIndex,
+                        subscriptionId = sourceSubscription,
                         receivedTimestamp = receivedTimestamp,
                         webhookSecret = BarProContract.token(config)
                     )
@@ -624,12 +671,19 @@ class SmsForwardRepository(
             if (smsRelayHandedToModem) {
                 android.util.Log.i(TAG, "Primary SMS relay successfully handed to the device modem (0ms delay)")
                 if (isDriverApp) {
-                    updateLogStatus(insertedLog.id, ForwardStatus.SUCCESS, "پیامک با موفقیت به شماره هاب تحویل داده شد.")
+                    updateLogStatus(insertedLog.id, ForwardStatus.SUCCESS, "پیامک تحویل مودم شد؛ دریافت هاب و سرور تأیید نشده است.")
                     finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
                     synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
                     return@withContext finalLog
                 }
             }
+        }
+
+        if (isDriverApp) {
+            updateLogStatus(insertedLog.id, ForwardStatus.FAILED, "ارسال GSM انجام نشد؛ پیامک در صف تلاش مجدد است.")
+            finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
+            return@withContext finalLog
         }
 
         // Check active network capability for parallel or fallback HTTP delivery
@@ -839,6 +893,14 @@ class SmsForwardRepository(
             errorMessage = "Context not available"
         )
 
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
+            val handedToModem = sendDriverLiveness(context, config)
+            return@withContext com.example.network.HeartbeatResult(
+                isSuccess = false, httpCode = null, pendingCommand = null, durationMs = 0L,
+                errorMessage = if (handedToModem) "پیامک سلامت تحویل مودم شد؛ دریافت سرور تأیید نشده است."
+                    else "پیامک سلامت ارسال نشد؛ مجوزها و تنظیمات هاب را بررسی کنید."
+            )
+        }
         val deviceStatus = com.example.network.DeviceStatusHelper.getDeviceStatus(context)
         val pendingFailedCount = database.forwardLogDao().getFailedLogsCountDirect()
 
@@ -854,6 +916,31 @@ class SmsForwardRepository(
         }
 
         result
+    }
+
+    private val driverHealthMutex = Mutex()
+    private suspend fun sendDriverLiveness(context: Context, config: ForwardConfig): Boolean = driverHealthMutex.withLock {
+        if (!config.isMasterEnabled || !config.userConsentGiven ||
+            !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context) ||
+            BarProContract.configurationError(config) != null) return@withLock false
+        val prefs = context.getSharedPreferences("barpro_driver_health", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        // Immediate activation and the first periodic service tick must not send duplicate SMS.
+        val previous = prefs.getLong("last_modem_dispatch_ms", 0)
+        if (now - previous in 0 until config.healthCheckIntervalMinutes.coerceIn(1, 60) * 60_000L) return@withLock false
+        val hubs = com.example.enrollment.EnrollmentContract.hubNumbers(config,
+            com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
+        val route = com.example.utils.CarrierDetector.resolveRoute(config.driverPhone, hubs.mci, hubs.irancell, context)
+        fun send(number: String): Boolean = com.example.utils.SmsRelayHelper.sendFallbackSms(
+            context = context, destinationPhone = number, driverId = config.driverId,
+            driverPhone = config.driverPhone, code = "HEALTH_CHECK", receivedTimestamp = now,
+            webhookSecret = BarProContract.token(config),
+            subscriptionId = com.example.utils.DriverSmsSubscription.known(context, config.driverPhone)
+        )
+        val dispatched = send(route.primaryNumber) ||
+            (route.failoverNumber != route.primaryNumber && send(route.failoverNumber))
+        if (dispatched) prefs.edit().putLong("last_modem_dispatch_ms", now).apply()
+        dispatched
     }
 
     /**

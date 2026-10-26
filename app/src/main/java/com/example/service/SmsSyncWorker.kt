@@ -139,7 +139,7 @@ class SmsSyncWorker(
         fun enqueue(context: Context, logId: Long) {
             try {
                 val constraints = Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiredNetworkType(if (com.example.BuildConfig.APP_ROLE == "DRIVER") NetworkType.NOT_REQUIRED else NetworkType.CONNECTED)
                     .build()
 
                 val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
@@ -166,7 +166,7 @@ class SmsSyncWorker(
         fun enqueueBatchSync(context: Context) {
             try {
                 val constraints = Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiredNetworkType(if (com.example.BuildConfig.APP_ROLE == "DRIVER") NetworkType.NOT_REQUIRED else NetworkType.CONNECTED)
                     .build()
 
                 val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
