@@ -166,4 +166,21 @@ class EnrollmentIntentE2ETest {
         assertTrue("Modem accepts the message or leaves a retryable GSM failure", result.isSuccess || result.isRetryable)
         assertNotEquals(com.example.data.model.ForwardStatus.SKIPPED, isolated.getLogById(id)!!.status)
     }
+    @Test fun driverPacketsVerifyAtTheHubAndCanBeCheckedByTheLocalBackend() {
+        val phone = "09129990001"
+        val shared = "phase16-loopback-hub-synthetic-key-32"
+        val scoped = com.example.utils.SmsFallbackEnvelope.deriveDriverKey(shared, phone)
+        val stamp = System.currentTimeMillis()
+        val health = com.example.utils.SmsFallbackEnvelope.encode(phone, stamp, "HEALTH_CHECK", scoped)
+        val otp = com.example.utils.SmsFallbackEnvelope.encode(phone, stamp, "54321", scoped)
+        for (packet in listOf(health, otp)) {
+            val parsed = com.example.utils.SmsFallbackEnvelope.parse(packet)!!
+            assertTrue(com.example.utils.SmsFallbackEnvelope.verifyForHub(parsed, shared))
+        }
+        context.openFileOutput("phase16-wire-packets.json", android.content.Context.MODE_PRIVATE).use {
+            it.write(JSONObject().put("phone", phone).put("health", health).put("otp", otp)
+                .toString().toByteArray(Charsets.UTF_8))
+        }
+    }
+
 }
