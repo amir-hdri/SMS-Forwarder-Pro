@@ -268,9 +268,7 @@ class SmsForwardRepository(
                 com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
             val route = com.example.utils.CarrierDetector.resolveRoute(log.recipientPhone,
                 hubs.mci, hubs.irancell, context)
-            if (com.example.utils.DriverSmsSubscription.known(context, log.recipientPhone) < 0) {
-                com.example.utils.DriverSmsSubscription.remember(context, log.recipientPhone, log.simSlot)
-            }
+            com.example.utils.DriverSmsSubscription.seedIfUnknown(context, log.recipientPhone, log.simSlot)
             fun send(number: String): Boolean = com.example.utils.SmsRelayHelper.sendFallbackSms(
                 context = context, destinationPhone = number, driverId = config.driverId,
                 driverPhone = log.recipientPhone, code = code,

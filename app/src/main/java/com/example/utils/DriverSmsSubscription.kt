@@ -15,10 +15,17 @@ object DriverSmsSubscription {
 
     fun id(label: String): Int = subscription.find(label)?.groupValues?.get(1)?.toIntOrNull() ?: -1
 
+    @Synchronized
     fun remember(context: Context, phone: String, label: String) {
         val id = id(label)
         if (id >= 0) context.getSharedPreferences("barpro_driver_subscription", Context.MODE_PRIVATE)
             .edit().putInt(SmsParser.normalizePhoneNumber(phone), id).apply()
+    }
+
+    /** Retry seeding shares the fresh-intake lock, so an older ID cannot overwrite it. */
+    @Synchronized
+    fun seedIfUnknown(context: Context, phone: String, label: String) {
+        if (known(context, phone) < 0) remember(context, phone, label)
     }
 
     // Before receiving an OTP, the OS-selected SMS SIM is the only available identity.

@@ -2,6 +2,9 @@ package com.example
 
 import android.Manifest
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import android.telephony.SmsManager
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -22,6 +25,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSmsManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = Application::class)
@@ -148,6 +155,76 @@ class DriverSubscriptionRelayTest {
             assertEquals(com.example.data.model.ForwardStatus.SUCCESS, authoritative.status)
             assertNotNull(shadowOf(manager(context, 17)).lastSentTextMessageParams)
         } finally { database.close() }
+    }
+
+    @Test fun concurrentFreshIntakeWinsOverRetrySeedingAnUnknownSubscription() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(context).grantPermissions(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS)
+        shadowOf(context).denyPermissions(Manifest.permission.READ_PHONE_STATE)
+        val readUnknown = CountDownLatch(1)
+        val releaseRead = CountDownLatch(1)
+        val freshStarted = CountDownLatch(1)
+        val freshFinished = CountDownLatch(1)
+        val firstRead = AtomicBoolean(true)
+        val preferences = context.getSharedPreferences("barpro_driver_subscription", Context.MODE_PRIVATE)
+        val blockedPreferences = object : SharedPreferences by preferences {
+            override fun getInt(key: String?, defaultValue: Int): Int {
+                val value = preferences.getInt(key, defaultValue)
+                if (firstRead.compareAndSet(true, false)) {
+                    assertEquals("Start with an unknown subscription", -1, value)
+                    readUnknown.countDown()
+                    check(releaseRead.await(5, TimeUnit.SECONDS)) { "Retry read barrier timed out" }
+                }
+                return value
+            }
+        }
+        val wrapped = object : ContextWrapper(context) {
+            override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+                if (name == "barpro_driver_subscription") blockedPreferences else super.getSharedPreferences(name, mode)
+        }
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+        val repository = SmsForwardRepository(database, SmsForwarderClient(OkHttpClient.Builder().addInterceptor {
+            throw AssertionError("Concurrent Driver retry cannot reach HTTP")
+        }.build()), wrapped)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            repository.saveConfig(ForwardConfig(isMasterEnabled = true, userConsentGiven = true,
+                setupCompleted = true, allowCleartextTransport = true, isEncryptionEnabled = false,
+                driverPhone = "09120000001", authHeaderValue = "a".repeat(64),
+                endpointUrl = "http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                fallbackServerPhoneNumber = "09120000002", hubIrancellPhoneNumber = "09350000003"))
+            val storage = SecureStorageManager.getInstance(context)
+            val body = AesEncryptionUtils.encrypt("کد تایید: 54321", storage.getOrCreateOutboxKey())
+            val id = database.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "***",
+                recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
+                encryptedBody = "v2:${body.iv}:${body.ciphertext}", simSlot = "SIM 2 (Sub #17)"))
+            val retry = executor.submit<com.example.network.TransmissionResult> {
+                runBlocking { repository.transmitPendingLog(id) }
+            }
+            assertTrue("Retry must reach its unknown-cache read", readUnknown.await(5, TimeUnit.SECONDS))
+            val fresh = executor.submit {
+                freshStarted.countDown()
+                com.example.utils.DriverSmsSubscription.remember(context, "09120000001", "SIM 2 (Sub #18)")
+                freshFinished.countDown()
+            }
+            assertTrue("Fresh intake writer must start", freshStarted.await(5, TimeUnit.SECONDS))
+            // Unlocked code completes this write before retry resumes. Atomic seeding
+            // instead serializes it after the seed, so the fresh observation wins.
+            freshFinished.await(1, TimeUnit.SECONDS)
+            releaseRead.countDown()
+            assertTrue(retry.get(5, TimeUnit.SECONDS).isSuccess)
+            fresh.get(5, TimeUnit.SECONDS)
+            assertEquals("Fresh intake must survive the old retry seed", 18,
+                com.example.utils.DriverSmsSubscription.known(context, "09120000001"))
+            assertNotNull("Retry keeps its original subscription", shadowOf(manager(context, 17)).lastSentTextMessageParams)
+            repository.performHeartbeatAndCommandPoll()
+            assertNotNull("Health must use the fresh subscription", shadowOf(manager(context, 18)).lastSentTextMessageParams)
+        } finally {
+            releaseRead.countDown()
+            executor.shutdownNow()
+            check(executor.awaitTermination(5, TimeUnit.SECONDS))
+            database.close()
+        }
     }
 
 }
