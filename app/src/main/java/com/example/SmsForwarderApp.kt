@@ -30,6 +30,10 @@ class SmsForwarderApp : Application(), Configuration.Provider {
         // Offload database warm-up, crypto salt generation, and worker scheduling
         // to Dispatchers.IO to prevent Main Thread blocking and eliminate cold-start ANR.
         appScope.launch {
+            // Recovery must not depend on successful configuration or crypto reads.
+            runCatching { com.example.service.CleanupWorker.schedule(this@SmsForwarderApp) }
+            runCatching { com.example.service.MaintenanceWorker.schedule(this@SmsForwarderApp) }
+            runCatching { com.example.service.SmsSyncWorker.enqueueBatchSync(this@SmsForwarderApp) }
             try {
                 AppDatabase.getDatabase(this@SmsForwarderApp)
                 SecureStorageManager.getInstance(this@SmsForwarderApp).getOrCreateSalt()
@@ -39,9 +43,13 @@ class SmsForwarderApp : Application(), Configuration.Provider {
             }
 
             try {
-                com.example.service.CleanupWorker.schedule(this@SmsForwarderApp)
-                com.example.service.MaintenanceWorker.schedule(this@SmsForwarderApp)
-                com.example.service.SmsSyncWorker.enqueueBatchSync(this@SmsForwarderApp)
+                val repository = SmsForwardRepository.getInstance(this@SmsForwarderApp)
+                val config = repository.getConfig()
+                if (config.isMasterEnabled && config.userConsentGiven) {
+                    com.example.service.HeartbeatAlarmManager.scheduleNext(this@SmsForwarderApp, config.healthCheckIntervalMinutes)
+                } else {
+                    com.example.service.HeartbeatAlarmManager.cancel(this@SmsForwarderApp)
+                }
             } catch (e: Exception) {
                 Log.w("SmsForwarderApp", "Failed to schedule background workers: ${e.message}")
             }

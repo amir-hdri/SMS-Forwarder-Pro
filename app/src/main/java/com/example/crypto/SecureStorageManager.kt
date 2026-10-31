@@ -5,43 +5,34 @@ import android.content.SharedPreferences
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 import java.security.SecureRandom
 
 /**
- * Enterprise Secure Storage Manager using Android Keystore and EncryptedSharedPreferences.
- * Safely manages high-entropy secrets (Forwarder webhook secret, AES encryption key, PBKDF2 salt)
- * protecting them from physical extraction, adb backup, or rooted device snooping.
+ * Keystore-backed credential storage. Failure to initialize encryption rejects every operation;
+ * production never substitutes plaintext preferences. The factory is an injectable storage
+ * boundary so non-Android runtimes can exercise consumers without an AndroidKeyStore provider.
  */
-class SecureStorageManager private constructor(context: Context) {
-    private var encryptedStorageAvailable = false
-
+class SecureStorageManager internal constructor(
+    context: Context,
+    encryptedPreferencesFactory: (Context) -> SharedPreferences = ::createEncryptedPreferences
+) {
     private val prefs: SharedPreferences by lazy {
         try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                context,
-                PREFS_NAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            ).also { encryptedStorageAvailable = true }
-        } catch (_: Exception) {
-            context.getSharedPreferences(PREFS_NAME + "_fallback", Context.MODE_PRIVATE)
+            encryptedPreferencesFactory(context).also { migrateLegacyFallback(context, it) }
+        } catch (error: Exception) {
+            throw IllegalStateException("Secure credential storage unavailable", error)
         }
     }
 
     /** Enrollment never falls back to plaintext secret storage if Keystore is unavailable. */
     fun savePendingEnrollment(document: String?) {
         val storage = prefs
-        check(encryptedStorageAvailable) { "Secure enrollment storage unavailable" }
         check(storage.edit().putString("pending_driver_enrollment_v1", document).commit())
     }
 
     fun getPendingEnrollment(): String? {
         val storage = prefs
-        if (!encryptedStorageAvailable) return null
         return storage.getString("pending_driver_enrollment_v1", null)
     }
 
@@ -75,6 +66,7 @@ class SecureStorageManager private constructor(context: Context) {
      * The salt is persisted in EncryptedSharedPreferences so the same passphrase deterministically
      * derives the same AES key on this device across restarts.
      */
+    @Synchronized
     fun getOrCreateSalt(length: Int = 16): ByteArray {
         val storedBase64 = prefs.getString(KEY_PBKDF2_SALT, null)
         if (!storedBase64.isNullOrBlank()) {
@@ -96,7 +88,7 @@ class SecureStorageManager private constructor(context: Context) {
     }
 
     fun clearAllSecrets() {
-        prefs.edit().clear().apply()
+        check(prefs.edit().clear().commit()) { "Cannot clear credential storage" }
     }
 
     companion object {
@@ -104,6 +96,28 @@ class SecureStorageManager private constructor(context: Context) {
         private const val KEY_FORWARDER_SECRET = "secure_forwarder_secret"
         private const val KEY_SECRET_ENCRYPTION_KEY = "secure_secret_encryption_key"
         private const val KEY_PBKDF2_SALT = "secure_pbkdf2_salt"
+
+        private fun migrateLegacyFallback(context: Context, encrypted: SharedPreferences) {
+            val legacyName = PREFS_NAME + "_fallback"
+            if (!File(context.dataDir, "shared_prefs/$legacyName.xml").exists()) return
+            val legacy = context.getSharedPreferences(legacyName, Context.MODE_PRIVATE)
+            val editor = encrypted.edit()
+            for (key in listOf(KEY_FORWARDER_SECRET, KEY_SECRET_ENCRYPTION_KEY, KEY_PBKDF2_SALT,
+                "outbox_key_v2", "pending_driver_enrollment_v1")) {
+                // A populated encrypted store remains authoritative; never rotate its outbox key.
+                if (!encrypted.contains(key)) legacy.getString(key, null)?.let { editor.putString(key, it) }
+            }
+            check(editor.commit()) { "Cannot migrate legacy credential storage" }
+            check(context.deleteSharedPreferences(legacyName)) { "Cannot remove legacy credential storage" }
+        }
+
+        private fun createEncryptedPreferences(context: Context): SharedPreferences {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+            return EncryptedSharedPreferences.create(context, PREFS_NAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+        }
 
         @Volatile
         private var instance: SecureStorageManager? = null

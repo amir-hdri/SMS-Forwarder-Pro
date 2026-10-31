@@ -13,6 +13,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [34])
 class AesEncryptionUtilsTest {
+    @get:org.junit.Rule val secureStorage = SecureStorageTestRule()
 
     private val testSecretKey = "BarProSuperSecretEncryptionKey2026!#"
     private val testSmsMessage = "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد."

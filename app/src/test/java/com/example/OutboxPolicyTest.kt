@@ -22,6 +22,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class OutboxPolicyTest {
+    @get:org.junit.Rule val secureStorage = SecureStorageTestRule()
     private lateinit var db: AppDatabase
     private lateinit var repository: SmsForwardRepository
     private lateinit var client: SmsForwarderClient

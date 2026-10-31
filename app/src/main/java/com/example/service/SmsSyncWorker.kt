@@ -14,7 +14,6 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.example.data.model.ForwardStatus
 import com.example.data.repository.SmsForwardRepository
-import com.example.network.BarProContract
 import com.example.utils.LogSanitizer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -47,22 +46,18 @@ class SmsSyncWorker(
                 }
 
                 // If already forwarded successfully, complete
-                if (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.SKIPPED) {
+                if (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.SKIPPED || log.status == ForwardStatus.SMS_SENT) {
                     return Result.success()
                 }
 
-                // 5-Minute OTP Expiry Guard:
-                // If message is an OTP and timestamp is expired / outside acceptable clock tolerance,
-                // mark as FAILED (expired) rather than delivering stale credentials to server.
-                val isOtpMessage = log.otpCode != null || log.smsType == com.example.data.model.SmsType.UTCMS_OTP
-                if (isOtpMessage && !BarProContract.isTimestampAcceptable(log.receivedTimestamp)) {
-                    Log.w(TAG, "OTP message #$logId is outside acceptable validity window or clock skew. Marking as expired.")
-                    repository.updateLogStatus(logId, ForwardStatus.FAILED, "اعتبار کد ۵ دقیقه‌ای به پایان رسیده یا ساعت دستگاه نادرست است")
-                    return Result.failure()
-                }
-
-                // Transmit pending log through repository outbox processor
+                // The repository rereads expiry under the same lock as result callbacks.
                 val result = repository.transmitPendingLog(logId)
+
+                // A successful Binder handoff is not a confirmed radio send. Keep recovery alive
+                // until the immutable sent callback arrives or the attempt's deadline expires.
+                if (repository.getLogById(logId)?.status == ForwardStatus.SMS_DISPATCHED) {
+                    return if (result.isRetryable && runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
+                }
 
                 if (result.isSuccess) {
                     Log.i(TAG, "Outbox SMS transmission succeeded for log ID: $logId")
@@ -123,7 +118,7 @@ class SmsSyncWorker(
             }
         } catch (e: Exception) {
             Log.e(TAG, LogSanitizer.sanitize("Unhandled exception during SMS sync: ${e.message}"), e)
-            Result.failure()
+            if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.failure()
         }
     }
 
@@ -136,13 +131,14 @@ class SmsSyncWorker(
          * Enqueues an outbox SMS transmission with guaranteed execution and exponential backoff.
          * Uses WorkManager.enqueueUniqueWork with ExistingWorkPolicy.KEEP to prevent duplicate workers.
          */
-        fun enqueue(context: Context, logId: Long) {
+        fun enqueue(context: Context, logId: Long, initialDelayMs: Long = 0) {
             try {
                 val constraints = Constraints.Builder()
                     .setRequiredNetworkType(if (com.example.BuildConfig.APP_ROLE == "DRIVER") NetworkType.NOT_REQUIRED else NetworkType.CONNECTED)
                     .build()
 
                 val request = OneTimeWorkRequestBuilder<SmsSyncWorker>()
+                    .setInitialDelay(initialDelayMs.coerceIn(0, 45_000), TimeUnit.MILLISECONDS)
                     .setInputData(workDataOf(KEY_LOG_ID to logId))
                     .setConstraints(constraints)
                     .setBackoffCriteria(
@@ -173,7 +169,7 @@ class SmsSyncWorker(
                     .setConstraints(constraints)
                     .build()
 
-                WorkManager.getInstance(context).enqueue(request)
+                WorkManager.getInstance(context).enqueueUniqueWork("sms_outbox_recovery", ExistingWorkPolicy.KEEP, request)
             } catch (e: Exception) {
                 Log.w(TAG, "WorkManager enqueueBatchSync failed or not initialized: ${e.message}")
             }

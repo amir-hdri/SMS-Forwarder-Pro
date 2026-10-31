@@ -21,6 +21,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 data class TransmissionResult(
@@ -181,6 +182,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         fastTimeoutMs: Long? = null,
         clientOverride: OkHttpClient? = null
     ): TransmissionResult = withContext(Dispatchers.IO) {
+        BarProContract.configurationError(config, requireRecipient = false)?.let { return@withContext failure(it) }
         val token = BarProContract.token(config)
         if (token.isBlank()) return@withContext failure("توکن وب‌هوک تنظیم نشده است.")
         val parsed = com.example.utils.SmsFallbackEnvelope.parse(envelopeText)
@@ -199,17 +201,36 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         }
 
         val gatewayConfig = config.copy(endpointUrl = targetUrl)
+        val expectedStatus = when (parsed.code) {
+            "HEALTH_CHECK" -> "health_acknowledged"
+            "TEST" -> "probe_acknowledged"
+            else -> "success"
+        }
+        // The server accepts legacy seconds but its probe receipt is always milliseconds.
+        val probeTimestampMs = if (parsed.timestamp <= 100_000_000_000L) parsed.timestamp * 1000L else parsed.timestamp
         post(
             payload,
             gatewayConfig,
-            expectedStatus = "success",
+            expectedStatus = expectedStatus,
             fastTimeoutMs = fastTimeoutMs,
             extraHeaders = extraHeaders,
             clientOverride = clientOverride,
-            responseMatches = { json -> json.optBoolean("success", false) }
+            responseMatches = { json ->
+                if (expectedStatus == "success") {
+                    // Numeric receipts have no phone/probe fields; post requires otp_detected.
+                    true
+                } else {
+                    val receiptTimestamp = json.opt("probe_timestamp") as? Number
+                    val receivedAt = (json.opt("received_at") as? Number)?.toDouble()
+                    json.optString("phone") == parsed.phone &&
+                        receiptTimestamp?.toLong() == probeTimestampMs &&
+                        receiptTimestamp.toDouble() == probeTimestampMs.toDouble() &&
+                        receivedAt != null && receivedAt.isFinite() && receivedAt > 0.0
+                }
+            }
         ).copy(
-            smsType = if (parsed.code == "HEALTH_CHECK") SmsType.OTHER else SmsType.UTCMS_OTP,
-            otpCode = if (parsed.code == "HEALTH_CHECK") null else parsed.code
+            smsType = if (expectedStatus == "success") SmsType.UTCMS_OTP else SmsType.OTHER,
+            otpCode = if (expectedStatus == "success") parsed.code else null
         )
     }
 
@@ -235,7 +256,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
             .followSslRedirects(false)
             .retryOnConnectionFailure(false)
             .build()
-        val requestBuilder = Request.Builder().url(config.endpointUrl.trim())
+        val requestBuilder = Request.Builder().url(ManagedTransport.endpoint(config.endpointUrl.trim()))
             .header(BarProContract.TOKEN_HEADER, BarProContract.token(config))
             .header("User-Agent", "BarPro-Forwarder-Android/1.0")
         extraHeaders.forEach { (key, value) ->
@@ -247,8 +268,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         var result = failure("ارتباط با سرور برقرار نشد.")
         repeat(attempts) { attempt ->
             try {
-                client.newCall(request).await().use { response ->
-                    val responseText = response.peekBody(16_384).string()
+                client.newCall(request).awaitConsumedResponse().let { response ->
+                    val responseText = response.bodyText
                     val json = try { JSONObject(responseText) } catch (_: Exception) { null }
                     val accepted = response.isSuccessful && json != null &&
                         json.optBoolean("success", false) && json.optString("status") == expectedStatus &&
@@ -293,20 +314,31 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         return result
     }
 
-    private suspend fun Call.await(): Response = suspendCancellableCoroutine { continuation ->
+    private data class ConsumedResponse(val code: Int, val isSuccessful: Boolean, val bodyText: String)
+
+    /** Keep cancellation attached until the bounded body is read and the live response is closed. */
+    private suspend fun Call.awaitConsumedResponse(): ConsumedResponse = suspendCancellableCoroutine { continuation ->
         continuation.invokeOnCancellation { cancel() }
         enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 if (!continuation.isCancelled) continuation.resumeWithException(e)
             }
             override fun onResponse(call: Call, response: Response) {
-                continuation.resume(response) { _, value, _ -> value.close() }
+                try {
+                    val consumed = response.use {
+                        if (continuation.isCancelled) return
+                        ConsumedResponse(it.code, it.isSuccessful, it.peekBody(16_384).string())
+                    }
+                    continuation.resume(consumed)
+                } catch (error: Exception) {
+                    if (!continuation.isCancelled) continuation.resumeWithException(error)
+                }
             }
         })
     }
 
     suspend fun sendHeartbeat(config: ForwardConfig, deviceStatus: DeviceStatus, pendingFailedCount: Int): HeartbeatResult {
-        val result = checkHealth(config)
+        val result = checkHealth(config, permissions = deviceStatus.permissions)
         return HeartbeatResult(result.isSuccess, result.httpStatusCode, null, result.durationMs, result.errorMessage)
     }
 

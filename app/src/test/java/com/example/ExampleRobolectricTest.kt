@@ -18,6 +18,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = android.app.Application::class, sdk = [34])
 class ExampleRobolectricTest {
+    @get:org.junit.Rule val secureStorage = SecureStorageTestRule()
 
     @Test
     fun `verify app name resource is Forward BarPro`() {

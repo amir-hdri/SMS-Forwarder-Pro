@@ -20,7 +20,7 @@ interface ForwardLogDao {
     @Query("SELECT * FROM forward_logs ORDER BY receivedTimestamp DESC")
     fun getAllLogs(): Flow<List<ForwardLog>>
 
-    @Query("SELECT * FROM forward_logs WHERE status = :status ORDER BY receivedTimestamp DESC")
+    @Query("SELECT * FROM forward_logs WHERE status = :status OR (:status = 'PENDING' AND status IN ('SMS_DISPATCHED', 'SMS_SENT')) ORDER BY receivedTimestamp DESC")
     fun getLogsByStatus(status: ForwardStatus): Flow<List<ForwardLog>>
 
     @Query("SELECT * FROM forward_logs WHERE id = :id")
@@ -59,10 +59,10 @@ interface ForwardLogDao {
     @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'SKIPPED'")
     fun getSkippedCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM forward_logs WHERE status IN ('PENDING', 'SMS_DISPATCHED') OR (status = 'SMS_SENT' AND encryptedBody IS NOT NULL)")
     fun getPendingCount(): Flow<Int>
 
-    @Query("SELECT * FROM forward_logs WHERE status = 'PENDING' ORDER BY receivedTimestamp ASC LIMIT :limit")
+    @Query("SELECT * FROM forward_logs WHERE status IN ('PENDING', 'SMS_DISPATCHED') ORDER BY receivedTimestamp ASC LIMIT :limit")
     suspend fun getPendingLogs(limit: Int = 20): List<ForwardLog>
 
     @Query("SELECT * FROM forward_logs WHERE status = 'FAILED' ORDER BY receivedTimestamp ASC LIMIT :limit")
@@ -70,6 +70,12 @@ interface ForwardLogDao {
 
     @Query("SELECT COUNT(*) FROM forward_logs WHERE status = 'FAILED'")
     suspend fun getFailedLogsCountDirect(): Int
+
+    @Query("SELECT * FROM forward_logs WHERE sender = 'HEARTBEAT' AND recipientPhone = :phone AND receivedTimestamp >= :since ORDER BY id DESC LIMIT 1")
+    suspend fun getRecentDriverHeartbeat(phone: String, since: Long): ForwardLog?
+
+    @Query("UPDATE forward_logs SET status = :status, forwardedTimestamp = :observedAt, responseSummary = :summary, errorMessage = :error WHERE id = :id AND lastRetryTimestamp = :attemptAt AND status IN ('SMS_DISPATCHED', 'SMS_SENT')")
+    suspend fun recordSmsResult(id: Long, attemptAt: Long, status: ForwardStatus, observedAt: Long, summary: String?, error: String?): Int
 
     @Query("DELETE FROM forward_logs WHERE status = 'SUCCESS' AND receivedTimestamp < :cutoffTimestamp")
     suspend fun deleteOldSuccessfulLogs(cutoffTimestamp: Long): Int

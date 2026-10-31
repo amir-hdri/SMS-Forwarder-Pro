@@ -18,6 +18,8 @@ import com.example.utils.LogSanitizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CancellationException
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -69,7 +71,6 @@ class SmsReceiver : BroadcastReceiver() {
         Log.i(TAG, LogSanitizer.sanitize("Incoming SMS detected | Sender: $sender | Length: ${messageText.length} | Slot: $simSlot"))
 
         val pendingResult = goAsync()
-        val repository = SmsForwardRepository.getInstance(context)
 
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         val wakeLock = powerManager?.newWakeLock(
@@ -77,11 +78,13 @@ class SmsReceiver : BroadcastReceiver() {
             "BarPro:SmsForwarderWakeLock"
         )?.apply {
             setReferenceCounted(false)
-            acquire(35_000L)
+            acquire(10_000L)
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                withTimeout(8_000L) {
+                val repository = SmsForwardRepository.getInstance(context.applicationContext)
                 Log.d(TAG, LogSanitizer.sanitize("Processing incoming SMS from $sender..."))
                 val log = repository.processIncomingSms(
                     sender = sender,
@@ -96,6 +99,9 @@ class SmsReceiver : BroadcastReceiver() {
                 if (config.showForegroundNotification && (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.FAILED)) {
                     showForwardNotification(context, sender, log.status)
                 }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Log.e(TAG, LogSanitizer.sanitize("Exception while processing incoming SMS from $sender: ${e.message}"), e)
             } finally {
@@ -136,9 +142,9 @@ class SmsReceiver : BroadcastReceiver() {
 
         val title = if (status == ForwardStatus.SUCCESS) "پیامک با موفقیت ارسال شد" else "خطا در انتقال پیامک"
         val content = if (status == ForwardStatus.SUCCESS) {
-            "پیامک رمزنگاری‌شده از $sender با موفقیت به وب‌سرویس تحویل داده شد."
+            "ثبت پیامک در سرور تأیید شد."
         } else {
-            "ارسال پیامک از $sender به سرور با شکست مواجه شد. گزارش‌ها را بررسی کنید."
+            "انتقال پیامک انجام نشد؛ وضعیت صف و شبکه را بررسی کنید."
         }
 
         val notification = NotificationCompat.Builder(context, channelId)

@@ -1,6 +1,7 @@
 package com.example.utils
 
 import android.content.Context
+import android.app.PendingIntent
 import android.os.Build
 import android.telephony.SmsManager
 import android.util.Log
@@ -23,7 +24,9 @@ object SmsRelayHelper {
         simSlot: Int = -1,
         receivedTimestamp: Long,
         webhookSecret: String,
-        subscriptionId: Int = -1
+        subscriptionId: Int = -1,
+        sentIntent: PendingIntent? = null,
+        deliveryIntent: PendingIntent? = null
     ): Boolean {
         if (destinationPhone.isBlank() || code.isBlank()) {
             Log.w(TAG, "Cannot send fallback SMS: destination or code is missing")
@@ -84,8 +87,8 @@ object SmsRelayHelper {
                 destinationPhone.trim(),
                 null,
                 messageText,
-                null,
-                null
+                sentIntent,
+                deliveryIntent
             )
             Log.i(TAG, "Fallback SMS handed to the modem; delivery remains unconfirmed")
             true

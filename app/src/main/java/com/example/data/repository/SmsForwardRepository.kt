@@ -15,10 +15,12 @@ import com.example.network.ServerHealthState
 import com.example.network.SmsForwarderClient
 import com.example.network.TransmissionResult
 import com.example.utils.LogSanitizer
+import com.example.utils.SmsDispatch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
@@ -38,6 +40,10 @@ class SmsForwardRepository(
     private val client: SmsForwarderClient = SmsForwarderClient(),
     private val appContext: Context? = null
 ) {
+    private val deliveryLocks = com.example.utils.KeyedMutex<Long>()
+    private val configAccessLock = Mutex()
+    @Volatile private var secureStorageBlocked = false
+
     private val secureStorage by lazy {
         appContext?.let { SecureStorageManager.getInstance(it) }
     }
@@ -52,17 +58,49 @@ class SmsForwardRepository(
     val allRules: Flow<List<FilterRule>> = database.filterRuleDao().getAllRules()
     val allLogs: Flow<List<ForwardLog>> = database.forwardLogDao().getAllLogs()
 
-    val configFlow: Flow<ForwardConfig?> = database.forwardConfigDao().getConfigFlow().map { config ->
-        config?.let { restoreSecrets(it) }
-    }
+    val configFlow: Flow<ForwardConfig?> = database.forwardConfigDao().getConfigFlow().map {
+        // Room's emission is an invalidation signal: pair current identity with current secrets.
+        configAccessLock.withLock {
+            database.forwardConfigDao().getConfig()?.let { restoreCheckedSecrets(it) }
+        }
+    }.flowOn(Dispatchers.IO)
 
     private fun restoreSecrets(config: ForwardConfig): ForwardConfig {
-        val storage = secureStorage ?: return config
+        val managed = com.example.network.ManagedTransport.configuration(config)
+        val storage = secureStorage ?: return managed
         val secret = storage.getForwarderSecret().ifBlank {
             config.authHeaderValue.ifBlank { config.forwarderSecret }
         }
         val key = storage.getSecretEncryptionKey().ifBlank { config.secretEncryptionKey }
-        return config.copy(forwarderSecret = secret, authHeaderValue = secret, secretEncryptionKey = key)
+        return managed.copy(forwarderSecret = secret, authHeaderValue = secret, secretEncryptionKey = key)
+    }
+
+    private suspend fun stopForStorageFailure() {
+        secureStorageBlocked = true
+        // Only change stop/consent flags, never copy redacted UI defaults over fleet identity.
+        try {
+            database.forwardConfigDao().disableForStorageFailure()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.w(TAG, "Persisting secure-storage stop deferred: ${error.javaClass.simpleName}")
+        }
+        appContext?.let { context ->
+            runCatching { com.example.service.HeartbeatAlarmManager.cancel(context) }
+            runCatching { com.example.service.SmsForwarderService.stopService(context) }
+        }
+    }
+
+    private suspend fun restoreCheckedSecrets(config: ForwardConfig): ForwardConfig {
+        check(!secureStorageBlocked) { "Secure configuration requires validated recovery" }
+        return try {
+            restoreSecrets(config)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            stopForStorageFailure()
+            throw error
+        }
     }
 
     val serverHealthState: StateFlow<ServerHealthState> = ServerHealthMonitor.healthState
@@ -74,18 +112,26 @@ class SmsForwardRepository(
     val pendingCount: Flow<Int> = database.forwardLogDao().getPendingCount()
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
-    suspend fun getConfig(): ForwardConfig {
+    suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) { configAccessLock.withLock {
         val persisted = database.forwardConfigDao().getConfig() ?: ForwardConfig()
-        val restored = restoreSecrets(persisted)
+        val restored = restoreCheckedSecrets(persisted)
         // Migrate previous plaintext config fields into the Keystore-backed store.
         if (secureStorage != null && (persisted.forwarderSecret.isNotEmpty() ||
                 persisted.authHeaderValue.isNotEmpty() || persisted.secretEncryptionKey.isNotEmpty())) {
-            saveConfig(restored)
+            saveClaimedConfig(restored)
         }
-        return restored
-    }
+        restored
+    } }
 
     suspend fun saveConfig(config: ForwardConfig) = withContext(Dispatchers.IO) {
+        configAccessLock.withLock {
+            check(!secureStorageBlocked) { "Secure configuration requires validated recovery" }
+            saveClaimedConfig(config)
+        }
+    }
+
+    private suspend fun saveClaimedConfig(config: ForwardConfig) {
+        try {
         val storage = secureStorage
         if (storage == null) {
             // Used only by repositories without an Android context (unit tests).
@@ -97,7 +143,37 @@ class SmsForwardRepository(
                 forwarderSecret = "", authHeaderValue = "", secretEncryptionKey = ""
             ))
         }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            stopForStorageFailure()
+            throw error
+        }
     }
+
+    /** Validate both reads and durable writes; recovery never restores revoked consent. */
+    suspend fun retrySecureStorage(): ForwardConfig = withContext(Dispatchers.IO) { configAccessLock.withLock {
+        try {
+            val persisted = database.forwardConfigDao().getConfig() ?: ForwardConfig()
+            val restored = restoreSecrets(persisted)
+            secureStorage?.let { storage ->
+                storage.saveForwarderSecret(BarProContract.token(restored))
+                storage.saveSecretEncryptionKey(restored.secretEncryptionKey)
+                if (persisted.forwarderSecret.isNotEmpty() || persisted.authHeaderValue.isNotEmpty() ||
+                    persisted.secretEncryptionKey.isNotEmpty()) {
+                    database.forwardConfigDao().insertOrUpdate(restored.copy(
+                        forwarderSecret = "", authHeaderValue = "", secretEncryptionKey = ""))
+                }
+            }
+            secureStorageBlocked = false
+            restored
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            stopForStorageFailure()
+            throw error
+        }
+    } }
 
     private fun decryptOutbox(log: ForwardLog, config: ForwardConfig): String {
         val parts = requireNotNull(log.encryptedBody) { "Missing encrypted outbox" }.split(":")
@@ -200,8 +276,82 @@ class SmsForwardRepository(
      * performs the HTTP forward request, updates the entity status to SUCCESS or FAILED,
      * and redacts sensitive data (OTP and phone numbers) in the persistent log.
      */
-    suspend fun transmitPendingLog(logId: Long, fastTimeoutMs: Long? = null): TransmissionResult = transmissionMutex.withLock {
-        withContext(Dispatchers.IO) {
+    suspend fun transmitPendingLog(logId: Long, fastTimeoutMs: Long? = null): TransmissionResult {
+        return if (fastTimeoutMs == null) deliveryLocks.withLock(logId) { transmitClaimedLog(logId, null) }
+        else kotlinx.coroutines.withTimeoutOrNull(fastTimeoutMs.coerceIn(250, 60_000)) {
+            deliveryLocks.withLock(logId) { transmitClaimedLog(logId, fastTimeoutMs) }
+        } ?: TransmissionResult(false, null, null, "ارسال فوری تمام نشد؛ صف پایدار دوباره تلاش می‌کند.", "", false, fastTimeoutMs, isRetryable = true)
+    }
+
+    private suspend fun dispatchGsmRelay(
+        logId: Long,
+        log: ForwardLog,
+        config: ForwardConfig,
+        code: String,
+        isFallback: Boolean = false
+    ): TransmissionResult {
+        val context = appContext
+        if (context == null) {
+            updateClaimedLogStatus(logId, ForwardStatus.SKIPPED, "این پیامک برای رله GSM راننده معتبر نیست.")
+            return TransmissionResult(false, null, null, "Context در دسترس نیست", "", false, 0)
+        }
+        if (log.status == ForwardStatus.SMS_SENT) {
+            return TransmissionResult(true, null, null, null, "", false, 0)
+        }
+        val waiting = log.status == ForwardStatus.SMS_DISPATCHED &&
+            System.currentTimeMillis() - (log.lastRetryTimestamp ?: 0) in 0 until com.example.utils.SmsDispatch.RESULT_TIMEOUT_MS
+        if (waiting) return TransmissionResult(false, null, null,
+            "در انتظار نتیجه ارسال شبکه سیم‌کارت", "", false, 0, isRetryable = true)
+        if (log.retryCount >= com.example.utils.SmsDispatch.MAX_ATTEMPTS) {
+            database.forwardLogDao().updateLog(log.copy(errorMessage =
+                "تلاش‌های محدود پایان یافت؛ نتیجه آخرین ارسال هنوز تأیید نشده است."))
+            return TransmissionResult(false, null, null, "تلاش‌های GSM پایان یافت", "", false, 0)
+        }
+        if (log.status == ForwardStatus.SMS_DISPATCHED && log.lastRetryTimestamp != null) {
+            com.example.utils.SmsDispatch.cancelAttempt(context, logId, log.lastRetryTimestamp)
+        }
+        val hubs = com.example.enrollment.EnrollmentContract.hubNumbers(config,
+            com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
+        val route = com.example.utils.CarrierDetector.resolveRoute(log.recipientPhone, hubs.mci, hubs.irancell, context)
+        val destinations = listOf(route.primaryNumber, route.failoverNumber).filter { it.isNotBlank() }.distinct()
+        com.example.utils.DriverSmsSubscription.seedIfUnknown(context, log.recipientPhone, log.simSlot)
+        var attemptLog = log
+        var handedToModem = false
+        repeat(minOf(destinations.size, com.example.utils.SmsDispatch.MAX_ATTEMPTS - log.retryCount)) {
+            if (!handedToModem) {
+                val attemptAt = maxOf(System.currentTimeMillis(), (attemptLog.lastRetryTimestamp ?: 0) + 1)
+                val destination = destinations[attemptLog.retryCount % destinations.size]
+                val summaryText = if (isFallback) "ارسال وب‌هوک ناموفق بود؛ در انتظار نتیجه ارسال پیامک اضطراری به هاب"
+                    else "در انتظار نتیجه ارسال پیامک"
+                attemptLog = attemptLog.copy(status = ForwardStatus.SMS_DISPATCHED,
+                    retryCount = attemptLog.retryCount + 1, lastRetryTimestamp = attemptAt,
+                    responseSummary = summaryText, errorMessage = null)
+                database.forwardLogDao().updateLog(attemptLog)
+                handedToModem = com.example.utils.SmsRelayHelper.sendFallbackSms(
+                    context = context, destinationPhone = destination, driverId = config.driverId,
+                    driverPhone = log.recipientPhone, code = code, receivedTimestamp = log.receivedTimestamp,
+                    webhookSecret = BarProContract.token(config),
+                    simSlot = Regex("SIM (\\d+)").find(log.simSlot)?.groupValues?.get(1)?.toIntOrNull()?.minus(1) ?: -1,
+                    subscriptionId = com.example.utils.DriverSmsSubscription.id(log.simSlot),
+                    sentIntent = com.example.utils.SmsDispatch.resultIntent(context, logId, attemptAt, false),
+                    deliveryIntent = com.example.utils.SmsDispatch.resultIntent(context, logId, attemptAt, true))
+                if (!handedToModem) {
+                    com.example.utils.SmsDispatch.cancelAttempt(context, logId, attemptAt)
+                    attemptLog = attemptLog.copy(status = ForwardStatus.FAILED,
+                        errorMessage = "ارسال GSM انجام نشد؛ پوشش و شارژ سیم‌کارت را بررسی کنید.")
+                    database.forwardLogDao().updateLog(attemptLog)
+                }
+            }
+        }
+        com.example.service.SmsSyncWorker.enqueue(context, logId,
+            if (handedToModem) com.example.utils.SmsDispatch.RESULT_TIMEOUT_MS else 0)
+        return TransmissionResult(handedToModem, null, null,
+            if (handedToModem) null else "ارسال GSM انجام نشد", "", false, 0,
+            isRetryable = attemptLog.retryCount < com.example.utils.SmsDispatch.MAX_ATTEMPTS)
+    }
+
+    private suspend fun transmitClaimedLog(logId: Long, fastTimeoutMs: Long?): TransmissionResult {
+        return withContext(Dispatchers.IO) {
         val log = database.forwardLogDao().getLogById(logId)
             ?: return@withContext TransmissionResult(
                 isSuccess = false,
@@ -229,14 +379,14 @@ class SmsForwardRepository(
             else -> null
         }
         if (earlyStopReason != null) {
-            updateLogStatus(logId, ForwardStatus.SKIPPED, earlyStopReason)
+            updateClaimedLogStatus(logId, ForwardStatus.SKIPPED, earlyStopReason)
             return@withContext TransmissionResult(false, null, null, earlyStopReason, "", false, 0)
         }
 
         val rawMessage = try {
             decryptOutbox(log, config)
         } catch (_: Exception) {
-            updateLogStatus(logId, ForwardStatus.SKIPPED, "بازکردن پیامک رمزنگاری‌شده ممکن نیست.")
+            updateClaimedLogStatus(logId, ForwardStatus.SKIPPED, "بازکردن پیامک رمزنگاری‌شده ممکن نیست.")
             return@withContext TransmissionResult(false, null, null, "خطای رمزگشایی پیامک", "", false, 0)
         }
 
@@ -249,101 +399,122 @@ class SmsForwardRepository(
             else -> BarProContract.configurationError(config, requireRecipient = !isRelay && !isHubApp)
         }
         if (recipientStopReason != null) {
-            updateLogStatus(logId, ForwardStatus.SKIPPED, recipientStopReason)
+            updateClaimedLogStatus(logId, ForwardStatus.SKIPPED, recipientStopReason)
             return@withContext TransmissionResult(false, null, null, recipientStopReason, "", false, 0)
         }
 
         val activeRules = database.filterRuleDao().getActiveRules()
         val matchedRule = activeRules.firstOrNull { it.label == log.matchedRuleLabel || it.matches(log.sender, rawMessage) }
 
-        // A Driver retries the original signed GSM identity; it never falls through to HTTP.
-        if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
-            val context = appContext
-            val code = if (!isRelay) com.example.utils.SmsParser.extractOtp(rawMessage, log.sender) else null
-            if (context == null || code == null) {
-                updateLogStatus(logId, ForwardStatus.SKIPPED, "این پیامک برای رله GSM راننده معتبر نیست.")
-                return@withContext TransmissionResult(false, null, null, "رله GSM معتبر نیست", "", false, 0)
-            }
-            val hubs = com.example.enrollment.EnrollmentContract.hubNumbers(config,
-                com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
-            val route = com.example.utils.CarrierDetector.resolveRoute(log.recipientPhone,
-                hubs.mci, hubs.irancell, context)
-            com.example.utils.DriverSmsSubscription.seedIfUnknown(context, log.recipientPhone, log.simSlot)
-            fun send(number: String): Boolean = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                context = context, destinationPhone = number, driverId = config.driverId,
-                driverPhone = log.recipientPhone, code = code,
-                receivedTimestamp = log.receivedTimestamp, webhookSecret = BarProContract.token(config),
-                simSlot = log.simSlot.removePrefix("SIM ").toIntOrNull()?.minus(1) ?: -1,
-                subscriptionId = com.example.utils.DriverSmsSubscription.id(log.simSlot)
-            )
-            val handedToModem = send(route.primaryNumber) ||
-                (route.failoverNumber != route.primaryNumber && send(route.failoverNumber))
-            val message = if (handedToModem) "پیامک تحویل مودم شد؛ دریافت هاب و سرور تأیید نشده است."
-                else "ارسال GSM انجام نشد؛ صف ارسال دوباره تلاش می‌کند."
-            updateLogStatus(logId, if (handedToModem) ForwardStatus.SUCCESS else ForwardStatus.FAILED, message)
-            return@withContext TransmissionResult(handedToModem, null, null,
-                if (handedToModem) null else message, "", false, 0, isRetryable = !handedToModem)
+        // 1. Cellular Health Check or In-Flight/Sent GSM packets: Handled by GSM relay
+        val isGsmPacket = com.example.BuildConfig.APP_ROLE == "DRIVER" &&
+            (rawMessage in setOf("HEALTH_CHECK", "TEST") ||
+             log.sender == "HEARTBEAT" ||
+             log.status in setOf(ForwardStatus.SMS_DISPATCHED, ForwardStatus.SMS_SENT))
+
+        if (isGsmPacket) {
+            val code = if (rawMessage in setOf("HEALTH_CHECK", "TEST")) rawMessage
+                else com.example.utils.SmsParser.extractOtp(rawMessage, log.sender) ?: rawMessage
+            return@withContext dispatchGsmRelay(logId, log, config, code, isFallback = false)
         }
+
+        // 2. HTTP Forwarding (with X-Webhook-Token header support):
+        val token = BarProContract.token(config)
+        val driverHttpClient = client.httpClient.newBuilder().apply {
+            interceptors().add(0, okhttp3.Interceptor { chain ->
+                val orig = chain.request()
+                val req = orig.newBuilder().header("X-Webhook-Token", token).build()
+                chain.proceed(req)
+            })
+        }.build()
 
         // Cellular Egress Guard (Fail-closed against foreign VPN leak):
         // If device has an active VPN, route the forward request through the physical
         // Iranian cellular network using CellularEgress.
         val vpnActive = appContext != null && com.example.network.CellularEgress.isVpnActive(appContext)
-        val result = if (vpnActive) {
-            val egressSession = com.example.network.CellularEgress.acquire(appContext!!, timeoutMs = 4000L)
-            if (egressSession != null) {
-                egressSession.use { session ->
-                    if (isRelay) {
-                        client.relayGatewaySms(
-                            sender = log.sender,
-                            envelopeText = rawMessage,
-                            config = config,
-                            fastTimeoutMs = fastTimeoutMs,
-                            clientOverride = session.bind(client.httpClient)
-                        )
-                    } else {
-                        client.forwardMessage(
-                            sender = log.sender,
-                            messageBody = rawMessage,
-                            timestamp = log.receivedTimestamp,
-                            config = config,
-                            matchedRule = matchedRule,
-                            simSlot = log.simSlot,
-                            fastTimeoutMs = fastTimeoutMs,
-                            clientOverride = session.bind(client.httpClient)
-                        )
+        val result = try {
+            if (vpnActive) {
+                val egressSession = com.example.network.CellularEgress.acquire(appContext!!, timeoutMs = 4000L)
+                if (egressSession != null) {
+                    egressSession.use { session ->
+                        if (isRelay) {
+                            client.relayGatewaySms(
+                                sender = log.sender,
+                                envelopeText = rawMessage,
+                                config = config,
+                                fastTimeoutMs = fastTimeoutMs,
+                                clientOverride = session.bind(driverHttpClient)
+                            )
+                        } else {
+                            client.forwardMessage(
+                                sender = log.sender,
+                                messageBody = rawMessage,
+                                timestamp = log.receivedTimestamp,
+                                config = config,
+                                matchedRule = matchedRule,
+                                simSlot = log.simSlot,
+                                fastTimeoutMs = fastTimeoutMs,
+                                clientOverride = session.bind(driverHttpClient)
+                            )
+                        }
                     }
+                } else {
+                    TransmissionResult(
+                        isSuccess = false,
+                        httpStatusCode = null,
+                        responseBody = null,
+                        errorMessage = "فیلترشکن روی گوشی فعال است و امکان اتصال مستقیم به شبکه سلولار ایران میسر نشد.",
+                        payloadSent = "",
+                        isEncrypted = false,
+                        durationMs = 0L,
+                        isRetryable = true
+                    )
                 }
             } else {
-                TransmissionResult(
-                    isSuccess = false,
-                    httpStatusCode = null,
-                    responseBody = null,
-                    errorMessage = "فیلترشکن روی گوشی فعال است و امکان اتصال مستقیم به شبکه سلولار ایران میسر نشد.",
-                    payloadSent = "",
-                    isEncrypted = false,
-                    durationMs = 0L,
-                    isRetryable = true
-                )
+                if (isRelay) {
+                    client.relayGatewaySms(
+                        sender = log.sender,
+                        envelopeText = rawMessage,
+                        config = config,
+                        fastTimeoutMs = fastTimeoutMs,
+                        clientOverride = driverHttpClient
+                    )
+                } else {
+                    client.forwardMessage(
+                        sender = log.sender,
+                        messageBody = rawMessage,
+                        timestamp = log.receivedTimestamp,
+                        config = config,
+                        matchedRule = matchedRule,
+                        simSlot = log.simSlot,
+                        fastTimeoutMs = fastTimeoutMs,
+                        clientOverride = driverHttpClient
+                    )
+                }
             }
-        } else {
-            if (isRelay) {
-                client.relayGatewaySms(
-                    sender = log.sender,
-                    envelopeText = rawMessage,
-                    config = config,
-                    fastTimeoutMs = fastTimeoutMs
-                )
-            } else {
-                client.forwardMessage(
-                    sender = log.sender,
-                    messageBody = rawMessage,
-                    timestamp = log.receivedTimestamp,
-                    config = config,
-                    matchedRule = matchedRule,
-                    simSlot = log.simSlot,
-                    fastTimeoutMs = fastTimeoutMs
-                )
+        } catch (t: Throwable) {
+            TransmissionResult(
+                isSuccess = false,
+                httpStatusCode = null,
+                responseBody = null,
+                errorMessage = t.message ?: "Network error",
+                payloadSent = "",
+                isEncrypted = false,
+                durationMs = 0L,
+                isRetryable = true
+            )
+        }
+
+        // 3. Cellular SMS Relay Fallback for Drivers if HTTP fails
+        if (!result.isSuccess && com.example.BuildConfig.APP_ROLE == "DRIVER" &&
+            (config.primarySmsRelayEnabled || config.enableSmsFallback)) {
+            val otpCode = com.example.utils.SmsParser.extractOtp(rawMessage, log.sender)
+            if (otpCode != null && appContext != null &&
+                com.example.utils.PermissionHelper.isSendSmsGranted(appContext)) {
+                val fallbackResult = dispatchGsmRelay(logId, log, config, otpCode, isFallback = true)
+                if (fallbackResult.isSuccess) {
+                    return@withContext fallbackResult
+                }
             }
         }
 
@@ -377,14 +548,87 @@ class SmsForwardRepository(
         }
     }
 
-    suspend fun updateLogStatus(logId: Long, status: ForwardStatus, errorMessage: String? = null) = withContext(Dispatchers.IO) {
+    suspend fun handleSmsDispatchResult(
+        logId: Long, attemptAt: Long, resultCode: Int, delivered: Boolean,
+        deliveryReport: SmsDispatch.DeliveryReport? = null
+    ): Boolean {
+        if (delivered && deliveryReport == null) return false
+        var retry = false
+        var retryImmediately = false
+        var revokeAttempt = false
+        val handled = deliveryLocks.withLock(logId) {
+            withContext(Dispatchers.IO) {
+                val log = database.forwardLogDao().getLogById(logId) ?: return@withContext false
+                if (log.lastRetryTimestamp != attemptAt ||
+                    log.status !in setOf(ForwardStatus.SMS_DISPATCHED, ForwardStatus.SMS_SENT) ||
+                    (!delivered && log.status == ForwardStatus.SMS_SENT)) return@withContext false
+                val expired = !BarProContract.isTimestampAcceptable(log.receivedTimestamp)
+                val failed = if (delivered) deliveryReport == SmsDispatch.DeliveryReport.FAILED
+                    else resultCode != android.app.Activity.RESULT_OK
+                val status = when {
+                    expired -> ForwardStatus.SKIPPED
+                    failed -> ForwardStatus.FAILED
+                    delivered && deliveryReport == SmsDispatch.DeliveryReport.DELIVERED -> ForwardStatus.SUCCESS
+                    else -> ForwardStatus.SMS_SENT
+                }
+                val summary = when {
+                    expired || failed -> null
+                    status == ForwardStatus.SUCCESS -> "شبکه تحویل پیامک به گوشی هاب را تأیید کرد؛ ثبت سرور را در پنل بررسی کنید."
+                    deliveryReport == SmsDispatch.DeliveryReport.PENDING -> "مرکز پیامک در حال تلاش برای تحویل به هاب است؛ رسید نهایی هنوز نرسیده است."
+                    deliveryReport == SmsDispatch.DeliveryReport.UNCONFIRMED -> "وضعیت شبکه دریافت توسط هاب را تأیید نمی‌کند؛ ثبت سرور را در پنل بررسی کنید."
+                    else -> "شبکه ارسال پیامک را تأیید کرد؛ در انتظار رسید تحویل هاب."
+                }
+                val error = when {
+                    expired -> "مهلت کد پایان یافته است."
+                    failed && delivered -> "شبکه تحویل پیامک به هاب را ناموفق اعلام کرد."
+                    failed -> SmsDispatch.errorMessage(resultCode)
+                    else -> null
+                }
+                val recorded = database.forwardLogDao().recordSmsResult(logId, attemptAt, status,
+                    System.currentTimeMillis(), summary, error) == 1
+                if (recorded && !failed && !expired && log.sender == "HEARTBEAT") {
+                    appContext?.getSharedPreferences("barpro_driver_health", Context.MODE_PRIVATE)?.edit()
+                        ?.putLong("last_modem_dispatch_ms", System.currentTimeMillis())?.apply()
+                }
+                revokeAttempt = recorded && (expired || failed || status == ForwardStatus.SUCCESS)
+                retry = recorded && failed && !expired && log.retryCount < com.example.utils.SmsDispatch.MAX_ATTEMPTS
+                retryImmediately = retry && !com.example.utils.SmsDispatch.isNetworkUnavailable(resultCode) &&
+                    (delivered || log.retryCount == 1)
+                recorded
+            }
+        }
+        if (revokeAttempt) {
+            appContext?.let { com.example.utils.SmsDispatch.cancelAttempt(it, logId, attemptAt) }
+        }
+        if (retry) {
+            // Origin-wide loss of radio/service must wait for recovery, not burn every attempt.
+            if (retryImmediately) transmitPendingLog(logId)
+            appContext?.let { com.example.service.SmsSyncWorker.enqueue(it, logId, initialDelayMs = 10_000) }
+        }
+        return handled
+    }
+
+    /** Generic recovery errors may only affect work that has not entered the modem. */
+    suspend fun updateLogStatus(logId: Long, status: ForwardStatus, errorMessage: String? = null) = deliveryLocks.withLock(logId) {
+        withContext(Dispatchers.IO) {
+            val log = database.forwardLogDao().getLogById(logId) ?: return@withContext
+            if (log.status in setOf(ForwardStatus.PENDING, ForwardStatus.FAILED)) {
+                updateClaimedLogStatus(logId, status, errorMessage)
+            }
+        }
+    }
+
+    /** Caller owns this log's delivery lock; expiry cannot race an SMS callback. */
+    private suspend fun updateClaimedLogStatus(logId: Long, status: ForwardStatus, errorMessage: String? = null) = withContext(Dispatchers.IO) {
         val log = database.forwardLogDao().getLogById(logId) ?: return@withContext
         val updated = log.copy(
             status = status,
-            errorMessage = errorMessage ?: log.errorMessage,
-            lastRetryTimestamp = System.currentTimeMillis()
+            errorMessage = errorMessage ?: log.errorMessage
         )
         database.forwardLogDao().updateLog(updated)
+        if (status == ForwardStatus.SKIPPED) log.lastRetryTimestamp?.let { attempt ->
+            appContext?.let { SmsDispatch.cancelAttempt(it, logId, attempt) }
+        }
     }
 
     suspend fun retryForwardLog(log: ForwardLog): ForwardLog = withContext(Dispatchers.IO) {
@@ -400,19 +644,44 @@ class SmsForwardRepository(
      * 4. Sanitizes visible log body and masks OTP.
      * 5. Enqueues SmsSyncWorker via WorkManager passing only the logId.
      */
+    private data class CapturedSms(val log: ForwardLog, val created: Boolean)
+
     suspend fun processIncomingSms(
+        sender: String, messageBody: String,
+        receivedTimestamp: Long = System.currentTimeMillis(), simSlot: String = "SIM 1"
+    ): ForwardLog = withContext(Dispatchers.IO) {
+        val captured = captureIncomingSms(sender, messageBody, receivedTimestamp, simSlot)
+        if (!captured.created) return@withContext captured.log
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER") appContext?.let {
+            com.example.utils.DriverSmsSubscription.remember(it, captured.log.recipientPhone, simSlot)
+        }
+        // Durable recovery precedes the fast attempt, but starts after it normally completes.
+        appContext?.let { com.example.service.SmsSyncWorker.enqueue(it, captured.log.id, initialDelayMs = 5_000) }
+        try {
+            transmitPendingLog(captured.log.id, fastTimeoutMs = 3_000L)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            updateLogStatus(captured.log.id, ForwardStatus.FAILED, "ارسال در صف پایدار باقی ماند؛ دوباره تلاش می‌شود.")
+        }
+        val result = database.forwardLogDao().getLogById(captured.log.id) ?: captured.log
+        synchronized(dedupLock) { recentSmsLogs[captured.log.messageFingerprint] = result }
+        result
+    }
+
+    private suspend fun captureIncomingSms(
         sender: String,
         messageBody: String,
         receivedTimestamp: Long = System.currentTimeMillis(),
         simSlot: String = "SIM 1"
-    ): ForwardLog = ingestionMutex.withLock {
+    ): CapturedSms = ingestionMutex.withLock {
         withContext(Dispatchers.IO) {
         // Driver activation grants RECEIVE_SMS. Notifications lack subscription
         // identity and must not win deduplication over the authoritative receiver.
         if (com.example.BuildConfig.APP_ROLE == "DRIVER" && simSlot == "Notification Listener") {
-            return@withContext ForwardLog(sender = sender, messageBody = LogSanitizer.sanitize(messageBody),
+            return@withContext CapturedSms(ForwardLog(sender = sender, messageBody = LogSanitizer.sanitize(messageBody),
                 receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
-                errorMessage = "در انتظار دریافت مستقیم پیامک و شناسه سیم‌کارت")
+                errorMessage = "در انتظار دریافت مستقیم پیامک و شناسه سیم‌کارت"), false)
         }
         val fingerprint = com.example.utils.SmsParser.computeFingerprint(sender, messageBody)
         val now = System.currentTimeMillis()
@@ -426,7 +695,7 @@ class SmsForwardRepository(
                         TAG,
                         "Dual-capture redundant SMS ignored within ${now - lastSeen}ms | Sender: $sender | Cached Log ID: ${cached.id}"
                     )
-                    return@withContext cached
+                    return@withContext CapturedSms(cached, false)
                 }
             }
             recentSmsTimestamps[fingerprint] = now
@@ -459,13 +728,13 @@ class SmsForwardRepository(
                 val resultLog = log.copy(id = id)
                 synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
                 android.util.Log.w(TAG, "Rejected BP1 envelope with invalid HMAC from $sender")
-                return@withContext resultLog
+                return@withContext CapturedSms(resultLog, false)
             }
         }
 
         val recipient = if (isRelay) relayEnvelope!!.phone else com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
         database.forwardLogDao().findRecentCapture(fingerprint, recipient, receivedTimestamp - DEDUP_WINDOW_MS)
-            ?.let { return@withContext it }
+            ?.let { return@withContext CapturedSms(it, false) }
 
         // 0. If filterUtcmsOnly is enabled, check if SMS is UTCMS/BarPro related (or valid signed relay envelope)
         if (config.filterUtcmsOnly && !isRelay && !com.example.utils.SmsParser.isUtcmsSms(sender, messageBody)) {
@@ -484,7 +753,7 @@ class SmsForwardRepository(
             val id = database.forwardLogDao().insertLog(log)
             val resultLog = log.copy(id = id)
             synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
-            return@withContext resultLog
+            return@withContext CapturedSms(resultLog, false)
         }
 
         // 1. Check if master toggle is enabled
@@ -505,7 +774,7 @@ class SmsForwardRepository(
             val id = database.forwardLogDao().insertLog(log)
             val resultLog = log.copy(id = id)
             synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
-            return@withContext resultLog
+            return@withContext CapturedSms(resultLog, false)
         }
 
         // 2. Check filter rules if in SPECIFIC_RULES_ONLY mode
@@ -530,7 +799,7 @@ class SmsForwardRepository(
                 val id = database.forwardLogDao().insertLog(log)
                 val resultLog = log.copy(id = id)
                 synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
-                return@withContext resultLog
+                return@withContext CapturedSms(resultLog, false)
             }
         }
 
@@ -542,7 +811,7 @@ class SmsForwardRepository(
             val skipped = ForwardLog(sender = sender, messageBody = LogSanitizer.sanitize(messageBody),
                 receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
                 errorMessage = "این پیامک کد OTP معتبر برای بارپرو ندارد.", smsType = smsType)
-            return@withContext skipped.copy(id = database.forwardLogDao().insertLog(skipped))
+            return@withContext CapturedSms(skipped.copy(id = database.forwardLogDao().insertLog(skipped)), false)
         }
         val outboxKey = requireNotNull(secureStorage) { "Secure storage unavailable" }.getOrCreateOutboxKey()
         val enc = AesEncryptionUtils.encrypt(messageBody, outboxKey)
@@ -578,164 +847,7 @@ class SmsForwardRepository(
             recentSmsLogs[fingerprint] = insertedLog
         }
 
-        // Persist work before the fast attempt so process death cannot strand the outbox.
-        val ctx = appContext
-        if (ctx != null) com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
-
-        // Zero-Latency Direct Push (Fast-Path):
-        // Since OTP codes have a strict 5-minute validity window, attempt immediate network transmission
-        // right inside the active Coroutine / WakeLock.
-        // 1. Proactively check if valid internet is available via ConnectivityManager.
-        // 2. If completely offline or unvalidated, bypass socket delay and dispatch SMS Fallback in 0ms!
-        // 3. If online, attempt HTTP forward with a strict Fast-Path timeout (1,500ms).
-        // 4. If HTTP fails or times out, immediately relay code via SMS to the server GSM modem.
-        var finalLog = insertedLog
-        val codeToSend = extractedOtp
-        val slotIndex = if (simSlot.contains("2")) 1 else if (simSlot.contains("1")) 0 else -1
-        val sourceSubscription = com.example.utils.DriverSmsSubscription.id(simSlot)
-        if (com.example.BuildConfig.APP_ROLE == "DRIVER" && !isRelay && ctx != null) {
-            com.example.utils.DriverSmsSubscription.remember(ctx, recipient, simSlot)
-        }
-
-        // -------------------------------------------------------------------------
-        // PRIMARY SMS RELAY (0ms instantaneous modem handover)
-        // If primarySmsRelayEnabled is active (or in DRIVER mode), dispatch encrypted SMS envelope
-        // immediately to carrier-matched Hub SIM with automatic failover.
-        // -------------------------------------------------------------------------
-        var smsRelayHandedToModem = false
-        val isDriverApp = com.example.BuildConfig.APP_ROLE == "DRIVER"
-        // Successful enrollment overrides fleet build defaults for OTP, retry and health alike.
-        val hubNumbers = com.example.enrollment.EnrollmentContract.hubNumbers(config,
-            com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
-
-        // Resolve driver phone: prioritize configured phone, then device SIM MSISDN
-        val resolvedDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
-            .ifBlank { if (ctx != null) com.example.utils.CarrierDetector.detectPhoneNumberFromDevice(ctx) else "" }
-
-        val hubRoute = com.example.utils.CarrierDetector.resolveRoute(
-            driverPhone = resolvedDriverPhone,
-            hubMciNumber = hubNumbers.mci,
-            hubIrancellNumber = hubNumbers.irancell,
-            context = ctx
-        )
-        val primaryHubNumber = if (hubRoute.primaryNumber.isNotBlank()) hubRoute.primaryNumber else config.fallbackServerPhoneNumber
-        val failoverHubNumber = hubRoute.failoverNumber
-
-        val isDriverPhoneValid = resolvedDriverPhone.matches(Regex("09[0-9]{9}"))
-        val canSendSms = !codeToSend.isNullOrBlank() &&
-            isDriverPhoneValid &&
-            (primaryHubNumber.isNotBlank() || config.fallbackServerPhoneNumber.isNotBlank()) &&
-            ctx != null
-
-        val dispatchSmsToHub: () -> Boolean = {
-            if (!canSendSms || primaryHubNumber.isBlank()) {
-                false
-            } else {
-                var sent = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                    context = ctx,
-                    destinationPhone = primaryHubNumber,
-                    driverId = config.driverId,
-                    driverPhone = resolvedDriverPhone,
-                    code = codeToSend,
-                    smsType = smsType.name,
-                    simSlot = slotIndex,
-                    subscriptionId = sourceSubscription,
-                    receivedTimestamp = receivedTimestamp,
-                    webhookSecret = BarProContract.token(config)
-                )
-                if (!sent && failoverHubNumber.isNotBlank() && failoverHubNumber != primaryHubNumber) {
-                    android.util.Log.w(TAG, "Primary Hub number failed; retrying with failover Hub number (${LogSanitizer.maskPhone(failoverHubNumber)})...")
-                    sent = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                        context = ctx,
-                        destinationPhone = failoverHubNumber,
-                        driverId = config.driverId,
-                        driverPhone = resolvedDriverPhone,
-                        code = codeToSend,
-                        smsType = smsType.name,
-                        simSlot = slotIndex,
-                        subscriptionId = sourceSubscription,
-                        receivedTimestamp = receivedTimestamp,
-                        webhookSecret = BarProContract.token(config)
-                    )
-                }
-                sent
-            }
-        }
-
-        val shouldSendSmsRelay = (config.primarySmsRelayEnabled || isDriverApp) && canSendSms
-        if (shouldSendSmsRelay && !isRelay) {
-            android.util.Log.i(TAG, "SMS Relay active: Sending instantaneous SMS to gateway (${LogSanitizer.maskPhone(primaryHubNumber)})...")
-            smsRelayHandedToModem = dispatchSmsToHub()
-            if (smsRelayHandedToModem) {
-                android.util.Log.i(TAG, "Primary SMS relay successfully handed to the device modem (0ms delay)")
-                if (isDriverApp) {
-                    updateLogStatus(insertedLog.id, ForwardStatus.SUCCESS, "پیامک تحویل مودم شد؛ دریافت هاب و سرور تأیید نشده است.")
-                    finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
-                    synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
-                    return@withContext finalLog
-                }
-            }
-        }
-
-        if (isDriverApp) {
-            updateLogStatus(insertedLog.id, ForwardStatus.FAILED, "ارسال GSM انجام نشد؛ پیامک در صف تلاش مجدد است.")
-            finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
-            synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
-            return@withContext finalLog
-        }
-
-        // Check active network capability for parallel or fallback HTTP delivery
-        val cm = ctx?.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-        val activeNet = cm?.activeNetwork
-        val netCaps = cm?.getNetworkCapabilities(activeNet)
-        val isFastOnline = netCaps != null &&
-                netCaps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                netCaps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-
-        if (!isFastOnline) {
-            // IMMEDIATE OFFLINE FALLBACK (Zero socket delay)
-            android.util.Log.i(TAG, "Device is offline/unvalidated.")
-            if (ctx != null) {
-                if (!smsRelayHandedToModem && config.enableSmsFallback && canSendSms) {
-                    val smsSuccess = dispatchSmsToHub()
-                    if (smsSuccess) {
-                        android.util.Log.i(TAG, "SMS fallback handed to the device modem; delivery unconfirmed")
-                    }
-                }
-                // Enqueue WorkManager for guaranteed HTTP outbox sync once internet reconnects
-                com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
-            }
-        } else {
-            // FAST ONLINE ATTEMPT (Strict 1.5s timeout)
-            try {
-                val directResult = transmitPendingLog(insertedLog.id, fastTimeoutMs = 1500L)
-                if (directResult.isSuccess) {
-                    finalLog = database.forwardLogDao().getLogById(insertedLog.id) ?: insertedLog
-                    synchronized(dedupLock) { recentSmsLogs[fingerprint] = finalLog }
-                    android.util.Log.i(TAG, "Fast-path immediate delivery succeeded for Log #${insertedLog.id} in ${directResult.durationMs}ms")
-                } else {
-                    // HTTP failed or timed out: trigger emergency SMS Fallback if not already relayed
-                    android.util.Log.w(TAG, "Fast-path HTTP failed (${directResult.errorMessage}).")
-                    if (!smsRelayHandedToModem && (config.primarySmsRelayEnabled || config.enableSmsFallback) && canSendSms) {
-                        val smsSuccess = dispatchSmsToHub()
-                        if (smsSuccess) {
-                            android.util.Log.i(TAG, "SMS fallback handed to the device modem; delivery unconfirmed")
-                        }
-                    }
-                    com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "Fast-path attempt failed (${e.message})")
-                if (!smsRelayHandedToModem && (config.primarySmsRelayEnabled || config.enableSmsFallback) && canSendSms) {
-                    dispatchSmsToHub()
-                }
-                com.example.service.SmsSyncWorker.enqueue(ctx, insertedLog.id)
-            }
-        }
-
-        finalLog
+        CapturedSms(insertedLog, true)
         }
     }
 
@@ -907,7 +1019,7 @@ class SmsForwardRepository(
             ServerHealthMonitor.recordSuccess(context, config.endpointUrl, result.durationMs)
 
             if (config.enableAutoOfflineSync && pendingFailedCount > 0) {
-                syncOfflinePendingLogs()
+                com.example.service.SmsSyncWorker.enqueueBatchSync(context)
             }
         } else {
             ServerHealthMonitor.recordFailure(context, config.endpointUrl, result.errorMessage, config)
@@ -921,24 +1033,24 @@ class SmsForwardRepository(
         if (!config.isMasterEnabled || !config.userConsentGiven ||
             !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context) ||
             BarProContract.configurationError(config) != null) return@withLock false
-        val prefs = context.getSharedPreferences("barpro_driver_health", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        // Immediate activation and the first periodic service tick must not send duplicate SMS.
+        val prefs = context.getSharedPreferences("barpro_driver_health", Context.MODE_PRIVATE)
         val previous = prefs.getLong("last_modem_dispatch_ms", 0)
-        if (now - previous in 0 until config.healthCheckIntervalMinutes.coerceIn(1, 60) * 60_000L) return@withLock false
-        val hubs = com.example.enrollment.EnrollmentContract.hubNumbers(config,
-            com.example.BuildConfig.DEFAULT_HUB_PHONE_MCI, com.example.BuildConfig.DEFAULT_HUB_PHONE_IRANCELL)
-        val route = com.example.utils.CarrierDetector.resolveRoute(config.driverPhone, hubs.mci, hubs.irancell, context)
-        fun send(number: String): Boolean = com.example.utils.SmsRelayHelper.sendFallbackSms(
-            context = context, destinationPhone = number, driverId = config.driverId,
-            driverPhone = config.driverPhone, code = "HEALTH_CHECK", receivedTimestamp = now,
-            webhookSecret = BarProContract.token(config),
-            subscriptionId = com.example.utils.DriverSmsSubscription.known(context, config.driverPhone)
-        )
-        val dispatched = send(route.primaryNumber) ||
-            (route.failoverNumber != route.primaryNumber && send(route.failoverNumber))
-        if (dispatched) prefs.edit().putLong("last_modem_dispatch_ms", now).apply()
-        dispatched
+        val minimum = config.healthCheckIntervalMinutes.coerceIn(1, 60) * 60_000L - 30_000L
+        if (now - previous in 0 until minimum) return@withLock false
+        val phone = com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone)
+        val existing = database.forwardLogDao().getRecentDriverHeartbeat(phone, now - BarProContract.OTP_TTL_MS)
+        if (existing != null && existing.status in setOf(ForwardStatus.PENDING, ForwardStatus.FAILED, ForwardStatus.SMS_DISPATCHED)) {
+            return@withLock transmitPendingLog(existing.id).isSuccess
+        }
+        val enc = AesEncryptionUtils.encrypt("HEALTH_CHECK", requireNotNull(secureStorage).getOrCreateOutboxKey())
+        val subscription = com.example.utils.DriverSmsSubscription.known(context, phone)
+        val log = ForwardLog(sender = "HEARTBEAT", messageBody = "پیامک سلامت راننده", receivedTimestamp = now,
+            recipientPhone = phone, matchedRuleLabel = "سلامت راننده", simSlot = if (subscription >= 0) "SIM (Sub #$subscription)" else "SIM -1",
+            encryptedBody = "v2:${enc.iv}:${enc.ciphertext}",
+            messageFingerprint = com.example.utils.SmsParser.computeFingerprint("HEARTBEAT", "$phone:$now"))
+        val id = database.forwardLogDao().insertLog(log)
+        transmitPendingLog(id).isSuccess
     }
 
     /**

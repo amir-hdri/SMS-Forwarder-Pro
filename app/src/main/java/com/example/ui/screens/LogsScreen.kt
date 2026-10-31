@@ -113,7 +113,7 @@ fun LogsScreen(
         ForwardStatus.SUCCESS -> 1
         ForwardStatus.FAILED -> 2
         ForwardStatus.SKIPPED -> 3
-        ForwardStatus.PENDING -> 4
+        ForwardStatus.PENDING, ForwardStatus.SMS_DISPATCHED, ForwardStatus.SMS_SENT -> 4
     }
 
     Column(
@@ -340,7 +340,7 @@ private fun LogCardItem(
                                     ForwardStatus.SUCCESS -> Emerald400
                                     ForwardStatus.FAILED -> Rose400
                                     ForwardStatus.SKIPPED -> Slate400
-                                    ForwardStatus.PENDING -> Sky400
+                                    ForwardStatus.PENDING, ForwardStatus.SMS_DISPATCHED, ForwardStatus.SMS_SENT -> Sky400
                                 }
                             )
                     )

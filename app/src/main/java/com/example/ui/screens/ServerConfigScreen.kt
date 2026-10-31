@@ -97,8 +97,15 @@ fun ServerConfigScreen(
     onTestDisconnectNotification: () -> Unit,
     onTestCryptoSandbox: (plaintext: String, secretKey: String) -> Unit,
     onGenerateKey: () -> String,
-    onOpenServerGuide: () -> Unit
+    onOpenServerGuide: () -> Unit,
+    onToggleMaster: (Boolean) -> Unit = { enabled -> onSaveConfig(config.copy(isMasterEnabled = enabled, userConsentGiven = enabled)) },
+    onOpenPermissions: () -> Unit = {},
+    onOpenBackgroundGuide: () -> Unit = {}
 ) {
+    if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
+        ManagedDriverScreen(config, onToggleMaster, onOpenPermissions, onOpenBackgroundGuide)
+        return
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val probeScope = rememberCoroutineScope()

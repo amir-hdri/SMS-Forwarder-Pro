@@ -51,6 +51,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -164,20 +165,44 @@ fun MainAppScreen(viewModel: MainViewModel) {
     val isOfflineSyncing by viewModel.isOfflineSyncing.collectAsState()
     val offlineSyncMessage by viewModel.offlineSyncMessage.collectAsState()
     val enrollmentStatus by viewModel.enrollmentStatus.collectAsState()
+    val secureStorageError by viewModel.secureStorageError.collectAsState()
 
     val context = LocalContext.current
+    val isDriver = BuildConfig.APP_ROLE == "DRIVER"
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshEnrollmentPermissions()
+                viewModel.refreshBackgroundRecovery()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    var requestedBatteryExemption by remember { mutableStateOf(false) }
+    fun requestBackgroundIfNeeded() {
+        if (!requestedBatteryExemption && com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context) &&
+            !com.example.utils.PermissionHelper.isBatteryOptimizationIgnored(context)) {
+            requestedBatteryExemption = true
+            com.example.utils.PermissionHelper.requestBatteryOptimization(context)
+        }
+    }
     var requestingPermissions by remember { mutableStateOf(false) }
     val initialPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
         requestingPermissions = false
         viewModel.refreshEnrollmentPermissions()
+        requestBackgroundIfNeeded()
     }
 
     LaunchedEffect(Unit) {
         if (!com.example.utils.PermissionHelper.areCriticalPermissionsGranted(context)) {
             requestingPermissions = true
             initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+        } else {
+            requestBackgroundIfNeeded()
         }
     }
 
@@ -185,6 +210,9 @@ fun MainAppScreen(viewModel: MainViewModel) {
         if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS && !requestingPermissions) {
             requestingPermissions = true
             initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+        }
+        if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.ACTIVE) {
+            requestBackgroundIfNeeded()
         }
         val message = when (enrollmentStatus) {
             com.example.enrollment.EnrollmentStatus.ACTIVATING -> "در حال فعال‌سازی امن از پنل بارپرو…"
@@ -313,6 +341,9 @@ fun MainAppScreen(viewModel: MainViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            secureStorageError?.let { message ->
+                SecureStorageFailureCard(message, viewModel::retrySecureStorage)
+            }
             if (enrollmentStatus != com.example.enrollment.EnrollmentStatus.IDLE) {
                 Card(modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("enrollment_status")) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -331,7 +362,14 @@ fun MainAppScreen(viewModel: MainViewModel) {
                     }
                 }
             }
-            DashboardScreen(
+            if (isDriver) {
+                com.example.ui.screens.ManagedDriverScreen(
+                    config = config, pendingCount = pendingCount,
+                    onToggleMaster = { viewModel.toggleMasterSwitch(it) },
+                    onOpenPermissions = { showPermissionsDialog = true },
+                    onOpenBackgroundGuide = { showBackgroundGuideSheet = true }
+                )
+            } else DashboardScreen(
                 config = config,
                 serverHealthState = serverHealthState,
                 totalCount = totalLogsCount,
@@ -358,7 +396,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
     }
 
     // Modal: OTP Inquiry
-    if (showOtpInquiryDialog) {
+    if (showOtpInquiryDialog && !isDriver) {
         OtpInquiryDialog(
             activeRules = rules.filter { it.isEnabled },
             isLoading = isOtpInquiryLoading,
@@ -374,7 +412,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
     }
 
     // Modal: Test SMS
-    if (showSimulateDialog) {
+    if (showSimulateDialog && !isDriver) {
         TestSmsDialog(
             lastSimulatedLog = simulatedLogResult,
             onSimulate = { sender, msg ->
@@ -404,7 +442,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
     }
 
     // Modal: Server Guide
-    if (showServerGuideSheet) {
+    if (showServerGuideSheet && !isDriver) {
         ServerGuideSheet(
             secretKey = config.secretEncryptionKey,
             onDismiss = { showServerGuideSheet = false }
@@ -449,6 +487,9 @@ fun MainAppScreen(viewModel: MainViewModel) {
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                secureStorageError?.let { message ->
+                    SecureStorageFailureCard(message, viewModel::retrySecureStorage)
+                }
                 ServerConfigScreen(
                     config = config,
                     serverHealthState = serverHealthState,
@@ -464,7 +505,10 @@ fun MainAppScreen(viewModel: MainViewModel) {
                         viewModel.testCryptoSandbox(plain, secret)
                     },
                     onGenerateKey = { viewModel.generateNewKey() },
-                    onOpenServerGuide = { showServerGuideSheet = true }
+                    onOpenServerGuide = { if (!isDriver) showServerGuideSheet = true },
+                    onToggleMaster = { viewModel.toggleMasterSwitch(it) },
+                    onOpenPermissions = { showServerSettingsSheet = false; showPermissionsDialog = true },
+                    onOpenBackgroundGuide = { showServerSettingsSheet = false; showBackgroundGuideSheet = true }
                 )
             }
         }
@@ -480,6 +524,17 @@ fun MainAppScreen(viewModel: MainViewModel) {
             },
             onDismiss = { selectedLogForDetail = null }
         )
+    }
+}
+
+@Composable
+private fun SecureStorageFailureCard(message: String, onRetry: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("secure_storage_error")) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(message)
+            Text("مشخصات و پیامک‌های ذخیره‌شده حفظ شده‌اند. پس از رفع خطا، ارسال را دوباره فعال کنید.")
+            Button(onClick = onRetry) { Text("تلاش دوباره برای ذخیره‌سازی امن") }
+        }
     }
 }
 

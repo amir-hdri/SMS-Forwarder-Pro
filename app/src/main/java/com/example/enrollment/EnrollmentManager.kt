@@ -1,6 +1,7 @@
 package com.example.enrollment
 
 import com.example.data.model.ForwardConfig
+import com.example.utils.SmsParser
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,12 +22,45 @@ class EnrollmentManager(
     private val stage: (String?) -> Unit,
     private val loadStage: () -> String?,
     private val permissionsGranted: () -> Boolean,
-    private val onActivated: suspend () -> Unit
+    private val onActivated: suspend () -> Unit,
+    private val resolve: suspend (phone: String, deviceId: String) -> EnrollmentCredentials = { phone, devId ->
+        EnrollmentClient().resolve(phone, EnrollmentContract.trustedServer(defaultEndpoint), devId)
+    }
 ) {
     private val mutex = Mutex()
     private val attempted = mutableSetOf<String>()
     private val mutableStatus = MutableStateFlow(EnrollmentStatus.IDLE)
     val status = mutableStatus.asStateFlow()
+    private val mutableErrorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = mutableErrorMessage.asStateFlow()
+
+    /**
+     * Automated resolution triggered by entering the driver's phone number.
+     * Queries BarPro /api/v1/otp/resolve-driver, parses credentials, stages to Keystore,
+     * and atomically activates forwarding.
+     */
+    suspend fun resolveDriverConfiguration(driverPhone: String, baseUrl: String? = null) = mutex.withLock {
+        try {
+            require(role == "DRIVER") { "تنها در حالت راننده (DRIVER) امکان فعال‌سازی وجود دارد." }
+            val cleanPhone = SmsParser.normalizePhoneNumber(driverPhone)
+            require(cleanPhone.matches(Regex("09[0-9]{9}"))) {
+                "شماره موبایل وارد شده معتبر نمی‌باشد (فرمت صحیح: 09xxxxxxxxx)"
+            }
+
+            mutableErrorMessage.value = null
+            mutableStatus.value = EnrollmentStatus.ACTIVATING
+
+            val credential = resolve(cleanPhone, deviceId())
+            // Pending secrets use Keystore storage; Room stays untouched until activation
+            stage(credential.document())
+            activatePending()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            mutableErrorMessage.value = error.message ?: "خطا در استعلام مشخصات راننده از سرور"
+            mutableStatus.value = EnrollmentStatus.FAILED
+        }
+    }
 
     suspend fun receive(value: String) = mutex.withLock {
         try {
@@ -42,7 +76,8 @@ class EnrollmentManager(
             activatePending()
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            mutableErrorMessage.value = error.message
             mutableStatus.value = EnrollmentStatus.FAILED
         }
     }
@@ -52,7 +87,8 @@ class EnrollmentManager(
             if (role == "DRIVER" && loadStage() != null) activatePending()
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            mutableErrorMessage.value = error.message
             mutableStatus.value = EnrollmentStatus.FAILED
         }
     }
@@ -72,6 +108,7 @@ class EnrollmentManager(
             throw error
         }
         mutableStatus.value = EnrollmentStatus.ACTIVE
+        mutableErrorMessage.value = null
         try { stage(null) } catch (_: Exception) {
             // A retained stage can be recovered; the validated configuration is already installed.
         }

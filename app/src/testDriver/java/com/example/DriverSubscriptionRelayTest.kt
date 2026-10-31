@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = Application::class)
 class DriverSubscriptionRelayTest {
+    @get:org.junit.Rule val secureStorage = SecureStorageTestRule()
     private fun manager(context: Application, id: Int? = null): SmsManager =
         if (android.os.Build.VERSION.SDK_INT >= 31) {
             val default = context.getSystemService(SmsManager::class.java)
@@ -152,7 +153,7 @@ class DriverSubscriptionRelayTest {
             assertEquals("Notification capture must wait for SMS_RECEIVED", com.example.data.model.ForwardStatus.SKIPPED, notification.status)
             assertNull(shadowOf(manager(context)).lastSentTextMessageParams)
             val authoritative = repository.processIncomingSms("20007777", "کد تایید: 67890", time, "SIM 2 (Sub #17)")
-            assertEquals(com.example.data.model.ForwardStatus.SUCCESS, authoritative.status)
+            assertEquals(com.example.data.model.ForwardStatus.SMS_DISPATCHED, authoritative.status)
             assertNotNull(shadowOf(manager(context, 17)).lastSentTextMessageParams)
         } finally { database.close() }
     }

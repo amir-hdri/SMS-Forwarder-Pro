@@ -36,9 +36,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".SmsForwarderApp"
@@ -106,12 +108,24 @@
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
 
+        <!-- CPU-Wakeup periodic keepalive receiver for Doze mode resilience -->
+        <receiver
+            android:name=".service.HeartbeatAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.service.ACTION_HEARTBEAT_ALARM" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".service.SmsResultReceiver" android:enabled="true" android:exported="false" />
+
         <!-- Foreground Service for Continuous SMS Forwarding & Health Monitoring -->
         <service
             android:name=".service.SmsForwarderService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="remoteMessaging|dataSync" />
 
         <!-- Notification Listener Service for capturing incoming SMS from system notifications -->
         <service

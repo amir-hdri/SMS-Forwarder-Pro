@@ -59,7 +59,7 @@ object EnrollmentContract {
     fun trustedServer(defaultEndpoint: String): HttpUrl {
         val url = requireNotNull(defaultEndpoint.toHttpUrlOrNull()) { "Enrollment unavailable" }
         require(url.username.isEmpty() && url.password.isEmpty() && url.query == null && url.fragment == null)
-        return url.newBuilder().encodedPath("/").build()
+        return com.example.network.ManagedTransport.canonical(url).newBuilder().encodedPath("/").build()
     }
 
     fun parseLink(value: String, defaultEndpoint: String): EnrollmentLink {
@@ -76,7 +76,7 @@ object EnrollmentContract {
         require(fields.size == 2 && fields.map { it.first }.toSet() == setOf("ticket", "server"))
         val ticket = fields.single { it.first == "ticket" }.second
         require(ticket.length in 20..1024 && ticket.all { it.code in 33..126 })
-        val server = requireNotNull(fields.single { it.first == "server" }.second.toHttpUrlOrNull())
+        val server = com.example.network.ManagedTransport.canonical(requireNotNull(fields.single { it.first == "server" }.second.toHttpUrlOrNull()))
         require(server.username.isEmpty() && server.password.isEmpty() && server.query == null &&
             server.fragment == null && server.encodedPath == "/")
         require(origin(server) == origin(trustedServer(defaultEndpoint))) { "Untrusted activation server" }
@@ -91,8 +91,8 @@ object EnrollmentContract {
         require(phone.matches(Regex("09[0-9]{9}")))
         val token = json.getString("webhook_token")
         require(token.matches(Regex("[0-9a-f]{64}")))
-        val endpoint = requireNotNull(json.getString("endpoint_url").toHttpUrlOrNull())
-        require(origin(endpoint) == origin(server) && endpoint.username.isEmpty() && endpoint.password.isEmpty() &&
+        val endpoint = com.example.network.ManagedTransport.canonical(requireNotNull(json.getString("endpoint_url").toHttpUrlOrNull()))
+        require(origin(endpoint) == origin(com.example.network.ManagedTransport.canonical(server)) && endpoint.username.isEmpty() && endpoint.password.isEmpty() &&
             endpoint.query == null && endpoint.fragment == null)
         // Scoped credentials are never sent to a global or Hub webhook.
         require(endpoint.encodedPath == "${BarProContract.PATH}/$phone")

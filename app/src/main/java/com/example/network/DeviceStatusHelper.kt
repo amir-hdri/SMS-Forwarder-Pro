@@ -6,12 +6,14 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import com.example.utils.PermissionHelper
 
 data class DeviceStatus(
     val batteryPercent: Int,
     val isCharging: Boolean,
     val networkType: String,
-    val isConnected: Boolean
+    val isConnected: Boolean,
+    val permissions: Map<String, Boolean> = emptyMap()
 )
 
 object DeviceStatusHelper {
@@ -67,7 +69,12 @@ object DeviceStatusHelper {
             batteryPercent = if (batteryPercent >= 0) batteryPercent else 100,
             isCharging = isCharging,
             networkType = networkType,
-            isConnected = isConnected
+            isConnected = isConnected,
+            permissions = mapOf(
+                "receive_sms" to PermissionHelper.isReceiveSmsGranted(context),
+                "send_sms" to PermissionHelper.isSendSmsGranted(context),
+                "battery_optimization_ignored" to PermissionHelper.isBatteryOptimizationIgnored(context)
+            )
         )
     }
 }

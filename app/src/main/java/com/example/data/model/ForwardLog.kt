@@ -8,7 +8,9 @@ enum class ForwardStatus {
     SUCCESS,
     FAILED,
     SKIPPED,
-    PENDING
+    PENDING,
+    SMS_DISPATCHED,
+    SMS_SENT
 }
 
 enum class SmsType {

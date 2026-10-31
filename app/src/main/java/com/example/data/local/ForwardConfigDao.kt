@@ -16,6 +16,9 @@ interface ForwardConfigDao {
     @Query("SELECT * FROM app_config WHERE id = 1 LIMIT 1")
     suspend fun getConfig(): ForwardConfig?
 
+    @Query("UPDATE app_config SET isMasterEnabled = 0, userConsentGiven = 0 WHERE id = 1")
+    suspend fun disableForStorageFailure(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(config: ForwardConfig)
 

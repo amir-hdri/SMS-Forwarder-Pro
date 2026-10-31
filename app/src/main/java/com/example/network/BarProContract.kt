@@ -56,7 +56,7 @@ object BarProContract {
     }
 
     fun configurationError(config: ForwardConfig, requireRecipient: Boolean = true): String? {
-        val url = config.endpointUrl.trim().toHttpUrlOrNull()
+        val url = config.endpointUrl.trim().toHttpUrlOrNull()?.let { ManagedTransport.canonical(it) }
             ?: return "آدرس کامل وب‌هوک بارپرو را وارد کنید."
         // BarPro serves plain HTTP today, so cleartext is reachable — but only after the operator
         // has explicitly accepted it. Defaulting to "off" keeps an http:// endpoint from ever being

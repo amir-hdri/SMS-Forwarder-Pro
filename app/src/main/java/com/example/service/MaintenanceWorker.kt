@@ -15,13 +15,17 @@ import java.util.concurrent.TimeUnit
 /** Recovery and retention continue after foreground-service timeouts and reboots. */
 class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
+        HeartbeatAlarmManager.scheduleNext(applicationContext)
         AppDatabase.getDatabase(applicationContext).forwardLogDao()
             .clearExpiredPayloads(System.currentTimeMillis() - (BarProContract.OTP_TTL_MS + BarProContract.IRAN_DST_OFFSET_MS))
         val repository = SmsForwardRepository.getInstance(applicationContext)
         val config = repository.getConfig()
         if (config.isMasterEnabled && config.userConsentGiven) {
+            HeartbeatAlarmManager.scheduleNext(applicationContext, config.healthCheckIntervalMinutes)
             SmsSyncWorker.enqueueBatchSync(applicationContext)
             repository.performHeartbeatAndCommandPoll()
+        } else {
+            HeartbeatAlarmManager.cancel(applicationContext)
         }
 
         // Periodic Remote Config check (safe overlay, no driver intervention)

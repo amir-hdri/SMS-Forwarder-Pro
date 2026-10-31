@@ -54,6 +54,7 @@ class SmsForwarderService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
+            HeartbeatAlarmManager.cancel(this)
             ServerHealthMonitor.stopPeriodicMonitoring(this)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -61,7 +62,13 @@ class SmsForwarderService : Service() {
         }
 
         val notification = buildForegroundNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
@@ -81,6 +88,8 @@ class SmsForwarderService : Service() {
             }
         )
 
+        HeartbeatAlarmManager.scheduleNext(applicationContext)
+
         return START_STICKY
     }
 
@@ -90,7 +99,8 @@ class SmsForwarderService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        // Android 15 limits dataSync foreground time; SMS broadcasts/WorkManager remain active.
+        // Android 15 limits dataSync foreground time; AlarmManager and WorkManager keep liveness active.
+        HeartbeatAlarmManager.scheduleNext(applicationContext)
         MaintenanceWorker.schedule(applicationContext)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()

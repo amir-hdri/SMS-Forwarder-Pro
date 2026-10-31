@@ -41,12 +41,12 @@ class EnrollmentTest {
     @Test fun validFragmentPreservesOpaqueTicketAndPinsOrigin() {
         val parsed = EnrollmentContract.parseLink(link(value = "opaque-ticket-with-&=+/characters"), endpoint)
         assertEquals("opaque-ticket-with-&=+/characters", parsed.ticket)
-        assertEquals("$server/", parsed.server.toString())
+        assertEquals("https://87.107.160.251/", parsed.server.toString())
         assertFalse(parsed.toString().contains("opaque-ticket"))
     }
 
     @Test fun linksRejectUntrustedServersAndAmbiguousOrQueryCredentials() {
-        for (base in listOf("https://87.107.160.251", "http://evil.test", "http://87.107.160.251.evil.test",
+        for (base in listOf("https://87.107.160.251:444", "http://evil.test", "http://87.107.160.251.evil.test",
             "http://87.107.160.251:8080", "$server/path", "$server?secret=x", "$server#x", "http://user@87.107.160.251")) {
             reject { EnrollmentContract.parseLink(link(base), endpoint) }
         }
@@ -209,7 +209,7 @@ class EnrollmentTest {
         assertEquals(token, credential.webhookToken)
         val request = requests.single()
         assertEquals("POST", request.method)
-        assertEquals("$server/api/v1/otp/enroll", request.url.toString())
+        assertEquals("https://87.107.160.251/api/v1/otp/enroll", request.url.toString())
         assertNull(request.url.query)
         assertNull(request.header("X-OTP-Webhook-Token"))
         val buffer = Buffer(); request.body!!.writeTo(buffer)

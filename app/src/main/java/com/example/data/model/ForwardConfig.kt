@@ -20,7 +20,7 @@ data class ForwardConfig(
     @PrimaryKey
     val id: Int = 1, // Single row configuration
     val isMasterEnabled: Boolean = false,
-    val endpointUrl: String = "http://87.107.160.251/api/v1/otp/sms-forwarder",
+    val endpointUrl: String = "https://87.107.160.251/api/v1/otp/sms-forwarder",
     val authType: AuthType = AuthType.CUSTOM_HEADER,
     val authHeaderKey: String = "X-OTP-Webhook-Token",
     val authHeaderValue: String = "",
@@ -66,11 +66,10 @@ data class ForwardConfig(
     /**
      * Explicit operator acknowledgement that the endpoint is plain HTTP.
      *
-     * HTTP on port 80 is the chosen transport for the BarPro deployment, so this is normally on in
-     * production. It still defaults to false so a cleartext endpoint can never be reached by a
-     * typo: the setup screen must show the warning and the operator must accept it. The `BP1#...`
-     * envelope stays HMAC-authenticated either way, but the webhook token and the OTP are not
-     * encrypted in transit — restricting network access to the gateway is part of the design.
+     * Retained for reading legacy configurations and isolated debug loopback tests. Managed
+     * Central URLs upgrade to the verified HTTPS endpoint; release network policy rejects
+     * cleartext even when an old configuration has this flag set. BP1 remains HMAC-authenticated
+     * plaintext over SMS, while the Hub's HTTP body and token are protected by TLS.
      */
     val allowCleartextTransport: Boolean = false,
     /** Signed remote-config document URL. Empty disables the no-APK settings channel. */

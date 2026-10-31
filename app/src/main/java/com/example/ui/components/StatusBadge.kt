@@ -54,6 +54,8 @@ fun StatusBadge(
             PaletteSage,
             "در انتظار"
         )
+        ForwardStatus.SMS_DISPATCHED -> Quadruple(PaletteMidnight, PaletteGold, PaletteGold, "منتظر نتیجه ارسال")
+        ForwardStatus.SMS_SENT -> Quadruple(PaletteMidnight, PaletteSage, PaletteGold, "ارسال تأیید شد")
     }
 
     Box(

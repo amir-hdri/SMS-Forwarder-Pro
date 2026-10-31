@@ -15,17 +15,29 @@ import com.example.data.model.MatchType
 import com.example.data.repository.SmsForwardRepository
 import com.example.network.TransmissionResult
 import com.example.service.SmsForwarderService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class EndpointTestState(
     val isLoading: Boolean = false,
     val result: TransmissionResult? = null
+)
+
+data class DriverActivationUiState(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val successMessage: String? = null,
+    val resolvedDriverName: String? = null
 )
 
 data class EncryptionSandboxState(
@@ -37,6 +49,7 @@ data class EncryptionSandboxState(
     val error: String? = null
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: SmsForwardRepository =
@@ -47,8 +60,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val storage = com.example.crypto.SecureStorageManager.getInstance(application)
         val preferences = application.getSharedPreferences("barpro_device_identity", android.content.Context.MODE_PRIVATE)
         val client = com.example.enrollment.EnrollmentClient()
+        val defaultUrl = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }
         com.example.enrollment.EnrollmentManager(
-            defaultEndpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl },
+            defaultEndpoint = defaultUrl,
             role = com.example.BuildConfig.APP_ROLE,
             deviceId = {
                 preferences.getString("enrollment_device_id", null) ?: java.util.UUID.randomUUID().toString().also {
@@ -60,12 +74,84 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             stage = { storage.savePendingEnrollment(it) }, loadStage = { storage.getPendingEnrollment() },
             permissionsGranted = { com.example.utils.PermissionHelper.areForwardingPermissionsGranted(application) },
             onActivated = {
+                com.example.service.HeartbeatAlarmManager.scheduleNext(application, 5)
+                runCatching { com.example.service.MaintenanceWorker.schedule(application) }
+                runCatching { SmsForwarderService.startService(application) }
                 repository.performHeartbeatAndCommandPoll()
-                SmsForwarderService.startService(application)
+            },
+            resolve = { phone, devId ->
+                val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { repository.getConfig().endpointUrl }
+                client.resolve(phone, com.example.enrollment.EnrollmentContract.trustedServer(endpoint), devId)
             }
         )
     }
     val enrollmentStatus get() = enrollment.status
+    val enrollmentError get() = enrollment.errorMessage
+
+    private val _driverActivationState = MutableStateFlow(DriverActivationUiState())
+    val driverActivationState: StateFlow<DriverActivationUiState> = _driverActivationState.asStateFlow()
+
+    fun resolveDriver(phone: String) {
+        resolveAndActivateDriver(phone)
+    }
+
+    fun resolveAndActivateDriver(rawPhone: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val cleanPhone = com.example.utils.SmsParser.normalizePhoneNumber(rawPhone).filter { it.isDigit() }
+            if (!cleanPhone.matches(Regex("^09[0-9]{9}$"))) {
+                _driverActivationState.value = DriverActivationUiState(
+                    errorMessage = "شماره موبایل وارد شده نامعتبر است (فرمت صحیح: 09xxxxxxxxx)"
+                )
+                return@launch
+            }
+
+            _driverActivationState.value = DriverActivationUiState(isLoading = true)
+
+            try {
+                enrollment.resolveDriverConfiguration(cleanPhone)
+                when (enrollment.status.value) {
+                    com.example.enrollment.EnrollmentStatus.ACTIVE -> {
+                        _driverActivationState.value = DriverActivationUiState(
+                            isLoading = false,
+                            successMessage = "فعال‌سازی با موفقیت انجام شد."
+                        )
+                    }
+                    com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> {
+                        _driverActivationState.value = DriverActivationUiState(
+                            isLoading = false,
+                            errorMessage = "برای تکمیل فعال‌سازی، مجوزهای پیامک را تأیید کنید."
+                        )
+                    }
+                    else -> {
+                        _driverActivationState.value = DriverActivationUiState(
+                            isLoading = false,
+                            errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور"
+                        )
+                    }
+                }
+            } catch (error: Exception) {
+                _driverActivationState.value = DriverActivationUiState(
+                    isLoading = false,
+                    errorMessage = error.message ?: "خطا در برقراری ارتباط با سرور بارپرو"
+                )
+            }
+        }
+    }
+
+    fun resetDriverActivation() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val current = repository.getConfig()
+            val resetConfig = current.copy(
+                driverPhone = "",
+                driverFullName = "",
+                setupCompleted = false,
+                isMasterEnabled = false,
+                userConsentGiven = false
+            )
+            repository.saveConfig(resetConfig)
+            _driverActivationState.value = DriverActivationUiState()
+        }
+    }
 
     fun activateFromLink(value: String) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.receive(value) }
@@ -75,12 +161,99 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.resume() }
     }
 
+    fun refreshBackgroundRecovery() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.example.service.MaintenanceWorker.schedule(getApplication()) }
+            val saved = refreshSecureConfiguration(retry = _secureStorageError.value != null) ?: return@launch
+            try {
+                if (saved.isMasterEnabled && saved.userConsentGiven) {
+                    com.example.service.HeartbeatAlarmManager.scheduleNext(getApplication(), saved.healthCheckIntervalMinutes)
+                    runCatching { SmsForwarderService.startService(getApplication()) }
+                } else {
+                    com.example.service.HeartbeatAlarmManager.cancel(getApplication())
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.w("MainViewModel", "Background recovery deferred: ${error.javaClass.simpleName}")
+            }
+        }
+    }
+
     val rules: StateFlow<List<FilterRule>> = repository.allRules
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val config: StateFlow<ForwardConfig> = repository.configFlow
-        .combine(MutableStateFlow(ForwardConfig())) { cfg, fallback -> cfg ?: fallback }
+    private val _secureStorageError = MutableStateFlow<String?>(null)
+    val secureStorageError: StateFlow<String?> = _secureStorageError.asStateFlow()
+    private val configRefresh = MutableStateFlow(0L)
+    private val lastReadableConfig = MutableStateFlow(ForwardConfig())
+
+    private fun stoppedUiConfig(value: ForwardConfig) = value.copy(
+        isMasterEnabled = false, userConsentGiven = false,
+        authHeaderValue = "", forwarderSecret = "", secretEncryptionKey = ""
+    )
+
+    private fun showSecureStorageFailure(error: Exception) {
+        android.util.Log.w("MainViewModel", "Secure configuration unavailable: ${error.javaClass.simpleName}")
+        _secureStorageError.value = "ذخیره‌سازی امن در دسترس نیست؛ ارسال پیامک متوقف است."
+    }
+
+    val config: StateFlow<ForwardConfig> = configRefresh.flatMapLatest {
+        repository.configFlow.map { cfg ->
+            (cfg ?: ForwardConfig()).also { lastReadableConfig.value = it }
+        }.catch { error ->
+            if (error is CancellationException) throw error
+            if (error !is Exception) throw error
+            showSecureStorageFailure(error)
+            emit(stoppedUiConfig(lastReadableConfig.value))
+        }
+    }.combine(_secureStorageError) { cfg, error -> if (error == null) cfg else stoppedUiConfig(cfg) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ForwardConfig())
+
+    /** Recovery verifies secure reads and writes; persisted forwarding stays disabled. */
+    fun retrySecureStorage() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { refreshSecureConfiguration(retry = true) }
+    }
+
+    private suspend fun refreshSecureConfiguration(retry: Boolean): ForwardConfig? = try {
+        val restored = if (retry) repository.retrySecureStorage() else repository.getConfig()
+        lastReadableConfig.value = restored
+        _secureStorageError.value = null
+        configRefresh.update { it + 1 }
+        restored
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        showSecureStorageFailure(error)
+        null
+    }
+
+    private suspend fun saveConfigSafely(value: ForwardConfig): Boolean {
+        // A redacted UI representation must never replace the stored enrollment identity.
+        if (_secureStorageError.value != null) return false
+        return try {
+            repository.saveConfig(value)
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            showSecureStorageFailure(error)
+            false
+        }
+    }
+
+    private fun launchSecureAction(operation: suspend () -> Unit) {
+        viewModelScope.launch {
+            if (_secureStorageError.value != null) return@launch
+            try {
+                operation()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showSecureStorageFailure(error)
+            }
+        }
+    }
 
     // Navigation trigger from notifications or external intents
     val showServerSettings = MutableStateFlow(false)
@@ -195,11 +368,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             // This explicit switch is the user's opt-in to forwarding.
             val updated = current.copy(isMasterEnabled = enabled, userConsentGiven = enabled)
-            repository.saveConfig(updated)
+            if (!saveConfigSafely(updated)) return@launch
 
             if (enabled) {
-                SmsForwarderService.startService(getApplication())
+                com.example.service.HeartbeatAlarmManager.scheduleNext(getApplication(), updated.healthCheckIntervalMinutes)
+                runCatching { SmsForwarderService.startService(getApplication()) }
             } else {
+                com.example.service.HeartbeatAlarmManager.cancel(getApplication())
                 SmsForwarderService.stopService(getApplication())
             }
         }
@@ -207,7 +382,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateConfig(updatedConfig: ForwardConfig) {
         viewModelScope.launch {
-            repository.saveConfig(updatedConfig)
+            saveConfigSafely(updatedConfig)
         }
     }
 
@@ -255,7 +430,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun retryForward(log: ForwardLog) {
-        viewModelScope.launch {
+        launchSecureAction {
             repository.retryForwardLog(log)
         }
     }
@@ -295,7 +470,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun simulateIncomingSms(sender: String, message: String) {
-        viewModelScope.launch {
+        launchSecureAction {
             val log = repository.processIncomingSms(sender.trim(), message.trim())
             _simulatedLogResult.value = log
         }
@@ -306,22 +481,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executeServerOtpInquiry(senderQuery: String, requestedTimestamp: Long = System.currentTimeMillis()) {
-        viewModelScope.launch {
+        launchSecureAction {
             _isOtpInquiryLoading.value = true
-            val result = repository.queryAndSendOtpForServer(senderQuery, requestedTimestamp)
-            _otpInquiryState.value = result
-            _isOtpInquiryLoading.value = false
+            try {
+                val result = repository.queryAndSendOtpForServer(senderQuery, requestedTimestamp)
+                _otpInquiryState.value = result
+            } finally {
+                _isOtpInquiryLoading.value = false
+            }
         }
     }
 
     fun checkServerHealthNow() {
-        viewModelScope.launch {
+        launchSecureAction {
             repository.checkServerHealth(getApplication())
         }
     }
 
     fun triggerTestDisconnectAlert() {
-        viewModelScope.launch {
+        launchSecureAction {
             repository.triggerTestDisconnectAlert(getApplication())
         }
     }
@@ -337,15 +515,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val offlineSyncMessage: StateFlow<String?> = _offlineSyncMessage.asStateFlow()
 
     fun syncOfflineLogsNow() {
-        viewModelScope.launch {
+        launchSecureAction {
             _isOfflineSyncing.value = true
-            val count = repository.syncOfflinePendingLogs()
-            _offlineSyncMessage.value = if (count > 0) {
-                "$count پیامک با موفقیت همگام‌سازی و به سرور تحویل داده شد."
-            } else {
-                "پیامک جدیدی در صف ارسال وجود نداشت یا اتصال سرور برقرار نشد."
+            try {
+                val count = repository.syncOfflinePendingLogs()
+                _offlineSyncMessage.value = if (count > 0) {
+                    "$count پیامک با موفقیت همگام‌سازی و به سرور تحویل داده شد."
+                } else {
+                    "پیامک جدیدی در صف ارسال وجود نداشت یا اتصال سرور برقرار نشد."
+                }
+            } finally {
+                _isOfflineSyncing.value = false
             }
-            _isOfflineSyncing.value = false
         }
     }
 
@@ -354,7 +535,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun pollServerCommandsNow() {
-        viewModelScope.launch {
+        launchSecureAction {
             repository.performHeartbeatAndCommandPoll()
         }
     }
