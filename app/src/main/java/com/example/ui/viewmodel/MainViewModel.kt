@@ -81,7 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             },
             resolve = { phone, devId ->
                 val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { repository.getConfig().endpointUrl }
-                client.resolve(phone, com.example.enrollment.EnrollmentContract.trustedServer(endpoint), devId)
+                client.resolve(phone, com.example.enrollment.EnrollmentContract.trustedServer(endpoint), devId, repository.getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } })
             }
         )
     }

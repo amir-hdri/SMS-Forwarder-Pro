@@ -41,10 +41,11 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
     suspend fun resolve(
         driverPhone: String,
         serverUrl: String,
-        deviceId: String
+        deviceId: String,
+        webhookToken: String = ""
     ): EnrollmentCredentials {
         val parsed = requireNotNull(serverUrl.toHttpUrlOrNull()) { "آدرس سرور نامعتبر است: $serverUrl" }
-        return resolve(driverPhone, parsed, deviceId)
+        return resolve(driverPhone, parsed, deviceId, webhookToken)
     }
 
     /**
@@ -54,8 +55,10 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
     suspend fun resolve(
         driverPhone: String,
         serverUrl: HttpUrl,
-        deviceId: String
+        deviceId: String,
+        webhookToken: String = ""
     ): EnrollmentCredentials = withContext(Dispatchers.IO) {
+        require(webhookToken.isNotBlank()) { "برای فعال‌سازی اولیه از لینک ثبت دستگاه در بارپرو استفاده کنید" }
         require(deviceId.isNotBlank() && deviceId.length <= 128) { "شناسه دستگاه نامعتبر است" }
         val cleanPhone = SmsParser.normalizePhoneNumber(driverPhone)
         require(cleanPhone.matches(Regex("09[0-9]{9}"))) {
@@ -76,6 +79,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             .url(postUrl)
             .header("Content-Type", "application/json")
             .header("X-Device-Id", deviceId)
+            .header("X-OTP-Webhook-Token", webhookToken)
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -116,6 +120,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             val getRequest = Request.Builder()
                 .url(getUrl)
                 .header("X-Device-Id", deviceId)
+            .header("X-OTP-Webhook-Token", webhookToken)
                 .get()
                 .build()
 

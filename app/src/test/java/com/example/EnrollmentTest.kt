@@ -38,6 +38,37 @@ class EnrollmentTest {
         try { block(); fail("Must reject invalid input") } catch (_: IllegalArgumentException) { }
     }
 
+    @Test fun anonymousRediscoveryFailsBeforeAnyNetworkRequest() = runBlocking {
+        var requests = 0
+        val client = EnrollmentClient(OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(document().toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        var rejected = false
+        try { client.resolve("09120000001", server, "device-synthetic") }
+        catch (_: IllegalArgumentException) { rejected = true }
+        assertTrue("An enrolled credential is required", rejected)
+        assertEquals("No anonymous discovery request", 0, requests)
+    }
+
+    @Test fun rediscoveryUsesCredentialHeadersForPostAndGetFallback() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val client = EnrollmentClient(OkHttpClient.Builder().addInterceptor { chain ->
+            requests.add(chain.request())
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(if (requests.size == 1) 405 else 200).message("controlled")
+                .body(document().toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        val credentials = client.resolve("09120000001", server, "device-synthetic", token)
+        assertEquals("09120000001", credentials.driverPhone)
+        assertEquals(listOf("POST", "GET"), requests.map { it.method })
+        for (request in requests) {
+            assertEquals(token, request.header("X-OTP-Webhook-Token"))
+            assertFalse(request.url.toString().contains(token))
+        }
+    }
+
     @Test fun validFragmentPreservesOpaqueTicketAndPinsOrigin() {
         val parsed = EnrollmentContract.parseLink(link(value = "opaque-ticket-with-&=+/characters"), endpoint)
         assertEquals("opaque-ticket-with-&=+/characters", parsed.ticket)

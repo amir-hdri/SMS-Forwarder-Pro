@@ -51,3 +51,22 @@ A fifth actual emulator test generated phone-scoped BP1 health and OTP packets w
 ## Atomic health subscription seeding — 2026-10-26
 
 A final actual repository concurrency regression demonstrated fresh subscription18 being overwritten by old retry17 between its unknown-cache check and write. Fresh remember and retry seedIfUnknown now share one synchronized critical section; the old OTP stays on17 and later health stays on18. RED1behavioral failure preceded GREEN6modem-shadow controls. Final JVM/build/lint passed129Driver/123Hub tests, zero failures/errors/skips, and final actual emulator5tests passed in53s. Lint has0errors and83warnings per flavor in this run. Evidence /tmp/barpro-phase16-merge/cache-concurrency-review.md and android170-cache-concurrency-full.log.
+
+## Authenticated rediscovery — 2026-11-01
+
+First activation uses the operator-issued single-use enrollment link. Driver
+rediscovery requires the stored phone-scoped credential; both POST and GET
+send it in X-OTP-Webhook-Token. A missing credential fails before a network
+request and directs the operator to enrollment. MainViewModel and the default
+EnrollmentManager resolver read the credential from existing configuration.
+
+DriverResolutionAdversarialChallengeTest now supplies synthetic enrolled
+credentials when testing input, response and network failures. EnrollmentTest
+checks anonymous refusal and headers on both fallback methods. Driver-only GSM
+fallback assertions are paired with Hub assertions that reject driver relay
+traffic instead of recursively relaying to the Hub itself.
+
+Validation before the version-only increment: Driver217 and Hub185 JVM tests,
+zero failures/errors/skips; both debug APKs built. These are synthetic tests,
+and establish neither a physical SIM receipt nor live UTCMS/OTP success.
+Release2.1.1 (versionCode4) is verified again by the release build/test receipts.
