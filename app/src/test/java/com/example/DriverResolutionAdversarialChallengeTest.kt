@@ -113,7 +113,7 @@ class DriverResolutionAdversarialChallengeTest {
     fun testEmptyPhoneInputRejected() = runBlocking {
         val client = EnrollmentClient(OkHttpClient())
         try {
-            client.resolve("", serverUrl, "dev-1")
+            client.resolve("", serverUrl, "dev-1", validToken)
             fail("Empty phone must be rejected")
         } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -125,7 +125,7 @@ class DriverResolutionAdversarialChallengeTest {
         val client = EnrollmentClient(OkHttpClient())
         for (input in listOf("0912abc3456", "abcdefghijk", "0912345678a")) {
             try {
-                client.resolve(input, serverUrl, "dev-1")
+                client.resolve(input, serverUrl, "dev-1", validToken)
                 fail("Phone with letters must be rejected: $input")
             } catch (e: IllegalArgumentException) {
                 assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -138,7 +138,7 @@ class DriverResolutionAdversarialChallengeTest {
         val client = EnrollmentClient(OkHttpClient())
         for (input in listOf("0912#34*56@", "0912!345678", "0912@345678")) {
             try {
-                client.resolve(input, serverUrl, "dev-1")
+                client.resolve(input, serverUrl, "dev-1", validToken)
                 fail("Phone with symbols must be rejected: $input")
             } catch (e: IllegalArgumentException) {
                 assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -150,7 +150,7 @@ class DriverResolutionAdversarialChallengeTest {
     fun testTwelveDigitPhoneInputRejected() = runBlocking {
         val client = EnrollmentClient(OkHttpClient())
         try {
-            client.resolve("091234567890", serverUrl, "dev-1")
+            client.resolve("091234567890", serverUrl, "dev-1", validToken)
             fail("12-digit phone must be rejected")
         } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -161,7 +161,7 @@ class DriverResolutionAdversarialChallengeTest {
     fun testTenDigitPhoneInputRejected() = runBlocking {
         val client = EnrollmentClient(OkHttpClient())
         try {
-            client.resolve("0912345678", serverUrl, "dev-1")
+            client.resolve("0912345678", serverUrl, "dev-1", validToken)
             fail("10-digit phone must be rejected")
         } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -173,7 +173,7 @@ class DriverResolutionAdversarialChallengeTest {
         val client = EnrollmentClient(OkHttpClient())
         for (input in listOf("+14155552671", "447911123456", "+4915123456789", "+905321234567")) {
             try {
-                client.resolve(input, serverUrl, "dev-1")
+                client.resolve(input, serverUrl, "dev-1", validToken)
                 fail("Non-Iranian international phone must be rejected: $input")
             } catch (e: IllegalArgumentException) {
                 assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -187,7 +187,7 @@ class DriverResolutionAdversarialChallengeTest {
         // 021 is Tehran landline, not Iranian mobile (must start with 09)
         for (input in listOf("02188776655", "03132223344", "05138889900")) {
             try {
-                client.resolve(input, serverUrl, "dev-1")
+                client.resolve(input, serverUrl, "dev-1", validToken)
                 fail("Landline numbers must be rejected: $input")
             } catch (e: IllegalArgumentException) {
                 assertTrue(e.message!!.contains("شماره موبایل نامعتبر است"))
@@ -209,18 +209,18 @@ class DriverResolutionAdversarialChallengeTest {
         val client = EnrollmentClient(mockHttp)
 
         // Persian digits ۰۹۱۲۳۴۵۶۷۸۹
-        val credsPersian = client.resolve("۰۹۱۲۳۴۵۶۷۸۹", serverUrl, "dev-1")
+        val credsPersian = client.resolve("۰۹۱۲۳۴۵۶۷۸۹", serverUrl, "dev-1", validToken)
         assertEquals(validPhone, credsPersian.driverPhone)
 
         // Arabic-Indic digits ٠٩١٢٣٤٥٦٧٨٩
-        val credsArabic = client.resolve("٠٩١٢٣٤٥٦٧٨٩", serverUrl, "dev-1")
+        val credsArabic = client.resolve("٠٩١٢٣٤٥٦٧٨٩", serverUrl, "dev-1", validToken)
         assertEquals(validPhone, credsArabic.driverPhone)
 
         // Formatted with +98 / 0098 / dashes / spaces
-        val credsPlus98 = client.resolve("+98 912 345 6789", serverUrl, "dev-1")
+        val credsPlus98 = client.resolve("+98 912 345 6789", serverUrl, "dev-1", validToken)
         assertEquals(validPhone, credsPlus98.driverPhone)
 
-        val credsDoubleZero = client.resolve("0098-912-345-6789", serverUrl, "dev-1")
+        val credsDoubleZero = client.resolve("0098-912-345-6789", serverUrl, "dev-1", validToken)
         assertEquals(validPhone, credsDoubleZero.driverPhone)
     }
 
@@ -242,7 +242,7 @@ class DriverResolutionAdversarialChallengeTest {
         })
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("Truncated JSON must throw JSONException")
         } catch (e: JSONException) {
             assertNotNull(e)
@@ -270,7 +270,7 @@ class DriverResolutionAdversarialChallengeTest {
         })
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("Missing required keys must throw JSONException")
         } catch (e: JSONException) {
             assertNotNull(e)
@@ -302,7 +302,7 @@ class DriverResolutionAdversarialChallengeTest {
         )
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("500 response must throw IllegalStateException")
         } catch (e: IllegalStateException) {
             assertEquals("Internal server database error", e.message)
@@ -334,7 +334,7 @@ class DriverResolutionAdversarialChallengeTest {
         )
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("500 HTML response must throw IllegalStateException")
         } catch (e: IllegalStateException) {
             assertTrue(e.message!!.contains("خطای سرور بارپرو (کد 500)"))
@@ -378,7 +378,7 @@ class DriverResolutionAdversarialChallengeTest {
         )
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("16KB+ response must be rejected by EnrollmentClient")
         } catch (e: Exception) {
             assertTrue(
@@ -402,7 +402,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { stagedDoc },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId) }
+            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
         )
 
         manager.resolveDriverConfiguration(validPhone)
@@ -424,7 +424,7 @@ class DriverResolutionAdversarialChallengeTest {
         })
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("Empty body must fail JSON parsing")
         } catch (e: JSONException) {
             assertNotNull(e)
@@ -455,7 +455,7 @@ class DriverResolutionAdversarialChallengeTest {
         )
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("404 must throw IllegalStateException")
         } catch (e: IllegalStateException) {
             assertEquals("Driver phone number not registered in BarPro", e.message)
@@ -486,7 +486,7 @@ class DriverResolutionAdversarialChallengeTest {
         )
         val client = EnrollmentClient(mockHttp)
         try {
-            client.resolve(validPhone, serverUrl, "dev-1")
+            client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("403 must throw IllegalStateException")
         } catch (e: IllegalStateException) {
             assertEquals("Driver account is deactivated or blocked", e.message)
@@ -517,7 +517,7 @@ class DriverResolutionAdversarialChallengeTest {
             permissionsGranted = { true },
             onActivated = {},
             resolve = { phone, devId ->
-                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId)
+                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
 
@@ -548,7 +548,7 @@ class DriverResolutionAdversarialChallengeTest {
             permissionsGranted = { true },
             onActivated = {},
             resolve = { phone, devId ->
-                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId)
+                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
 
@@ -577,7 +577,7 @@ class DriverResolutionAdversarialChallengeTest {
             permissionsGranted = { true },
             onActivated = {},
             resolve = { phone, devId ->
-                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId)
+                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
 
@@ -606,7 +606,7 @@ class DriverResolutionAdversarialChallengeTest {
             permissionsGranted = { true },
             onActivated = {},
             resolve = { phone, devId ->
-                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId)
+                client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
 
@@ -648,7 +648,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { staged },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId) }
+            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
         )
 
         // Fire 10 sequential rapid resolutions

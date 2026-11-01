@@ -188,6 +188,11 @@ class DriverForwardingStrategyTest {
         val result = repository.transmitPendingLog(logId)
 
         assertTrue("HTTP request must be attempted first", httpAttempted.get())
+        if (BuildConfig.APP_ROLE == "HUB") {
+            assertFalse("Hub must retain failure rather than recursively relay to itself", result.isSuccess)
+            assertNull("Hub must not dispatch a driver relay", shadowOf(modem()).lastSentTextMessageParams)
+            return@runBlocking
+        }
         assertTrue("GSM fallback transmission must report success when handed to modem: ${result.errorMessage}", result.isSuccess)
 
         val updatedLog = db.forwardLogDao().getLogById(logId)
@@ -220,6 +225,11 @@ class DriverForwardingStrategyTest {
 
         val result = repository.transmitPendingLog(logId)
 
+        if (BuildConfig.APP_ROLE == "HUB") {
+            assertFalse("Driver GSM heartbeat is not a Hub OTP", result.isSuccess)
+            assertNull("Hub must not dispatch a driver heartbeat", shadowOf(modem()).lastSentTextMessageParams)
+            return@runBlocking
+        }
         assertTrue("Health check GSM dispatch should succeed: ${result.errorMessage}", result.isSuccess)
 
         val updatedLog = db.forwardLogDao().getLogById(logId)

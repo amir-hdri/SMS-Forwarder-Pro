@@ -24,7 +24,7 @@ class EnrollmentManager(
     private val permissionsGranted: () -> Boolean,
     private val onActivated: suspend () -> Unit,
     private val resolve: suspend (phone: String, deviceId: String) -> EnrollmentCredentials = { phone, devId ->
-        EnrollmentClient().resolve(phone, EnrollmentContract.trustedServer(defaultEndpoint), devId)
+        EnrollmentClient().resolve(phone, EnrollmentContract.trustedServer(defaultEndpoint), devId, getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } })
     }
 ) {
     private val mutex = Mutex()
