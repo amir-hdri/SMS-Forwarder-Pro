@@ -24,6 +24,22 @@ import java.net.URLEncoder
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
 class EnrollmentTest {
+    @Test fun authenticationFailureDoesNotRetryOrExposeServerBody() = runBlocking {
+        for (status in listOf(401, 403)) {
+            val requests = mutableListOf<Request>()
+            val client = EnrollmentClient(OkHttpClient.Builder().addInterceptor { chain ->
+                requests.add(chain.request())
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                    .code(status).message("denied")
+                    .body("{\"detail\":\"private-server-body-must-not-leak\"}".toResponseBody("application/json".toMediaType())).build()
+            }.build())
+            var message = ""
+            try { client.resolve("09120000001", server, "device-synthetic", token); fail("Must refuse auth") }
+            catch (error: Exception) { message = error.message.orEmpty() }
+            assertEquals("Authentication refusal must not trigger GET", listOf("POST"), requests.map { it.method })
+            assertFalse(message.contains("private-server-body"))
+        }
+    }
     private val endpoint = "http://87.107.160.251/api/v1/otp/sms-forwarder"
     private val server = "http://87.107.160.251"
     private val ticket = "single-use-synthetic-ticket-123456"

@@ -36,7 +36,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
 
     /**
      * Resolves driver webhook endpoint and Hub configuration from BarPro by phone number.
-     * Executes HTTP POST /api/v1/otp/resolve-driver with automatic GET fallback.
+     * Executes HTTP POST /api/v1/otp/resolve-driver with GET fallback only for HTTP 405.
      */
     suspend fun resolve(
         driverPhone: String,
@@ -50,7 +50,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
 
     /**
      * Resolves driver webhook endpoint and Hub configuration from BarPro by phone number.
-     * Executes HTTP POST /api/v1/otp/resolve-driver with automatic GET fallback.
+     * Executes HTTP POST /api/v1/otp/resolve-driver with GET fallback only for HTTP 405.
      */
     suspend fun resolve(
         driverPhone: String,
@@ -58,7 +58,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
         deviceId: String,
         webhookToken: String = ""
     ): EnrollmentCredentials = withContext(Dispatchers.IO) {
-        require(webhookToken.isNotBlank()) { "برای فعال‌سازی اولیه از لینک ثبت دستگاه در بارپرو استفاده کنید" }
+        if (webhookToken.isBlank()) throw ActivationRequiredException()
         require(deviceId.isNotBlank() && deviceId.length <= 128) { "شناسه دستگاه نامعتبر است" }
         val cleanPhone = SmsParser.normalizePhoneNumber(driverPhone)
         require(cleanPhone.matches(Regex("09[0-9]{9}"))) {
@@ -83,79 +83,28 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        var responseString: String? = null
-        var lastError: Exception? = null
-
-        try {
-            http.newCall(postRequest).execute().use { response ->
-                if (response.code == 200) {
-                    val body = requireNotNull(response.body) { "پاسخ سرور خالی است" }
-                    require(body.contentLength() <= 16_384) { "حجم پاسخ سرور بیش از حد مجاز است" }
-                    val source = body.source()
-                    require(!source.request(16_385)) { "حجم داده‌های پاسخ سرور بیش از 16KB است" }
-                    responseString = source.readByteArray().toString(Charsets.UTF_8)
-                } else {
-                    val errorBody = response.body?.string() ?: ""
-                    val detail = try {
-                        JSONObject(errorBody).optString("detail", "")
-                    } catch (_: Exception) { "" }
-                    val errorMsg = if (detail.isNotBlank()) detail else when (response.code) {
-                        404 -> "راننده‌ای با این شماره در ناوگان بارپرو یافت نشد"
-                        403 -> "حساب کاربری راننده غیرفعال یا مسدود است"
-                        400 -> "فرمت شماره موبایل ارسالی نامعتبر است"
-                        else -> "خطای سرور بارپرو (کد ${response.code})"
-                    }
-                    lastError = IllegalStateException(errorMsg)
-                }
-            }
-        } catch (networkErr: Exception) {
-            lastError = networkErr
+        fun execute(request: Request): Pair<Int, String?> = http.newCall(request).execute().use { response ->
+            if (response.code == 401 || response.code == 403) throw ActivationRequiredException()
+            if (response.code != 200) return@use response.code to null
+            val body = requireNotNull(response.body)
+            require(body.contentLength() <= 16_384) { "حجم پاسخ سرور بیش از حد مجاز است" }
+            val source = body.source()
+            require(!source.request(16_385)) { "حجم داده‌های پاسخ سرور بیش از 16KB است" }
+            response.code to source.readByteArray().toString(Charsets.UTF_8)
         }
-
-        // 2. Fallback to GET /api/v1/otp/resolve-driver/{cleanPhone} if POST did not yield 200
-        if (responseString == null) {
-            val getUrl = canonicalServer.newBuilder()
-                .encodedPath("/api/v1/otp/resolve-driver/$cleanPhone")
-                .build()
-            val getRequest = Request.Builder()
-                .url(getUrl)
-                .header("X-Device-Id", deviceId)
-            .header("X-OTP-Webhook-Token", webhookToken)
-                .get()
-                .build()
-
-            try {
-                http.newCall(getRequest).execute().use { response ->
-                    if (response.code == 200) {
-                        val body = requireNotNull(response.body) { "پاسخ سرور خالی است" }
-                        require(body.contentLength() <= 16_384) { "حجم پاسخ سرور بیش از حد مجاز است" }
-                        val source = body.source()
-                        require(!source.request(16_385)) { "حجم داده‌های پاسخ سرور بیش از 16KB است" }
-                        responseString = source.readByteArray().toString(Charsets.UTF_8)
-                    } else {
-                        val errorBody = response.body?.string() ?: ""
-                        val detail = try {
-                            JSONObject(errorBody).optString("detail", "")
-                        } catch (_: Exception) { "" }
-                        val errorMsg = if (detail.isNotBlank()) detail else when (response.code) {
-                            404 -> "راننده‌ای با این شماره در ناوگان بارپرو یافت نشد"
-                            403 -> "حساب کاربری راننده غیرفعال یا مسدود است"
-                            400 -> "فرمت شماره موبایل ارسالی نامعتبر است"
-                            else -> (lastError?.message ?: "خطای سرور بارپرو (کد ${response.code})")
-                        }
-                        throw IllegalStateException(errorMsg)
-                    }
-                }
-            } catch (getErr: Exception) {
-                if (getErr is IllegalStateException) throw getErr
-                throw IllegalStateException(
-                    lastError?.message ?: getErr.message ?: "عدم برقراری ارتباط با سرور بارپرو",
-                    getErr
-                )
-            }
+        val (status, document) = execute(postRequest)
+        // Only method negotiation may use the legacy GET endpoint; auth/network errors cannot.
+        val resolved = if (status == 405) {
+            val getRequest = postRequest.newBuilder().url(canonicalServer.newBuilder()
+                .encodedPath("/api/v1/otp/resolve-driver/$cleanPhone").build()).get().build()
+            execute(getRequest).second
+        } else document
+        check(resolved != null) {
+            if (status == 404) "راننده‌ای با این شماره در ناوگان بارپرو یافت نشد"
+            else "خطای سرور بارپرو (کد $status)"
         }
-
-        val document = requireNotNull(responseString) { "پاسخ معتبری از سرور دریافت نشد" }
-        EnrollmentContract.parseCredentials(document, canonicalServer)
+        EnrollmentContract.parseCredentials(resolved, canonicalServer)
     }
 }
+
+class ActivationRequiredException : IllegalArgumentException("تأیید سیم‌کارت برای فعال‌سازی لازم است.")

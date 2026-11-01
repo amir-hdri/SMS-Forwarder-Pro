@@ -37,6 +37,7 @@ data class DriverActivationUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val progressMessage: String? = null,
     val resolvedDriverName: String? = null
 )
 
@@ -55,6 +56,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: SmsForwardRepository =
         (application as? SmsForwarderApp)?.repository
             ?: SmsForwardRepository.getInstance(application)
+
+    private val bootstrap by lazy {
+        val storage = com.example.crypto.SecureStorageManager.getInstance(application)
+        val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }
+        val server = com.example.enrollment.EnrollmentContract.trustedServer(endpoint)
+        val client = com.example.enrollment.BootstrapClient(server)
+        com.example.enrollment.BootstrapCoordinator(server, com.example.enrollment.DeviceBootstrapKey(),
+            challenge = { phone, id, key -> client.challenge(phone, id, key) },
+            poll = { nonce, id, signature -> client.poll(nonce, id, signature) },
+            stage = { storage.savePendingBootstrap(it) }, loadStage = { storage.getPendingBootstrap() },
+            permissionsGranted = { com.example.utils.PermissionHelper.areForwardingPermissionsGranted(application) },
+            sendSms = { destination, nonce -> com.example.enrollment.BootstrapSms.send(application, destination, nonce) },
+            progress = { message -> _driverActivationState.value = DriverActivationUiState(isLoading = true, progressMessage = message) })
+    }
 
     private val enrollment by lazy {
         val storage = com.example.crypto.SecureStorageManager.getInstance(application)
@@ -79,6 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { SmsForwarderService.startService(application) }
                 repository.performHeartbeatAndCommandPoll()
             },
+            bootstrap = { phone, id -> bootstrap.start(phone, id) },
             resolve = { phone, devId ->
                 val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { repository.getConfig().endpointUrl }
                 client.resolve(phone, com.example.enrollment.EnrollmentContract.trustedServer(endpoint), devId, repository.getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } })
@@ -111,6 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 enrollment.resolveDriverConfiguration(cleanPhone)
                 when (enrollment.status.value) {
                     com.example.enrollment.EnrollmentStatus.ACTIVE -> {
+                        com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
                         _driverActivationState.value = DriverActivationUiState(
                             isLoading = false,
                             successMessage = "فعال‌سازی با موفقیت انجام شد."
@@ -149,6 +166,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 userConsentGiven = false
             )
             repository.saveConfig(resetConfig)
+            com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
             _driverActivationState.value = DriverActivationUiState()
         }
     }
@@ -158,7 +176,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshEnrollmentPermissions() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.resume() }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                enrollment.resume()
+                if (com.example.BuildConfig.APP_ROLE == "DRIVER" && enrollment.status.value != com.example.enrollment.EnrollmentStatus.ACTIVE) {
+                    val storage = com.example.crypto.SecureStorageManager.getInstance(getApplication())
+                    if (storage.getPendingEnrollment() == null && !_driverActivationState.value.isLoading)
+                        bootstrap.pendingPhone()?.let { resolveAndActivateDriver(it) }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showSecureStorageFailure(error)
+            }
+        }
     }
 
     fun refreshBackgroundRecovery() {

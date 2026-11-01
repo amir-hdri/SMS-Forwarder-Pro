@@ -25,7 +25,8 @@ class EnrollmentManager(
     private val onActivated: suspend () -> Unit,
     private val resolve: suspend (phone: String, deviceId: String) -> EnrollmentCredentials = { phone, devId ->
         EnrollmentClient().resolve(phone, EnrollmentContract.trustedServer(defaultEndpoint), devId, getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } })
-    }
+    },
+    private val bootstrap: (suspend (String, String) -> EnrollmentCredentials)? = null
 ) {
     private val mutex = Mutex()
     private val attempted = mutableSetOf<String>()
@@ -50,12 +51,23 @@ class EnrollmentManager(
             mutableErrorMessage.value = null
             mutableStatus.value = EnrollmentStatus.ACTIVATING
 
-            val credential = resolve(cleanPhone, deviceId())
+            val id = deviceId()
+            val credential = try {
+                if (getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } }.isBlank() && bootstrap != null)
+                    bootstrap.invoke(cleanPhone, id)
+                else resolve(cleanPhone, id)
+            } catch (required: ActivationRequiredException) {
+                bootstrap?.invoke(cleanPhone, id) ?: throw required
+            }
+            require(credential.driverPhone == cleanPhone) { "پاسخ فعال‌سازی متعلق به این شماره نیست." }
             // Pending secrets use Keystore storage; Room stays untouched until activation
             stage(credential.document())
             activatePending()
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (required: BootstrapNeedsPermissions) {
+            mutableErrorMessage.value = required.message
+            mutableStatus.value = EnrollmentStatus.NEEDS_PERMISSIONS
         } catch (error: Exception) {
             mutableErrorMessage.value = error.message ?: "خطا در استعلام مشخصات راننده از سرور"
             mutableStatus.value = EnrollmentStatus.FAILED

@@ -305,7 +305,8 @@ class DriverResolutionAdversarialChallengeTest {
             client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("500 response must throw IllegalStateException")
         } catch (e: IllegalStateException) {
-            assertEquals("Internal server database error", e.message)
+            assertFalse("Server internals must stay private", e.message.orEmpty().contains("Internal server database error"))
+            assertTrue(e.message.orEmpty().contains("500"))
         }
     }
 
@@ -458,12 +459,13 @@ class DriverResolutionAdversarialChallengeTest {
             client.resolve(validPhone, serverUrl, "dev-1", validToken)
             fail("404 must throw IllegalStateException")
         } catch (e: IllegalStateException) {
-            assertEquals("Driver phone number not registered in BarPro", e.message)
+            assertFalse(e.message.orEmpty().contains("Driver phone number not registered in BarPro"))
+            assertTrue(e.message.orEmpty().contains("یافت نشد"))
         }
     }
 
     @Test
-    fun test403ForbiddenReturnsDeactivatedDriverErrorMessage() = runBlocking {
+    fun test403RequestsSimActivationWithoutExposingServerDetail() = runBlocking {
         val mockHttp = createMockClient(
             postHandler = { req ->
                 Response.Builder()
@@ -487,9 +489,10 @@ class DriverResolutionAdversarialChallengeTest {
         val client = EnrollmentClient(mockHttp)
         try {
             client.resolve(validPhone, serverUrl, "dev-1", validToken)
-            fail("403 must throw IllegalStateException")
-        } catch (e: IllegalStateException) {
-            assertEquals("Driver account is deactivated or blocked", e.message)
+            fail("403 must request SIM activation")
+        } catch (e: com.example.enrollment.ActivationRequiredException) {
+            assertFalse(e.message.orEmpty().contains("Driver account is deactivated or blocked"))
+            assertTrue(e.message.orEmpty().contains("سیم‌کارت"))
         }
     }
 

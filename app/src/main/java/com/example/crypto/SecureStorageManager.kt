@@ -36,6 +36,12 @@ class SecureStorageManager internal constructor(
         return storage.getString("pending_driver_enrollment_v1", null)
     }
 
+    fun savePendingBootstrap(document: String?) {
+        check(prefs.edit().putString("pending_driver_bootstrap_v1", document).commit())
+    }
+
+    fun getPendingBootstrap(): String? = prefs.getString("pending_driver_bootstrap_v1", null)
+
     @Synchronized
     fun getOrCreateOutboxKey(): String {
         val existing = prefs.getString("outbox_key_v2", null)

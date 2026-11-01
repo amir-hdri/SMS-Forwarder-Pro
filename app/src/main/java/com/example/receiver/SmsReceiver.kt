@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CancellationException
+import java.util.concurrent.TimeUnit
 
 class SmsReceiver : BroadcastReceiver() {
 
@@ -47,7 +48,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         // Group messages by sender in case multiple chunks arrived
-        val sender = messages[0].displayOriginatingAddress ?: messages[0].originatingAddress ?: "Unknown"
+        val sender = messages[0].originatingAddress ?: "Unknown"
         val fullMessageBody = StringBuilder()
         var timestamp = messages[0].timestampMillis
         if (timestamp <= 0) timestamp = System.currentTimeMillis()
@@ -65,6 +66,14 @@ class SmsReceiver : BroadcastReceiver() {
         val messageText = fullMessageBody.toString().trim()
         if (messageText.isBlank()) {
             Log.w(TAG, LogSanitizer.sanitize("Received blank SMS body, skipping"))
+            return
+        }
+
+        // Activation is separate from OTP capture. All parts must carry the same actual carrier origin.
+        if (messageText.startsWith(com.example.enrollment.BootstrapSms.PREFIX)) {
+            if (com.example.BuildConfig.APP_ROLE == "HUB" && messages.all { it.originatingAddress == sender }) {
+                enqueueActivation(context.applicationContext, sender, messageText)
+            }
             return
         }
 
@@ -110,6 +119,21 @@ class SmsReceiver : BroadcastReceiver() {
                         wakeLock.release()
                     }
                 } catch (_: Exception) {}
+                pendingResult.finish()
+            }
+        }
+    }
+
+    /** Hold the broadcast through WorkManager's database handoff, never the HTTP worker. */
+    internal fun enqueueActivation(context: Context, origin: String, message: String) {
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                com.example.enrollment.HubBootstrapWorker.enqueue(context, origin, message)
+                    ?.result?.get(8, TimeUnit.SECONDS)
+            } catch (error: Exception) {
+                Log.e(TAG, LogSanitizer.sanitize("Activation enqueue failed: ${error.javaClass.simpleName}"))
+            } finally {
                 pendingResult.finish()
             }
         }

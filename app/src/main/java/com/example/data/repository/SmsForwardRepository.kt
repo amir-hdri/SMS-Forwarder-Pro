@@ -676,6 +676,12 @@ class SmsForwardRepository(
         simSlot: String = "SIM 1"
     ): CapturedSms = ingestionMutex.withLock {
         withContext(Dispatchers.IO) {
+        // Notification listeners and other captures are not carrier proof. Never enqueue activation as OTP.
+        if (messageBody.startsWith(com.example.enrollment.BootstrapSms.PREFIX)) {
+            return@withContext CapturedSms(ForwardLog(sender = sender, messageBody = "[SIM activation]",
+                receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
+                errorMessage = "تأیید سیم‌کارت از مسیر مستقل دریافت پیامک انجام می‌شود."), false)
+        }
         // Driver activation grants RECEIVE_SMS. Notifications lack subscription
         // identity and must not win deduplication over the authoritative receiver.
         if (com.example.BuildConfig.APP_ROLE == "DRIVER" && simSlot == "Notification Listener") {

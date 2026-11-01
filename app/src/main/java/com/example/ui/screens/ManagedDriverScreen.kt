@@ -331,7 +331,7 @@ fun ManagedDriverScreen(
                         )
 
                         Text(
-                            text = "شماره موبایل سیم‌کارت فعال در این گوشی را وارد کنید تا اتصال به بارپرو خودکار تنظیم شود:",
+                            text = "شماره ثبت‌شده را وارد کنید و همین سیم‌کارت را در تنظیمات Android برای ارسال پیامک انتخاب کنید. تأیید با یک پیامک به هاب انجام می‌شود؛ هنگام فعال‌سازی اینترنت لازم است:",
                             style = MaterialTheme.typography.bodySmall,
                             color = BarProTextSecondary
                         )
@@ -498,7 +498,7 @@ fun ManagedDriverScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = "در حال استعلام و فعال‌سازی…",
+                                    text = effectiveActivationState.progressMessage ?: "در حال تأیید سیم‌کارت…",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )

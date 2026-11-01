@@ -1,0 +1,31 @@
+{
+  "grant": {
+    "status": "granted",
+    "protocol": "barpro-bootstrap-v1",
+    "nonce": "vc9tlcPW10jWcGJYDZQBHNujIQv4iSRWZWL6TRLs594",
+    "device_id": "synthetic-device-one",
+    "wrapped_key": "Urdg08ASF5y9OwMzxCZGv/09BCsrFNWGRcnsJo9BivtAWvRdgKqhboUMNuQJC/PQ3NOxT3JM29GwevA9SvgO0PBCwR5Q6gZ/yTxLQjPL68j5l3fXFqqya5dBdZRRTyyCBFJhnw86rBW2HTNDhirkJwOKt4H/h1HvGFL/XUYGpG2/pikQp640DwbIaBaiz1wxzN7qQ2d1ym0CVSMOGQL4IkqaRIfQytxD0e0v+mDps8o2ewf/wmGNJxsZpmAoImIdWWt5076DVv4UyKZVG4v0GryBaEcIdWRhN49Ms4Oorl0YBsjxIPnql+LhNlG7/5Y3kDT8JDuniphu/S3aAVZFEA==",
+    "iv": "cWQ9dYSCJz5BVhjS",
+    "ciphertext": "idzPlE8DnoMU2d5lsA7MxfGq6StBNzUWR02FB+4U7MoGfctCdN0TtXJeVYUAlzuURpKmvF0HV7smEZ73Iaiq5G+mo9qOymOkmmqMX2sb102nITPyNp7IDKn5tGNAW497ijIN+FuNtxPHtc+kv1wMxTG8BYtkwKetWKlGf8yYmmhLi/bmkybqN2vszfeU3Y1besBfZQ+OsQX6KNxZtMMomEXmjNGIUsLtb3FFb5wwPqKiCr+AZPODYKtme3UNQDGN0wzsF+PQ57DwizCTHJ6Eho2NAazG2JFpCkn1BBEXiEZSWKj92DxnTyFf7bRbbxHWfusCyVbUYyFlfsDCmVOKC4PT+4g/wSt4pAlukhm6pVKjWal54j0lp13wFjppQtfk+Ye4VAOPeTDbq7927q2HXHVysP6dvoHY44o2eA=="
+  },
+  "phone": "09120000001",
+  "device_id": "synthetic-device-one",
+  "nonce": "vc9tlcPW10jWcGJYDZQBHNujIQv4iSRWZWL6TRLs594",
+  "private_key": "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDCgPvE78P+GMYAUPBpLjywl6SjO/NCWWe7CJE9WOomjITJ3N3CYpgZdkOqk6OD4V9SsVfRzlhdLhoaIBMhn68japFdUffxoUPXnaG2xJoG4VyOsENyoJy6kPK32yd3wPqMq+sCuFhEEDUHPYWFDR8JcuSY07E6TSNf8pa77cxetIxw6xbLimCOJ3PHezvas45GlxHw2j8o68YFrbF2ZpCGx4Qv/PTc7RGFJxFvjTJzV53qBYKTAYz1UjdA2rxZOHj52AM48gHLTZPxWlYzsWbuPblSpcy2Tzqar0Hk19zCNJ0AX7oYT5ekDNf31VPMp2Kzt4RWG9PNd2avExO2++gtAgMBAAECggEACFgXNPIiQtbWO7I9Ng3tPZgr0HLkcy65s/zgmjSjyuaRVcWbX9jx9Hmt2nX9+EzlVXtVLKOBB/JP3VoN6A3dKhRKyymWjO+hpPDWvKv/fZcSbO6j3hmEz74jI38L2OfW98zyRooZA0Z8t+RMQ5J2B+Y9Z08BleI0R8v06nf/ofpik9p3I/pZ584mUXn0ySes5WjTlYqEvPtl8QszlujgH6j/VM4ZpIVj9BXwKIvjpXEFrw+ubi4pSB+DLehnbd9U1OLw6B+XC3+nnpJaDyfXtIe6zVhn1xW4z4DN7ufz/X55KhXfI+paxrc8O0wTlr/CYjQsyuByFYnN2UayVsWbYwKBgQD93eEg0ItAryXh/kV6ndrNkf3Chw/URNhwJTuUMmDSZCRzCLWaXlJzpyBkV+GPns3MTwZp5a5oTQFJJQj7RuetS0k97wpD+udldRdD9Tlfw1gELEajbK4x7Gpj32TUX6fyc4Je8KSRjaT5NdM86jyqoFORSbqcgmTxYmT9CoW3UwKBgQDEI2btm8y8hCyU3s96Bdpuv6RIagJMtM5HCkW2i8bSKgBabMJ2zS5a5hgi6yPyeQ8FLicpQvb0MMe6lDtBephM6f3UoCJdhAgchusCcgPDkjRk4ODOXtbPqPo1Us+CFZDubRVVh2mVZqtYrU+KrR5EQfWjGQPAg5TneYUxz5FyfwKBgBwfZD0aXRLBVFUAsfmvWvnC3nWaOKqvJbrmpP75xbgI1/DWWifLox6kuPXktlwOn4Wui2tXwkZToXzU2XXcmPWdjXOK83wsY03d9sHUfJKbNTjhHsIj2/gz1GVT7fuIzTYSjbKuvcxSAKCK0efBmw7by+YgYMfNuhjzaXSOodl5AoGBAJBAmUrX81QSwdcbp+xOscASInk/vkE8GRoWa/89/hRD386hfsRxU053O/kyh1Wlw25D63llTst5tOt8abhWufyXe6ANxjiRCoYwlFdQE4Sa2v32hmBBUCuaU6s0JHm/8r/oanBlDzpaMFsf3AhaGpCJEmfJ1gCYxcMYlOV1i7txAoGAJ/iAbvRx6z6Gv6wxoBxS52kaqDVprX0LT9LUjgZnyyZ8aH0WGtYwjzAKlou1gPW+YpFB/c6FDWAj2SyUs51zVWBBEEV7r9QVEfzJSouQIhZPizcOtaLJ3ENqyCZg7ew3I0pGeDSa+ZGmDqLIlyMZy0VKDhOMHln6ZhanFgJS7gU=",
+  "public_key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwoD7xO/D/hjGAFDwaS48sJekozvzQllnuwiRPVjqJoyEydzdwmKYGXZDqpOjg+FfUrFX0c5YXS4aGiATIZ+vI2qRXVH38aFD152htsSaBuFcjrBDcqCcupDyt9snd8D6jKvrArhYRBA1Bz2FhQ0fCXLkmNOxOk0jX/KWu+3MXrSMcOsWy4pgjidzx3s72rOORpcR8No/KOvGBa2xdmaQhseEL/z03O0RhScRb40yc1ed6gWCkwGM9VI3QNq8WTh4+dgDOPIBy02T8VpWM7Fm7j25UqXMtk86mq9B5NfcwjSdAF+6GE+XpAzX99VTzKdis7eEVhvTzXdmrxMTtvvoLQIDAQAB",
+  "challenge": {
+    "protocol": "barpro-bootstrap-v1",
+    "nonce": "vc9tlcPW10jWcGJYDZQBHNujIQv4iSRWZWL6TRLs594",
+    "expires_in": 900,
+    "hub_phone_mci": "09120000002",
+    "hub_phone_irancell": "09350000003"
+  },
+  "credentials": {
+    "protocol": "barpro-driver-v1",
+    "driver_phone": "09120000001",
+    "endpoint_url": "https://fleet.example.test/api/v1/otp/sms-forwarder/09120000001",
+    "webhook_token": "6dbb7f8cf34c0192639254bd57fa1404e9b309809e212eb18480c5821249b4fc",
+    "hub_phone_mci": "09120000002",
+    "hub_phone_irancell": "09350000003"
+  }
+}
