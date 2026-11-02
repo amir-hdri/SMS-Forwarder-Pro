@@ -41,18 +41,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                 if (fetchResult is com.example.update.ConfigFetch.Applied) {
                     com.example.update.RemoteConfig.applyMatchingOverlay(fetchResult.snapshot)
                     store.recordConfig(fetchResult.snapshot.version)
-                    val updated = config.copy(
-                        endpointUrl = fetchResult.snapshot.endpointUrl ?: config.endpointUrl,
-                        forwarderSecret = fetchResult.snapshot.webhookToken ?: config.forwarderSecret,
-                        updateManifestUrl = fetchResult.snapshot.updateManifestUrl ?: config.updateManifestUrl,
-                        filterUtcmsOnly = fetchResult.snapshot.filterUtcmsOnly ?: config.filterUtcmsOnly,
-                        enableSmsFallback = fetchResult.snapshot.enableSmsFallback ?: config.enableSmsFallback,
-                        fallbackServerPhoneNumber = fetchResult.snapshot.fallbackServerPhoneNumber ?: config.fallbackServerPhoneNumber,
-                        hubIrancellPhoneNumber = fetchResult.snapshot.hubIrancellPhoneNumber ?: config.hubIrancellPhoneNumber,
-                        timeoutSeconds = fetchResult.snapshot.timeoutSeconds ?: config.timeoutSeconds,
-                        maxRetries = fetchResult.snapshot.maxRetries ?: config.maxRetries,
-                        healthCheckIntervalMinutes = fetchResult.snapshot.healthCheckIntervalMinutes ?: config.healthCheckIntervalMinutes
-                    )
+                    val updated = fetchResult.snapshot.applyTo(config)
                     repository.saveConfig(updated)
 
                     // Gate against outdated versions:

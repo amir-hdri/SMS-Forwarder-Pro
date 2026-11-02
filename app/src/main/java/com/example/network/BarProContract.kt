@@ -23,6 +23,17 @@ object BarProContract {
         else -> config.forwarderSecret.trim()
     }
 
+    fun webhookTokenError(value: String): String? {
+        val token = value.trim()
+        if (token.isBlank() || token == "change-me-to-a-secure-random-token")
+            return "کلید OTP_WEBHOOK_SECRET سرور را وارد کنید."
+        if (token.any { it.code !in 33..126 })
+            return "کلید وب‌هوک باید فقط از نویسه‌های قابل چاپ انگلیسی و بدون فاصله تشکیل شده باشد."
+        if (token.toHttpUrlOrNull() != null)
+            return "آدرس وب‌هوک جای کلید امنیتی وارد شده است؛ آدرس را در فیلد آدرس و کلید معتبر هاب را در این فیلد وارد کنید."
+        return null
+    }
+
     fun isPathValid(encodedPath: String): Boolean {
         if (encodedPath in setOf(PATH, WEBHOOK_ALIAS_PATH, GATEWAY_PATH)) return true
         val segments = encodedPath.trim('/').split('/')
@@ -67,10 +78,7 @@ object BarProContract {
             return "آدرس وب‌هوک نباید شامل نام کاربری، رمز یا فرگمنت باشد."
         if (!isPathValid(url.encodedPath))
             return "مسیر وب‌هوک بارپرو باید $PATH ، $WEBHOOK_ALIAS_PATH یا $GATEWAY_PATH باشد."
-        if (token(config).isBlank() || token(config) == "change-me-to-a-secure-random-token")
-            return "کلید OTP_WEBHOOK_SECRET سرور را وارد کنید."
-        if (token(config).any { it.code !in 33..126 })
-            return "کلید وب‌هوک باید فقط از نویسه‌های قابل چاپ انگلیسی و بدون فاصله تشکیل شده باشد."
+        webhookTokenError(token(config))?.let { return it }
         if (config.isEncryptionEnabled)
             return "بارپرو بدنه JSON استاندارد را می‌پذیرد؛ رمزنگاری سفارشی بدنه پشتیبانی نمی‌شود."
         if (requireRecipient && !SmsParser.normalizePhoneNumber(config.driverPhone).matches(Regex("09[0-9]{9}")))
