@@ -39,9 +39,8 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                     knownVersion = store.configVersion
                 )
                 if (fetchResult is com.example.update.ConfigFetch.Applied) {
+                    repository.updateConfig { latest -> fetchResult.snapshot.applyTo(latest) }
                     com.example.update.RemoteConfig.applyMatchingOverlay(fetchResult.snapshot)
-                    val updated = fetchResult.snapshot.applyTo(config)
-                    repository.saveConfig(updated)
                     store.recordConfig(fetchResult.snapshot.version)
 
                     // Gate against outdated versions:

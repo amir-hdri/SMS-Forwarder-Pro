@@ -112,7 +112,12 @@ class SmsForwardRepository(
     val pendingCount: Flow<Int> = database.forwardLogDao().getPendingCount()
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
-    suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) { configAccessLock.withLock {
+    suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) {
+        configAccessLock.withLock { getClaimedConfig() }
+    }
+
+    /** Caller owns configAccessLock; public reads/writes must not reacquire its non-reentrant mutex. */
+    private suspend fun getClaimedConfig(): ForwardConfig {
         val persisted = database.forwardConfigDao().getConfig() ?: com.example.network.ManagedTransport.initialConfiguration()
         val restored = restoreCheckedSecrets(persisted)
         // Migrate previous plaintext config fields into the Keystore-backed store.
@@ -120,8 +125,17 @@ class SmsForwardRepository(
                 persisted.authHeaderValue.isNotEmpty() || persisted.secretEncryptionKey.isNotEmpty())) {
             saveClaimedConfig(restored)
         }
-        restored
-    } }
+        return restored
+    }
+
+    /** Patch the latest private profile in the same critical section as its read and secure save. */
+    suspend fun updateConfig(patch: (ForwardConfig) -> ForwardConfig): ForwardConfig = withContext(Dispatchers.IO) {
+        configAccessLock.withLock {
+            val updated = patch(getClaimedConfig())
+            saveClaimedConfig(updated)
+            updated
+        }
+    }
 
     suspend fun saveConfig(config: ForwardConfig) = withContext(Dispatchers.IO) {
         configAccessLock.withLock {
