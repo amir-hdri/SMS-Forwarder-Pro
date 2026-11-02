@@ -113,7 +113,7 @@ class SmsForwardRepository(
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
     suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) { configAccessLock.withLock {
-        val persisted = database.forwardConfigDao().getConfig() ?: ForwardConfig()
+        val persisted = database.forwardConfigDao().getConfig() ?: com.example.network.ManagedTransport.initialConfiguration()
         val restored = restoreCheckedSecrets(persisted)
         // Migrate previous plaintext config fields into the Keystore-backed store.
         if (secureStorage != null && (persisted.forwarderSecret.isNotEmpty() ||

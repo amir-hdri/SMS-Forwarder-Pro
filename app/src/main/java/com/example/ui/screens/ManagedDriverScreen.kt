@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -49,6 +47,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -65,8 +64,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -137,7 +134,6 @@ fun ManagedDriverScreen(
 
     val isReceiveSmsGranted = remember(permissionRevision) { PermissionHelper.isReceiveSmsGranted(context) }
     val isSendSmsGranted = remember(permissionRevision) { PermissionHelper.isSendSmsGranted(context) }
-    val isReadPhoneStateGranted = remember(permissionRevision) { PermissionHelper.isReadPhoneStateGranted(context) }
     val isPostNotificationGranted = remember(permissionRevision) { PermissionHelper.isPostNotificationGranted(context) }
 
     val areCriticalPermissionsGranted = isReceiveSmsGranted && isSendSmsGranted && isPostNotificationGranted
@@ -162,11 +158,16 @@ fun ManagedDriverScreen(
 
     val isEnrolled = config.driverPhone.isNotBlank() && config.setupCompleted
 
-    var phoneInput by remember { mutableStateOf("") }
-    val cleanPhone = remember(phoneInput) {
-        SmsParser.normalizePhoneNumber(phoneInput).filter { it.isDigit() }
+    LaunchedEffect(areCriticalPermissionsGranted, isEnrolled) {
+        if (areCriticalPermissionsGranted && !isEnrolled) effectiveOnActivate("")
     }
-    val isPhoneValid = cleanPhone.matches(Regex("^09[0-9]{9}$"))
+    var openedSmsSelection by remember { mutableStateOf(false) }
+    LaunchedEffect(effectiveActivationState.needsSmsSelection) {
+        if (effectiveActivationState.needsSmsSelection && !openedSmsSelection) {
+            openedSmsSelection = true
+            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) }
+        }
+    }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Column(
@@ -279,8 +280,7 @@ fun ManagedDriverScreen(
                                 onClick = {
                                     val list = mutableListOf(
                                         Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.SEND_SMS,
-                                        Manifest.permission.READ_PHONE_STATE
+                                        Manifest.permission.SEND_SMS
                                     )
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                         list.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -324,93 +324,17 @@ fun ManagedDriverScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = "ورود مشخصات راننده",
+                            text = "فعال‌سازی خودکار سیم‌کارت",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = BarProTextPrimary
                         )
 
                         Text(
-                            text = "شماره ثبت‌شده را وارد کنید و همین سیم‌کارت را در تنظیمات Android برای ارسال پیامک انتخاب کنید. تأیید با یک پیامک به هاب انجام می‌شود؛ هنگام فعال‌سازی اینترنت لازم است:",
+                            text = "برنامه با سیم‌کارت انتخاب‌شده در Android یک پیامک تأیید به هاب می‌فرستد. سرور شماره واقعی راننده را از فرستنده پیامک تشخیص می‌دهد؛ برای فعال‌سازی اولیه اینترنت لازم است.",
                             style = MaterialTheme.typography.bodySmall,
                             color = BarProTextSecondary
                         )
-
-                        // Mobile Phone Input Field (Strict LTR input)
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                OutlinedTextField(
-                                    value = phoneInput,
-                                    onValueChange = { raw ->
-                                        val normalized = SmsParser.normalizePhoneNumber(raw).filter { it.isDigit() }
-                                        if (normalized.length <= 11) {
-                                            phoneInput = normalized
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("driver_phone_input"),
-                                    placeholder = {
-                                        Text(
-                                            "09123456789",
-                                            color = BarProTextMuted,
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Phone,
-                                            contentDescription = null,
-                                            tint = if (isPhoneValid) BarProCyan else BarProTextMuted
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (isPhoneValid) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = BarProEmerald
-                                            )
-                                        }
-                                    },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Phone,
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = {
-                                            focusManager.clearFocus()
-                                            if (isPhoneValid && areCriticalPermissionsGranted) {
-                                                effectiveOnActivate(cleanPhone)
-                                            }
-                                        }
-                                    ),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = BarProSurfaceSubtle,
-                                        unfocusedContainerColor = BarProSurfaceSubtle,
-                                        focusedBorderColor = BarProCyan,
-                                        unfocusedBorderColor = BarProBorder,
-                                        focusedTextColor = BarProTextPrimary,
-                                        unfocusedTextColor = BarProTextPrimary
-                                    )
-                                )
-                            }
-
-                            // Validation Helper Text
-                            Text(
-                                text = when {
-                                    phoneInput.isEmpty() -> "شماره موبایل ۱۱ رقمی راننده (مثال: 09123456789)"
-                                    !cleanPhone.startsWith("09") -> "شماره موبایل باید با ۰۹ شروع شود"
-                                    cleanPhone.length < 11 -> "${11 - cleanPhone.length} رقم دیگر وارد کنید"
-                                    isPhoneValid -> "✓ فرمت شماره موبایل معتبر است"
-                                    else -> "فرمت شماره موبایل نامعتبر است"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isPhoneValid) BarProEmerald else if (phoneInput.isNotEmpty()) BarProAmber else BarProTextMuted
-                            )
-                        }
 
                         // Activation Error Card
                         AnimatedVisibility(
@@ -464,18 +388,19 @@ fun ManagedDriverScreen(
                                 if (!areCriticalPermissionsGranted) {
                                     val list = mutableListOf(
                                         Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.SEND_SMS,
-                                        Manifest.permission.READ_PHONE_STATE
+                                        Manifest.permission.SEND_SMS
                                     )
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                         list.add(Manifest.permission.POST_NOTIFICATIONS)
                                     }
                                     permissionsLauncher.launch(list.toTypedArray())
-                                } else if (isPhoneValid) {
-                                    effectiveOnActivate(cleanPhone)
+                                } else if (effectiveActivationState.needsSmsSelection) {
+                                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
+                                } else {
+                                    effectiveOnActivate("")
                                 }
                             },
-                            enabled = !effectiveActivationState.isLoading && (isPhoneValid || !areCriticalPermissionsGranted),
+                            enabled = !effectiveActivationState.isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
@@ -510,7 +435,7 @@ fun ManagedDriverScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "فعال‌سازی خودکار",
+                                    text = if (effectiveActivationState.needsSmsSelection) "انتخاب سیم‌کارت پیامک در Android" else "ادامه بررسی خودکار",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )

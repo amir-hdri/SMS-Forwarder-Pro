@@ -22,6 +22,7 @@ class BootReceiver : BroadcastReceiver() {
         HeartbeatAlarmManager.scheduleNext(app)
         runCatching { MaintenanceWorker.schedule(app) }
         runCatching { SmsSyncWorker.enqueueBatchSync(app) }
+        runCatching { com.example.enrollment.DriverBootstrapWorker.enqueue(app) }
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {

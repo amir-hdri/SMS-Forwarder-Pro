@@ -218,7 +218,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
             com.example.enrollment.EnrollmentStatus.ACTIVATING -> "در حال فعال‌سازی امن از پنل بارپرو…"
             com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> "برای فعال‌سازی، مجوز دریافت و ارسال پیامک را تأیید کنید."
             com.example.enrollment.EnrollmentStatus.ACTIVE -> "فعال‌سازی انجام شد؛ تأیید دریافت پیامک سلامت را در پنل بارپرو ببینید."
-            com.example.enrollment.EnrollmentStatus.FAILED -> "فعال‌سازی انجام نشد. از پنل بارپرو لینک تازه بگیرید؛ تنظیمات قبلی حفظ شد."
+            com.example.enrollment.EnrollmentStatus.FAILED -> "فعال‌سازی هنوز تأیید نشده است؛ وضعیت سیم‌کارت و پیام سامانه را بررسی کنید."
             else -> null
         }
         message?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }

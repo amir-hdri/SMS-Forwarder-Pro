@@ -71,9 +71,10 @@ class RemoteConfigClient(
                     nowSeconds = System.currentTimeMillis() / 1000L
                 )
             )
-        } catch (error: RemoteConfig.RejectedException) {
-            // Most commonly "not newer than N", which is normal on every poll after the first.
+        } catch (_: RemoteConfig.StaleException) {
             ConfigFetch.NoChange
+        } catch (_: RemoteConfig.RejectedException) {
+            ConfigFetch.Failed("تنظیمات امضاشده برای این برنامه معتبر نیست؛ پیکربندی قبلی حفظ شد.", isSecurityRejection = true)
         }
     }
 

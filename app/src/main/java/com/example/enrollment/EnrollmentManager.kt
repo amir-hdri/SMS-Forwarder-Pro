@@ -34,6 +34,10 @@ class EnrollmentManager(
     val status = mutableStatus.asStateFlow()
     private val mutableErrorMessage = MutableStateFlow<String?>(null)
     val errorMessage = mutableErrorMessage.asStateFlow()
+    private val mutableNeedsSmsSelection = MutableStateFlow(false)
+    val needsSmsSelection = mutableNeedsSmsSelection.asStateFlow()
+    var failureRetryable: Boolean = true
+        private set
 
     /**
      * Automated resolution triggered by entering the driver's phone number.
@@ -44,22 +48,28 @@ class EnrollmentManager(
         try {
             require(role == "DRIVER") { "تنها در حالت راننده (DRIVER) امکان فعال‌سازی وجود دارد." }
             val cleanPhone = SmsParser.normalizePhoneNumber(driverPhone)
-            require(cleanPhone.matches(Regex("09[0-9]{9}"))) {
+            require(cleanPhone.isEmpty() || cleanPhone.matches(Regex("09[0-9]{9}"))) {
                 "شماره موبایل وارد شده معتبر نمی‌باشد (فرمت صحیح: 09xxxxxxxxx)"
             }
 
             mutableErrorMessage.value = null
+            mutableNeedsSmsSelection.value = false
+            failureRetryable = true
+            if (cleanPhone.isEmpty() && EnrollmentContract.isEnrolledDriver(getConfig())) {
+                mutableStatus.value = EnrollmentStatus.ACTIVE
+                return@withLock
+            }
             mutableStatus.value = EnrollmentStatus.ACTIVATING
 
             val id = deviceId()
             val credential = try {
-                if (getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } }.isBlank() && bootstrap != null)
+                if ((cleanPhone.isEmpty() || getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } }.isBlank()) && bootstrap != null)
                     bootstrap.invoke(cleanPhone, id)
                 else resolve(cleanPhone, id)
             } catch (required: ActivationRequiredException) {
                 bootstrap?.invoke(cleanPhone, id) ?: throw required
             }
-            require(credential.driverPhone == cleanPhone) { "پاسخ فعال‌سازی متعلق به این شماره نیست." }
+            require(cleanPhone.isEmpty() || credential.driverPhone == cleanPhone) { "پاسخ فعال‌سازی متعلق به این شماره نیست." }
             // Pending secrets use Keystore storage; Room stays untouched until activation
             stage(credential.document())
             activatePending()
@@ -68,7 +78,13 @@ class EnrollmentManager(
         } catch (required: BootstrapNeedsPermissions) {
             mutableErrorMessage.value = required.message
             mutableStatus.value = EnrollmentStatus.NEEDS_PERMISSIONS
+        } catch (_: BootstrapPending) {
+            mutableErrorMessage.value = null
+            mutableStatus.value = EnrollmentStatus.ACTIVATING
         } catch (error: Exception) {
+            mutableNeedsSmsSelection.value = error is BootstrapSmsNotSent && error.needsSmsSelection
+            failureRetryable = !mutableNeedsSmsSelection.value &&
+                !(error is BootstrapHttpException && error.code in setOf(400, 401, 403, 422))
             mutableErrorMessage.value = error.message ?: "خطا در استعلام مشخصات راننده از سرور"
             mutableStatus.value = EnrollmentStatus.FAILED
         }

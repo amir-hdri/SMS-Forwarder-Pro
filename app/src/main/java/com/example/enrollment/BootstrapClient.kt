@@ -22,7 +22,10 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient()) {
     }
 
     suspend fun challenge(phone: String, deviceId: String, publicKey: String): JSONObject =
-        request("challenge", JSONObject().put("driver_phone", phone).put("device_id", deviceId).put("public_key", publicKey))
+        request("challenge", JSONObject().apply {
+            if (phone.isNotBlank()) put("driver_phone", phone)
+            put("device_id", deviceId).put("public_key", publicKey)
+        })
 
     suspend fun poll(nonce: String, deviceId: String, signature: String): JSONObject =
         request("poll", JSONObject().put("nonce", nonce).put("device_id", deviceId).put("signature", signature))

@@ -29,7 +29,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Remote Config check (safe overlay, no driver intervention)
-        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val client = com.example.update.RemoteConfigClient(com.example.BuildConfig.CONFIG_PUBLIC_KEY)
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
@@ -40,9 +40,9 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                 )
                 if (fetchResult is com.example.update.ConfigFetch.Applied) {
                     com.example.update.RemoteConfig.applyMatchingOverlay(fetchResult.snapshot)
-                    store.recordConfig(fetchResult.snapshot.version)
                     val updated = fetchResult.snapshot.applyTo(config)
                     repository.saveConfig(updated)
+                    store.recordConfig(fetchResult.snapshot.version)
 
                     // Gate against outdated versions:
                     val updateManager = com.example.update.AppUpdateManager(applicationContext, com.example.BuildConfig.CONFIG_PUBLIC_KEY)
@@ -64,7 +64,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Self-Update check
-        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
                 val updateManager = com.example.update.AppUpdateManager(

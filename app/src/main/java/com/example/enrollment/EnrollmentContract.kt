@@ -44,11 +44,16 @@ class EnrollmentCredentials(
 object EnrollmentContract {
     const val PROTOCOL = "barpro-driver-v1"
 
+    fun isEnrolledDriver(config: ForwardConfig): Boolean {
+        val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
+        return config.setupCompleted && phone.matches(Regex("09[0-9]{9}")) &&
+            BarProContract.token(config).matches(Regex("[0-9a-f]{64}")) &&
+            config.endpointUrl.toHttpUrlOrNull()?.encodedPath == "${BarProContract.PATH}/$phone"
+    }
+
     /** Persisted activation identity distinguishes imported Hub routes from pre-enrollment defaults. */
     fun hubNumbers(config: ForwardConfig, buildMci: String, buildIrancell: String): com.example.utils.HubNumbers {
-        val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
-        val enrolled = config.setupCompleted && BarProContract.token(config).matches(Regex("[0-9a-f]{64}")) &&
-            config.endpointUrl.toHttpUrlOrNull()?.encodedPath == "${BarProContract.PATH}/$phone"
+        val enrolled = isEnrolledDriver(config)
         return if (enrolled) com.example.utils.HubNumbers(config.fallbackServerPhoneNumber, config.hubIrancellPhoneNumber)
         else com.example.utils.CarrierDetector.resolveHubNumbers(buildMci, buildIrancell,
             config.fallbackServerPhoneNumber, config.hubIrancellPhoneNumber)

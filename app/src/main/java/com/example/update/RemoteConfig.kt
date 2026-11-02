@@ -62,7 +62,8 @@ data class RemoteConfigSnapshot(
 
 object RemoteConfig {
 
-    class RejectedException(message: String) : IllegalArgumentException(message)
+    open class RejectedException(message: String) : IllegalArgumentException(message)
+    class StaleException(message: String) : RejectedException(message)
 
     const val MAX_SENDERS = 32
     const val MAX_KEYWORDS = 64
@@ -89,12 +90,15 @@ object RemoteConfig {
         if (documentAudience != audience) {
             throw RejectedException("Document audience '$documentAudience' is not '$audience'")
         }
+        if (audience.endsWith(".driver") && listOf("endpointUrl", "webhookToken").any {
+            payload.has(it) && !payload.isNull(it) && payload.optString(it).isNotBlank()
+        }) throw RejectedException("Public Driver settings cannot replace its enrolled endpoint or credential")
 
         val version = payload.optLong("version", 0L)
         if (version <= 0L) throw RejectedException("Document is missing a positive version")
         // Anti-rollback: a captured older document must not be replayable over a newer one.
         if (version <= knownVersion) {
-            throw RejectedException("Document version $version is not newer than $knownVersion")
+            throw StaleException("Document version $version is not newer than $knownVersion")
         }
 
         val issuedAt = payload.optLong("issuedAt", 0L)

@@ -48,6 +48,10 @@ android {
       applicationIdSuffix = ".driver"
       versionNameSuffix = "-driver"
       buildConfigField("String", "APP_ROLE", "\"DRIVER\"")
+      val driverConfigUrl = providers.gradleProperty("BARPRO_DRIVER_CONFIG_URL").orNull ?: defaultConfigUrl
+      val driverUpdateUrl = providers.gradleProperty("BARPRO_DRIVER_UPDATE_URL").orNull ?: defaultUpdateUrl
+      buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$driverConfigUrl\"")
+      buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$driverUpdateUrl\"")
       val hubMci = providers.gradleProperty("BARPRO_HUB_PHONE_MCI").orNull ?: ""
       val hubIrancell = providers.gradleProperty("BARPRO_HUB_PHONE_IRANCELL").orNull ?: ""
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"$hubMci\"")
@@ -58,6 +62,10 @@ android {
       applicationIdSuffix = ".hub"
       versionNameSuffix = "-hub"
       buildConfigField("String", "APP_ROLE", "\"HUB\"")
+      val hubConfigUrl = providers.gradleProperty("BARPRO_HUB_CONFIG_URL").orNull ?: defaultConfigUrl
+      val hubUpdateUrl = providers.gradleProperty("BARPRO_HUB_UPDATE_URL").orNull ?: defaultUpdateUrl
+      buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$hubConfigUrl\"")
+      buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$hubUpdateUrl\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
     }

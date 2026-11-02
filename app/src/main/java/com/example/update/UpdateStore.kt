@@ -41,6 +41,14 @@ class UpdateStore private constructor(private val prefs: SharedPreferences) {
         manifestVersion = version
     }
 
+    val lastVerifiedManifestDocument: String?
+        get() = prefs.getString("verified_release_document", null)
+
+    fun recordManifest(document: String, version: Long) {
+        check(prefs.edit().putString("verified_release_document", document)
+            .putLong(KEY_MANIFEST_VERSION, version).commit()) { "Cannot persist verified release" }
+    }
+
     /** versionCode of an APK already downloaded and verified but not yet installed. */
     var stagedVersionCode: Int
         get() = prefs.getInt(KEY_STAGED_VERSION_CODE, 0)
