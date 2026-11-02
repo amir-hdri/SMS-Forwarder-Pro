@@ -40,6 +40,19 @@ class SecureStorageManager internal constructor(
         check(prefs.edit().putString("pending_driver_bootstrap_v1", document).commit())
     }
 
+    fun savePendingHubInstall(document: String?) {
+        check(prefs.edit().putString("pending_hub_install_v1", document).commit())
+    }
+
+    fun getCompletedHubInstallHash(): String? = prefs.getString("completed_hub_install_hash", null)
+
+    fun saveCompletedHubInstallHash(hash: String) {
+        require(hash.matches(Regex("[0-9a-f]{64}")))
+        check(prefs.edit().putString("completed_hub_install_hash", hash).commit())
+    }
+
+    fun getPendingHubInstall(): String? = prefs.getString("pending_hub_install_v1", null)
+
     fun getPendingBootstrap(): String? = prefs.getString("pending_driver_bootstrap_v1", null)
 
     fun saveBootstrapSmsAttempt(document: String?) {

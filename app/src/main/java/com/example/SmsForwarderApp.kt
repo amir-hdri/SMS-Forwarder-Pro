@@ -35,6 +35,7 @@ class SmsForwarderApp : Application(), Configuration.Provider {
             runCatching { com.example.service.MaintenanceWorker.schedule(this@SmsForwarderApp) }
             runCatching { com.example.service.SmsSyncWorker.enqueueBatchSync(this@SmsForwarderApp) }
             runCatching { com.example.enrollment.DriverBootstrapWorker.enqueue(this@SmsForwarderApp) }
+            runCatching { com.example.enrollment.HubInstallWorker.enqueue(this@SmsForwarderApp) }
             try {
                 AppDatabase.getDatabase(this@SmsForwarderApp)
                 SecureStorageManager.getInstance(this@SmsForwarderApp).getOrCreateSalt()

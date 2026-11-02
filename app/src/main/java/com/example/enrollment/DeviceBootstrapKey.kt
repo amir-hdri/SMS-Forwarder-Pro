@@ -21,9 +21,13 @@ class DeviceBootstrapKey internal constructor(private val keyPair: () -> KeyPair
 
     fun publicKey(): String = Base64.encodeToString(keyPair().public.encoded, Base64.NO_WRAP)
 
-    fun signature(nonce: String, deviceId: String, protocol: String = PROTOCOL): String = Base64.encodeToString(
-        Signature.getInstance("SHA256withRSA").apply { initSign(keyPair().private); update(binding(nonce, deviceId, protocol)) }.sign(),
-        Base64.NO_WRAP)
+    fun signature(nonce: String, deviceId: String, protocol: String = PROTOCOL): String = sign(binding(nonce, deviceId, protocol))
+
+    fun hubDeviceId(): String = "hub_" + java.security.MessageDigest.getInstance("SHA-256").digest(keyPair().public.encoded)
+        .joinToString("") { "%02x".format(it) }.take(32)
+
+    fun sign(message: ByteArray): String = Base64.encodeToString(
+        Signature.getInstance("SHA256withRSA").apply { initSign(keyPair().private); update(message) }.sign(), Base64.NO_WRAP)
 
     fun decrypt(grant: JSONObject, nonce: String, deviceId: String): String {
         val protocol = grant.getString("protocol")

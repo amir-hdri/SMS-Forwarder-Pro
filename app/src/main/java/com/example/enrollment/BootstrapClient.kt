@@ -10,7 +10,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient()) {
+class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient(),
+    private val hubKey: DeviceBootstrapKey = DeviceBootstrapKey()) {
     private val base = com.example.network.ManagedTransport.canonical(server)
     private val http = client.newBuilder().followRedirects(false).followSslRedirects(false)
         .retryOnConnectionFailure(false).callTimeout(20, TimeUnit.SECONDS).build()
@@ -20,6 +21,11 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient()) {
         // Localhost is reserved for owned protocol tests, never a deployment origin.
         require(base.isHttps || base.host in setOf("127.0.0.1", "::1", "localhost")) { "فعال‌سازی به اتصال امن نیاز دارد." }
     }
+
+    suspend fun enrollHub(capability: String, deviceId: String, key: DeviceBootstrapKey): JSONObject =
+        request("hub-enroll", JSONObject().put("capability", capability).put("device_id", deviceId)
+            .put("public_key", key.publicKey()).put("signature", key.signature(capability, deviceId, DeviceBootstrapKey.AUTOMATIC_PROTOCOL)),
+            prefix = "/api/v1/otp")
 
     suspend fun challenge(phone: String, deviceId: String, publicKey: String): JSONObject =
         request("challenge", JSONObject().apply {
@@ -35,11 +41,12 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient()) {
         return request("prove", JSONObject().put("origin", origin).put("nonce", nonce), hubToken)
     }
 
-    private suspend fun request(path: String, payload: JSONObject, token: String = ""): JSONObject = withContext(Dispatchers.IO) {
-        val builder = Request.Builder().url(base.newBuilder().encodedPath("/api/v1/otp/bootstrap/$path").build())
+    private suspend fun request(path: String, payload: JSONObject, token: String = "",
+        prefix: String = "/api/v1/otp/bootstrap"): JSONObject = withContext(Dispatchers.IO) {
+        val builder = Request.Builder().url(base.newBuilder().encodedPath("$prefix/$path").build())
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
         if (token.isNotEmpty()) builder.header("X-OTP-Webhook-Token", token)
-        http.newCall(builder.build()).execute().use { response ->
+        com.example.network.HubRequestAuth.client(http, token, base, hubKey).newCall(builder.build()).execute().use { response ->
             if (response.code != 200) throw BootstrapHttpException(response.code)
             val body = requireNotNull(response.body)
             require(body.contentLength() <= 16_384)

@@ -725,10 +725,16 @@ class SmsForwardRepository(
         val relayEnvelope = com.example.utils.SmsFallbackEnvelope.parse(messageBody)
         val isRelay = relayEnvelope != null
 
-        // A structurally valid envelope whose HMAC does not verify is a forgery attempt, not a
-        // delivery. Drop it here so it never occupies an outbox slot or a network round-trip; the
-        // server performs the same check authoritatively with hmac.compare_digest.
-        if (relayEnvelope != null) {
+        if (messageBody.trimStart().startsWith("BP1#") && relayEnvelope == null) {
+            return@withContext CapturedSms(ForwardLog(sender = sender, messageBody = "[Invalid BP1 relay]",
+                receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
+                errorMessage = "قالب یا اندازه پاکت BP1 معتبر نیست."), false)
+        }
+        // Legacy Hubs can pre-filter with the shared secret. Device-scoped Hubs possess only their
+        // own HTTP credential, so the authenticated gateway verifies the Driver HMAC authoritatively.
+        val scopedHub = com.example.BuildConfig.APP_ROLE == "HUB" &&
+            com.example.enrollment.HubInstallContract.TOKEN.matches(BarProContract.token(config))
+        if (relayEnvelope != null && !scopedHub) {
             val relaySecret = BarProContract.token(config)
             if (!com.example.utils.SmsFallbackEnvelope.verifyForHub(relayEnvelope, relaySecret)
             ) {

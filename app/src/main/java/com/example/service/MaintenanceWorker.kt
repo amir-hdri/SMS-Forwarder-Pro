@@ -9,12 +9,14 @@ import androidx.work.WorkerParameters
 import com.example.data.local.AppDatabase
 import com.example.data.repository.SmsForwardRepository
 import com.example.network.BarProContract
+import com.example.enrollment.HubInstallWorker
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /** Recovery and retention continue after foreground-service timeouts and reboots. */
 class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
+        HubInstallWorker.enqueue(applicationContext)
         HeartbeatAlarmManager.scheduleNext(applicationContext)
         AppDatabase.getDatabase(applicationContext).forwardLogDao()
             .clearExpiredPayloads(System.currentTimeMillis() - (BarProContract.OTP_TTL_MS + BarProContract.IRAN_DST_OFFSET_MS))

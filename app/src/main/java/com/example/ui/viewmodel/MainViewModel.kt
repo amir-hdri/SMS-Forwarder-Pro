@@ -60,8 +60,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val activationRuntime by lazy { com.example.enrollment.DriverActivationRuntime.get(application) }
     private val enrollment get() = activationRuntime.enrollment
-    val enrollmentStatus get() = enrollment.status
-    val enrollmentError get() = enrollment.errorMessage
+    private val hubInstallRuntime by lazy { com.example.enrollment.HubInstallRuntime.get(application) }
+    val enrollmentStatus get() = if (com.example.BuildConfig.APP_ROLE == "HUB") hubInstallRuntime.manager.status else enrollment.status
+    val enrollmentError get() = if (com.example.BuildConfig.APP_ROLE == "HUB") hubInstallRuntime.manager.error else enrollment.errorMessage
 
     private val _driverActivationState = MutableStateFlow(DriverActivationUiState())
     val driverActivationState: StateFlow<DriverActivationUiState> = _driverActivationState.asStateFlow()
@@ -143,8 +144,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshEnrollmentPermissions() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                if (com.example.BuildConfig.APP_ROLE != "DRIVER") enrollment.resume()
                 com.example.enrollment.DriverBootstrapWorker.enqueue(getApplication())
+                com.example.enrollment.HubInstallWorker.enqueue(getApplication())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {

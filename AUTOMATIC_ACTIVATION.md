@@ -1,4 +1,4 @@
-# Automatic activation candidate 2.1.3 — 2026-11-03
+# Automatic activation candidate 2.1.4 — 2026-11-03
 
 This source implements the approved no-typed-phone Driver flow. It does not establish installation, real modem transmission, genuine carrier receipt, live activation or OTP delivery on either handset.
 
@@ -29,7 +29,7 @@ The 45-second missing-callback deadline, 90-second missing-proof deadline and ma
 
 The upgraded Hub preserves its existing secure credential, endpoint, routes and consent. No global secret is bundled or put into public documents; the advanced token field is masked. Fresh public defaults keep an unprovisioned configuration disabled with an empty credential (`ManagedDefaultsTest`).
 
-There is no existing anonymous Hub enrollment or Android managed-profile provisioning implementation in this app. Android permissions alone cannot create trusted Hub authority. This candidate supports the user's already configured Hub; a fresh Hub without an authorized private profile remains unprovisioned. No enrollment link is required by the automatic Driver flow.
+The public Hub APK preserves an already authorized profile. A factory-clean Hub can now use the approved organization-private one-use install capability described below; Android permissions alone do not create Hub authority. No enrollment link or typed phone, URL or token is required by either automatic flow.
 
 ## Public update channels
 
@@ -96,4 +96,32 @@ Historical log: `/tmp/automatic-driver-final-checks.log`; the consent RED log is
 
 `SmsForwardRepository.updateConfig` now reads, patches and securely saves the latest profile under one `configAccessLock` acquisition. The private read/save helpers avoid reacquiring the non-reentrant mutex. `MaintenanceWorker` applies the snapshot through that atomic patch and records the version after successful save. Public Driver endpoint/token rejection remains in `RemoteConfig.parse`; legitimate Hub token rotation still updates both credential fields through `RemoteConfigSnapshot.applyTo`.
 
-Reviewed candidates are produced separately from the earlier candidate and its Downloads copies. Their exact source freeze, artifact hashes, embedded-metadata result and fresh verification totals belong in the reviewed directory's external `release-receipt.json` and `verification.md`. No credential provisioning is added for a factory-clean Hub.
+Reviewed candidates are produced separately from the earlier candidate and its Downloads copies. Their exact source freeze, artifact hashes, embedded-metadata result and fresh verification totals belong in the reviewed directory's external `release-receipt.json` and `verification.md`. The separately approved private Hub provisioning flow below uses this same atomic patch.
+
+
+## Approved private Hub installation — 2026-11-03
+
+The user explicitly approved the limited exception to the no-hardcoded-credential rule: one short-lived, single-use provisioning capability may be packaged only inside an organization-private Hub APK. The global Hub secret stays server-side. Real provisioning capabilities and Hub credentials stay outside tracked source and public Hub/Driver APKs, config and release assets; tracked protocol fixtures use synthetic test values. Possession of the private APK before redemption permits first claim; keep it private.
+
+`-PBARPRO_HUB_PROVISIONING_PROFILE_FILE=<absolute external private file>` supplies JSON with exactly `protocol=barpro-hub-install-v1`, trusted HTTPS root `server`, 43-character URL-safe `capability`, and integer epoch `expires_at`. Build with `--no-build-cache`; the asset task reads the current invocation and opts out of configuration cache so a prior cached flag cannot authorize a later private build. `HubProvisioningAssets` validates the profile, generates only the Hub variant's `assets/barpro_hub_install.json`, and removes prior generated assets on every invocation. A subsequent public build generates an empty asset directory. No profile value is embedded in tracked Gradle properties, manifests or BuildConfig; the latter contains only a boolean indicating the private asset.
+
+After Android permissions and initial internet, one unique `HubInstallWorker` uses the existing AndroidKeyStore RSA key. The device ID is `hub_` plus the first 32 lowercase hex characters of SHA256(DER public key). `POST /api/v1/otp/hub-enroll` sends the capability, key-derived ID, public key and the existing v2 binding signature. The HTTPS transport disables redirects and retains CA/hostname verification. The backend binds the first device/key atomically and caches its encrypted grant for retry; another binding is refused. The capability remains a 24-hour server authorization, not a reusable global secret.
+
+The encrypted grant uses `barpro-bootstrap-v2`, nonce equal to the capability, matching device ID and the existing RSA-OAEP/AES-GCM envelope. The decrypted `barpro-hub-v1` document includes that device ID, the same-origin global webhook endpoint, `HUB1_<16hex credential ID>_<64hex secret>`, and both Hub SMS routes. `HubInstallContract` rejects wrong role, device, credential format, HTTP, query, origin and expiry. The credential and pending encrypted grant live in `SecureStorageManager`; Room stores a redacted private profile. A completed capability hash prevents repeat redemption and allows a newly packaged capability to rotate credentials without restoring prior explicit stop/consent. Public upgrades preserve the stored private identity and can resume a staged encrypted grant without a private asset.
+
+`HubRequestAuth` signs each actual scoped-credential network attempt independently. The exact RSA message is `barpro-hub-request-v1\n<device_id>\n<METHOD>\n<ENCODED_PATH>\n<timestamp>\n<nonce>\n<SHA256(raw body bytes)>`; the 16-byte nonce is freshly generated for every network attempt, including OkHttp follow-ups. Authentication is restricted to same-origin HTTPS POSTs at sms-forwarder/sms-gateway (optionally phone-scoped) and bootstrap/prove, without query strings. Public config/update fetching and legacy global/Driver credentials are unaffected.
+
+A device-scoped Hub cannot derive a Driver's BP1 HMAC key. It accepts only structurally valid, bounded one-SMS envelopes through the existing deduplication, consent, encrypted outbox and retry controls; its authenticated server verifies the Driver HMAC. Legacy Hubs retain local HMAC filtering. Malformed/oversized BP1 input does not enter the outbox, and a forged valid-shape envelope remains unsuccessful after the server's rejection. Receiving a grant is not a health, modem, SIM, carrier or OTP-delivery witness.
+
+Behavioral RED logs: `/tmp/private-hub-activation-red.log` (missing device proof, profile/activation gaps), `/tmp/private-hub-relay-red.log` (valid Driver envelope skipped and oversized parsing), `/tmp/private-hub-capability-rotation-red.log` (new capability ignored). Focused GREEN logs are dated verification snapshots; complete results and artifact provenance are recorded separately in the reviewed candidate receipt after full checks. `HubPythonInteropTest` consumes production Python crypto with a clearly synthetic test-only RSA key/capability/token. `OwnedHubTlsServer` uses a synthetic test certificate trusted explicitly by the injected test client; the untrusted-CA negative exercises the default production client. No production mutation, SMS send, handset installation or publication is part of these local controls.
+
+Final review candidate version: **2.1.4 / versionCode 7**. Earlier 2.1.3 APKs are preserved separately; the existing Android signing certificate and persistent public channel key are retained. Source freeze and complete fresh validation belong to the reviewed candidate receipt.
+
+
+## Review freeze controls — 2026-11-03
+
+With the same JDK21 and `--max-workers=2 --continue --no-build-cache --console=plain`, the focused review command executed real maintenance-race, private Hub contract/activation, TLS request, encrypted relay and Python interop controls. `/tmp/private-hub-review-focus.log` reports **BUILD SUCCESSFUL in 1m 14s**; Driver **21 tests**, Hub **27 tests**, zero failures/errors/skips. These are focused totals, not the complete app suite; `/tmp/private-hub-review-focus-receipt.json` preserves the XML totals before full checks.
+
+`python3 tools/verify-private-hub-assets.py` executed **7 actual Gradle controls**: private generation, changed capability, public-after-private purge, equivalent root spelling, cache-enabled refusal, wrong-origin refusal and expiry refusal. An intentional purge omission first produced the expected public asset leak failure (`/tmp/private-hub-asset-purge-red.log`). A separate run exposed a stale configuration-cache build-cache flag; the task now checks the current invocation outside configuration cache. The final corrected result is in `/tmp/private-hub-asset-controls-green.log`.
+
+The final source uses version 2.1.4/code7. Independent source review precedes final public/private APK copies. Full app JVM/lint checks and APK signer/hash/asset verification need their own fresh execution receipts; the prior 2.1.3 check totals and artifacts are not reused for this source.
