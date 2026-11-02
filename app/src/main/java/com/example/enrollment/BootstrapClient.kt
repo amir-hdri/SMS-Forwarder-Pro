@@ -28,7 +28,7 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient()) {
         request("poll", JSONObject().put("nonce", nonce).put("device_id", deviceId).put("signature", signature))
 
     suspend fun prove(origin: String, nonce: String, hubToken: String): JSONObject {
-        require(hubToken.isNotBlank()) { "هاب هنوز پیکربندی نشده است." }
+        com.example.network.BarProContract.webhookTokenError(hubToken)?.let { error(it) }
         return request("prove", JSONObject().put("origin", origin).put("nonce", nonce), hubToken)
     }
 

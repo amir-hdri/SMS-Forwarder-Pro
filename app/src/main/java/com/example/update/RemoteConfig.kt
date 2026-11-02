@@ -1,5 +1,6 @@
 package com.example.update
 
+import com.example.data.model.ForwardConfig
 import com.example.network.BarProContract
 import com.example.utils.SmsParser
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -42,7 +43,22 @@ data class RemoteConfigSnapshot(
     val operatorMessageFa: String? = null,
     /** Where to look for APK releases. Lets the update channel be moved without a new APK. */
     val updateManifestUrl: String? = null
-)
+) {
+    /** Apply the verified overlay without changing the configured authentication scheme. */
+    fun applyTo(config: ForwardConfig): ForwardConfig = config.copy(
+        endpointUrl = endpointUrl ?: config.endpointUrl,
+        authHeaderValue = webhookToken ?: config.authHeaderValue,
+        forwarderSecret = webhookToken ?: config.forwarderSecret,
+        updateManifestUrl = updateManifestUrl ?: config.updateManifestUrl,
+        filterUtcmsOnly = filterUtcmsOnly ?: config.filterUtcmsOnly,
+        enableSmsFallback = enableSmsFallback ?: config.enableSmsFallback,
+        fallbackServerPhoneNumber = fallbackServerPhoneNumber ?: config.fallbackServerPhoneNumber,
+        hubIrancellPhoneNumber = hubIrancellPhoneNumber ?: config.hubIrancellPhoneNumber,
+        timeoutSeconds = timeoutSeconds ?: config.timeoutSeconds,
+        maxRetries = maxRetries ?: config.maxRetries,
+        healthCheckIntervalMinutes = healthCheckIntervalMinutes ?: config.healthCheckIntervalMinutes
+    )
+}
 
 object RemoteConfig {
 

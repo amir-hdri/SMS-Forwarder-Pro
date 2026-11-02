@@ -1012,6 +1012,7 @@ fun ServerConfigScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // Auth Header / Webhook Token Field
+                        val tokenError = com.example.network.BarProContract.webhookTokenError(authHeaderValue)
                         OutlinedTextField(
                             value = authHeaderValue,
                             onValueChange = {
@@ -1021,9 +1022,10 @@ fun ServerConfigScreen(
                             label = { Text("کلید امنیتی وب‌هوک (X-OTP-Webhook-Token)") },
                             placeholder = { Text("barpro-fleet-secure-token") },
                             singleLine = true,
+                            isError = authHeaderValue.isNotBlank() && tokenError != null,
                             supportingText = {
                                 Text(
-                                    text = "این مقدار باید دقیقاً با OTP_WEBHOOK_SECRET روی سرور FastAPI یکسان باشد (خطای ۴۰۱ در صورت مغایرت)",
+                                    text = tokenError ?: "کلید امنیتی هاب را وارد کنید؛ آدرس وب‌هوک در فیلد آدرس قرار می‌گیرد (خطای ۴۰۱ در صورت مغایرت کلید)",
                                     fontSize = 11.sp,
                                     color = BarProTextSecondary
                                 )
