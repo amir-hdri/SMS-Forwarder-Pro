@@ -38,7 +38,8 @@ data class DriverActivationUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val progressMessage: String? = null,
-    val resolvedDriverName: String? = null
+    val resolvedDriverName: String? = null,
+    val needsSmsSelection: Boolean = false
 )
 
 data class EncryptionSandboxState(
@@ -57,52 +58,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         (application as? SmsForwarderApp)?.repository
             ?: SmsForwardRepository.getInstance(application)
 
-    private val bootstrap by lazy {
-        val storage = com.example.crypto.SecureStorageManager.getInstance(application)
-        val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }
-        val server = com.example.enrollment.EnrollmentContract.trustedServer(endpoint)
-        val client = com.example.enrollment.BootstrapClient(server)
-        com.example.enrollment.BootstrapCoordinator(server, com.example.enrollment.DeviceBootstrapKey(),
-            challenge = { phone, id, key -> client.challenge(phone, id, key) },
-            poll = { nonce, id, signature -> client.poll(nonce, id, signature) },
-            stage = { storage.savePendingBootstrap(it) }, loadStage = { storage.getPendingBootstrap() },
-            permissionsGranted = { com.example.utils.PermissionHelper.areForwardingPermissionsGranted(application) },
-            sendSms = { destination, nonce -> com.example.enrollment.BootstrapSms.send(application, destination, nonce) },
-            progress = { message -> _driverActivationState.value = DriverActivationUiState(isLoading = true, progressMessage = message) })
-    }
-
-    private val enrollment by lazy {
-        val storage = com.example.crypto.SecureStorageManager.getInstance(application)
-        val preferences = application.getSharedPreferences("barpro_device_identity", android.content.Context.MODE_PRIVATE)
-        val client = com.example.enrollment.EnrollmentClient()
-        val defaultUrl = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }
-        com.example.enrollment.EnrollmentManager(
-            defaultEndpoint = defaultUrl,
-            role = com.example.BuildConfig.APP_ROLE,
-            deviceId = {
-                preferences.getString("enrollment_device_id", null) ?: java.util.UUID.randomUUID().toString().also {
-                    check(preferences.edit().putString("enrollment_device_id", it).commit())
-                }
-            },
-            redeem = { link, id -> client.redeem(link, id) },
-            getConfig = { repository.getConfig() }, saveConfig = { repository.saveConfig(it) },
-            stage = { storage.savePendingEnrollment(it) }, loadStage = { storage.getPendingEnrollment() },
-            permissionsGranted = { com.example.utils.PermissionHelper.areForwardingPermissionsGranted(application) },
-            onActivated = {
-                com.example.service.HeartbeatAlarmManager.scheduleNext(application, 5)
-                runCatching { com.example.service.MaintenanceWorker.schedule(application) }
-                runCatching { SmsForwarderService.startService(application) }
-                repository.performHeartbeatAndCommandPoll()
-            },
-            bootstrap = { phone, id -> bootstrap.start(phone, id) },
-            resolve = { phone, devId ->
-                val endpoint = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { repository.getConfig().endpointUrl }
-                client.resolve(phone, com.example.enrollment.EnrollmentContract.trustedServer(endpoint), devId, repository.getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } })
-            }
-        )
-    }
-    val enrollmentStatus get() = enrollment.status
-    val enrollmentError get() = enrollment.errorMessage
+    private val activationRuntime by lazy { com.example.enrollment.DriverActivationRuntime.get(application) }
+    private val enrollment get() = activationRuntime.enrollment
+    private val hubInstallRuntime by lazy { com.example.enrollment.HubInstallRuntime.get(application) }
+    val enrollmentStatus get() = if (com.example.BuildConfig.APP_ROLE == "HUB") hubInstallRuntime.manager.status else enrollment.status
+    val enrollmentError get() = if (com.example.BuildConfig.APP_ROLE == "HUB") hubInstallRuntime.manager.error else enrollment.errorMessage
 
     private val _driverActivationState = MutableStateFlow(DriverActivationUiState())
     val driverActivationState: StateFlow<DriverActivationUiState> = _driverActivationState.asStateFlow()
@@ -112,6 +72,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resolveAndActivateDriver(rawPhone: String) {
+        if (rawPhone.isBlank()) {
+            if (_secureStorageError.value != null) return
+            activationRuntime.progress.value = "در انتظار اینترنت اولیه و تأیید واقعی سیم‌کارت…"
+            com.example.enrollment.DriverBootstrapWorker.enqueue(getApplication())
+            return
+        }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val cleanPhone = com.example.utils.SmsParser.normalizePhoneNumber(rawPhone).filter { it.isDigit() }
             if (!cleanPhone.matches(Regex("^09[0-9]{9}$"))) {
@@ -178,12 +144,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshEnrollmentPermissions() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                enrollment.resume()
-                if (com.example.BuildConfig.APP_ROLE == "DRIVER" && enrollment.status.value != com.example.enrollment.EnrollmentStatus.ACTIVE) {
-                    val storage = com.example.crypto.SecureStorageManager.getInstance(getApplication())
-                    if (storage.getPendingEnrollment() == null && !_driverActivationState.value.isLoading)
-                        bootstrap.pendingPhone()?.let { resolveAndActivateDriver(it) }
-                }
+                com.example.enrollment.DriverBootstrapWorker.enqueue(getApplication())
+                com.example.enrollment.HubInstallWorker.enqueue(getApplication())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -216,6 +178,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _secureStorageError = MutableStateFlow<String?>(null)
     val secureStorageError: StateFlow<String?> = _secureStorageError.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(enrollment.status, enrollment.errorMessage,
+                activationRuntime.progress, enrollment.needsSmsSelection) { status, error, progress, selection ->
+                DriverActivationUiState(isLoading = status == com.example.enrollment.EnrollmentStatus.ACTIVATING ||
+                    (status == com.example.enrollment.EnrollmentStatus.IDLE && progress != null),
+                    errorMessage = error, progressMessage = progress, needsSmsSelection = selection)
+            }.collect { _driverActivationState.value = it }
+        }
+    }
     private val configRefresh = MutableStateFlow(0L)
     private val lastReadableConfig = MutableStateFlow(ForwardConfig())
 

@@ -1,6 +1,7 @@
 package com.example.enrollment
 
 import android.content.Context
+import android.app.PendingIntent
 import android.os.Build
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
@@ -21,21 +22,28 @@ object BootstrapSms {
         return PREFIX + nonce
     }
 
-    fun send(context: Context, destination: String, nonce: String): Boolean {
+    fun send(context: Context, destination: String, nonce: String): Boolean = BootstrapSmsDispatch.send(context, destination, nonce)
+
+    internal fun selectedSubscription(context: Context): Int {
         if (!PermissionHelper.isSendSmsGranted(context)) throw BootstrapSmsNotSent("مجوز ارسال پیامک را تأیید کنید.")
         val selected = SubscriptionManager.getDefaultSmsSubscriptionId()
         // -1 is invalid; MAX_VALUE is the unresolved default-subscription sentinel.
         if (selected < 0 || selected == Int.MAX_VALUE) throw BootstrapSmsNotSent(
-            "سیم‌کارت همین شماره را در تنظیمات Android به‌عنوان سیم‌کارت پیش‌فرض پیامک انتخاب کنید.")
+            "سیم‌کارت ارسال پیامک را در تنظیمات Android انتخاب کنید؛ برنامه شماره‌ای را حدس نمی‌زند.", needsSmsSelection = true)
+        return selected
+    }
+
+    internal fun handoff(context: Context, destination: String, nonce: String,
+        selected: Int, sent: PendingIntent, delivered: PendingIntent): Boolean {
         val manager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
             context.getSystemService(SmsManager::class.java).createForSubscriptionId(selected)
         else {
             @Suppress("DEPRECATION")
             SmsManager.getSmsManagerForSubscriptionId(selected)
         }
-        manager.sendTextMessage(destination, null, message(nonce), null, null)
+        manager.sendTextMessage(destination, null, message(nonce), sent, delivered)
         return true // modem handoff only; the server's carrier proof determines activation
     }
 }
 
-class BootstrapSmsNotSent(message: String) : IllegalStateException(message)
+class BootstrapSmsNotSent(message: String, val needsSmsSelection: Boolean = false) : IllegalStateException(message)

@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -55,7 +56,8 @@ data class HeartbeatResult(
     val errorMessage: String?
 )
 
-class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
+class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
+    private val hubKey: com.example.enrollment.DeviceBootstrapKey = com.example.enrollment.DeviceBootstrapKey()) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private fun failure(message: String) = TransmissionResult(false, null, null, message, "", false, 0)
@@ -247,7 +249,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient()) {
         val timeout = fastTimeoutMs?.coerceIn(250, 60_000)
             ?: (config.timeoutSeconds.coerceIn(1, 60) * 1000L)
         val baseClient = clientOverride ?: httpClient
-        val client = baseClient.newBuilder()
+        val client = HubRequestAuth.client(baseClient, BarProContract.token(config),
+            requireNotNull(config.endpointUrl.trim().toHttpUrlOrNull()), hubKey).newBuilder()
             .callTimeout(timeout, TimeUnit.MILLISECONDS)
             .connectTimeout(timeout, TimeUnit.MILLISECONDS)
             .readTimeout(timeout, TimeUnit.MILLISECONDS)

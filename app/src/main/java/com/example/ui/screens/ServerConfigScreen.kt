@@ -1020,6 +1020,7 @@ fun ServerConfigScreen(
                                 onSaveConfig(config.copy(authHeaderValue = it, forwarderSecret = it))
                             },
                             label = { Text("کلید امنیتی وب‌هوک (X-OTP-Webhook-Token)") },
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                             placeholder = { Text("barpro-fleet-secure-token") },
                             singleLine = true,
                             isError = authHeaderValue.isNotBlank() && tokenError != null,

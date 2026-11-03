@@ -100,7 +100,7 @@ abstract class AppDatabase : RoomDatabase() {
                     // Pre-populate with default config
                     // Enrollment can finish while this callback runs; defaults must not replace it.
                     database.forwardConfigDao().insertDefaultIfAbsent(
-                        ForwardConfig(allowCleartextTransport = true)
+                        com.example.network.ManagedTransport.initialConfiguration()
                     )
 
                     // Pre-populate with helpful filter rules for BarPro, logistics, and OTPs

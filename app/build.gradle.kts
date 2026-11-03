@@ -1,3 +1,50 @@
+import java.io.File
+import java.net.URI
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
+import org.gradle.work.DisableCachingByDefault
+
+@DisableCachingByDefault(because = "A private one-use capability must never enter a shared build cache")
+abstract class HubProvisioningAssets : DefaultTask() {
+  @get:InputFile @get:Optional abstract val profileFile: RegularFileProperty
+  @get:Input abstract val checkoutRoot: Property<String>
+  @get:Input abstract val trustedEndpoint: Property<String>
+  @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+
+  @TaskAction fun generate() {
+    val output = outputDirectory.get().asFile
+    // This runs for every Hub build, including public builds after a private build.
+    output.deleteRecursively()
+    output.mkdirs()
+    val source = profileFile.orNull?.asFile ?: return
+    require(!project.gradle.startParameter.isBuildCacheEnabled) { "Private Hub builds require --no-build-cache" }
+    require(!source.canonicalPath.startsWith(checkoutRoot.get() + File.separator)) {
+      "Hub provisioning profile must be an external private file"
+    }
+    val document = source.readText()
+    require(document.length <= 4096)
+    val fields = groovy.json.JsonSlurper().parseText(document) as? Map<*, *>
+      ?: error("Invalid private Hub profile")
+    require(fields.keys == setOf("protocol", "server", "capability", "expires_at"))
+    require(fields["protocol"] == "barpro-hub-install-v1")
+    require((fields["capability"] as? String)?.matches(Regex("[A-Za-z0-9_-]{43}")) == true)
+    val server = URI(fields["server"] as String)
+    val trusted = URI(trustedEndpoint.get())
+    require(server.scheme == "https" && server.host != null && server.userInfo == null &&
+      server.rawQuery == null && server.fragment == null && server.path in listOf("", "/"))
+    val serverPort = if (server.port == -1) 443 else server.port
+    val trustedPort = if (trusted.port == -1) 443 else trusted.port
+    require(server.host == trusted.host && serverPort == trustedPort)
+    val expires = (fields["expires_at"] as? Number)?.toLong() ?: error("Missing Hub expiry")
+    val now = System.currentTimeMillis() / 1000L
+    require(expires > now && expires - now <= 86400L) { "Private Hub capability expired or exceeds 24 hours" }
+    File(output, "barpro_hub_install.json").writeText(document)
+  }
+}
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -18,6 +65,7 @@ val configPublicKey = providers.gradleProperty("BARPRO_CONFIG_PUBLIC_KEY").orNul
 val defaultEndpoint = providers.gradleProperty("BARPRO_DEFAULT_ENDPOINT").orNull ?: ""
 val defaultConfigUrl = providers.gradleProperty("BARPRO_CONFIG_URL").orNull ?: ""
 val defaultUpdateUrl = providers.gradleProperty("BARPRO_UPDATE_URL").orNull ?: ""
+val privateHubProfile = providers.gradleProperty("BARPRO_HUB_PROVISIONING_PROFILE_FILE")
 
 android {
   namespace = "com.example"
@@ -37,6 +85,7 @@ android {
     buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$defaultConfigUrl\"")
     buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$defaultUpdateUrl\"")
     buildConfigField("String", "APP_ROLE", "\"COMMON\"")
+    buildConfigField("boolean", "HAS_PRIVATE_HUB_PROFILE", "false")
     buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
     buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
   }
@@ -48,6 +97,10 @@ android {
       applicationIdSuffix = ".driver"
       versionNameSuffix = "-driver"
       buildConfigField("String", "APP_ROLE", "\"DRIVER\"")
+      val driverConfigUrl = providers.gradleProperty("BARPRO_DRIVER_CONFIG_URL").orNull ?: defaultConfigUrl
+      val driverUpdateUrl = providers.gradleProperty("BARPRO_DRIVER_UPDATE_URL").orNull ?: defaultUpdateUrl
+      buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$driverConfigUrl\"")
+      buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$driverUpdateUrl\"")
       val hubMci = providers.gradleProperty("BARPRO_HUB_PHONE_MCI").orNull ?: ""
       val hubIrancell = providers.gradleProperty("BARPRO_HUB_PHONE_IRANCELL").orNull ?: ""
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"$hubMci\"")
@@ -58,6 +111,11 @@ android {
       applicationIdSuffix = ".hub"
       versionNameSuffix = "-hub"
       buildConfigField("String", "APP_ROLE", "\"HUB\"")
+      buildConfigField("boolean", "HAS_PRIVATE_HUB_PROFILE", privateHubProfile.isPresent.toString())
+      val hubConfigUrl = providers.gradleProperty("BARPRO_HUB_CONFIG_URL").orNull ?: defaultConfigUrl
+      val hubUpdateUrl = providers.gradleProperty("BARPRO_HUB_UPDATE_URL").orNull ?: defaultUpdateUrl
+      buildConfigField("String", "DEFAULT_CONFIG_URL", "\"$hubConfigUrl\"")
+      buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$hubUpdateUrl\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
     }
@@ -113,6 +171,18 @@ android {
 // the variant's APK artifact and copies it under the distribution name.
 androidComponents {
   onVariants { variant ->
+    if (variant.name.startsWith("hub")) {
+      val generate = tasks.register<HubProvisioningAssets>("generate${variant.name.replaceFirstChar { it.uppercaseChar() }}ProvisioningAssets") {
+        if (privateHubProfile.isPresent) profileFile.set(file(privateHubProfile.get()))
+        checkoutRoot.set(rootDir.canonicalPath)
+        notCompatibleWithConfigurationCache("Private capability/cache authorization uses the current invocation, never a captured prior flag")
+        trustedEndpoint.set(defaultEndpoint.ifBlank { "https://87.107.160.251/api/v1/otp/sms-forwarder" })
+        outputDirectory.set(layout.buildDirectory.dir("generated/privateHubAssets/${variant.name}"))
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
+      }
+      variant.sources.assets?.addGeneratedSourceDirectory(generate, HubProvisioningAssets::outputDirectory)
+    }
     val distributionName = when {
       variant.name.startsWith("driver") -> "Forward-BarPro-Driver"
       variant.name.startsWith("hub") -> "Forward-BarPro-Hub"

@@ -74,10 +74,12 @@ class AppUpdateManager(
 
         val manifest = try {
             val payload = SignedPayload.verify(document, publicKeyBase64)
+            val pendingSameRelease = document == store.lastVerifiedManifestDocument &&
+                payload.optLong("version") == store.manifestVersion
             UpdateManifest.parse(
                 payload = payload,
                 audience = context.packageName,
-                knownVersion = store.manifestVersion,
+                knownVersion = if (pendingSameRelease) 0 else store.manifestVersion,
                 nowSeconds = System.currentTimeMillis() / 1000L
             )
         } catch (error: SignedPayload.InvalidSignatureException) {
@@ -87,7 +89,7 @@ class AppUpdateManager(
             return@withContext UpdateCheck.UpToDate
         }
 
-        store.recordManifest(manifest.version)
+        store.recordManifest(document, manifest.version)
         if (manifest.versionCode <= installedVersionCode()) UpdateCheck.UpToDate
         else UpdateCheck.Available(manifest)
     }

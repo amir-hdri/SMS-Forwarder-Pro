@@ -21,12 +21,17 @@ class DeviceBootstrapKey internal constructor(private val keyPair: () -> KeyPair
 
     fun publicKey(): String = Base64.encodeToString(keyPair().public.encoded, Base64.NO_WRAP)
 
-    fun signature(nonce: String, deviceId: String): String = Base64.encodeToString(
-        Signature.getInstance("SHA256withRSA").apply { initSign(keyPair().private); update(binding(nonce, deviceId)) }.sign(),
-        Base64.NO_WRAP)
+    fun signature(nonce: String, deviceId: String, protocol: String = PROTOCOL): String = sign(binding(nonce, deviceId, protocol))
+
+    fun hubDeviceId(): String = "hub_" + java.security.MessageDigest.getInstance("SHA-256").digest(keyPair().public.encoded)
+        .joinToString("") { "%02x".format(it) }.take(32)
+
+    fun sign(message: ByteArray): String = Base64.encodeToString(
+        Signature.getInstance("SHA256withRSA").apply { initSign(keyPair().private); update(message) }.sign(), Base64.NO_WRAP)
 
     fun decrypt(grant: JSONObject, nonce: String, deviceId: String): String {
-        require(grant.getString("protocol") == PROTOCOL && grant.getString("status") == "granted")
+        val protocol = grant.getString("protocol")
+        require(protocol in setOf(PROTOCOL, AUTOMATIC_PROTOCOL) && grant.getString("status") == "granted")
         require(grant.getString("nonce") == nonce && grant.getString("device_id") == deviceId)
         fun bytes(name: String): ByteArray {
             val encoded = grant.getString(name)
@@ -41,14 +46,18 @@ class DeviceBootstrapKey internal constructor(private val keyPair: () -> KeyPair
         val iv = bytes("iv").also { require(it.size == 12) }
         return Cipher.getInstance("AES/GCM/NoPadding").apply {
             init(Cipher.DECRYPT_MODE, SecretKeySpec(aes, "AES"), GCMParameterSpec(128, iv))
-            updateAAD(binding(nonce, deviceId))
+            updateAAD(binding(nonce, deviceId, protocol))
         }.doFinal(bytes("ciphertext")).toString(Charsets.UTF_8)
     }
 
     companion object {
         const val PROTOCOL = "barpro-bootstrap-v1"
+        const val AUTOMATIC_PROTOCOL = "barpro-bootstrap-v2"
         private const val ALIAS = "barpro-driver-bootstrap-rsa-v1"
-        fun binding(nonce: String, deviceId: String): ByteArray = "$PROTOCOL\n$nonce\n$deviceId".toByteArray(Charsets.UTF_8)
+        fun binding(nonce: String, deviceId: String, protocol: String = PROTOCOL): ByteArray {
+            require(protocol in setOf(PROTOCOL, AUTOMATIC_PROTOCOL))
+            return "$protocol\n$nonce\n$deviceId".toByteArray(Charsets.UTF_8)
+        }
 
         @Synchronized private fun androidKeyPair(): KeyPair {
             val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }

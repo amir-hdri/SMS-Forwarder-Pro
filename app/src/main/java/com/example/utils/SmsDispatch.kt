@@ -15,6 +15,7 @@ object SmsDispatch {
     const val ACTION_DELIVERED = "com.example.service.SMS_DELIVERED"
     const val LOG_ID = "log_id"
     const val ATTEMPT_AT = "attempt_at_ms"
+    const val BOOTSTRAP_NONCE = "bootstrap_nonce"
     const val RESULT_TIMEOUT_MS = 45_000L
     const val MAX_ATTEMPTS = 5
 
@@ -58,6 +59,25 @@ object SmsDispatch {
         return PendingIntent.getBroadcast(context, (logId xor attemptAt).toInt(),
             callbackIntent(context, logId, attemptAt, delivered),
             PendingIntent.FLAG_UPDATE_CURRENT or identityFlags(delivered))
+    }
+
+    private fun bootstrapIntent(context: Context, nonce: String, attemptAt: Long, delivered: Boolean): Intent =
+        Intent(context, SmsResultReceiver::class.java)
+            .setAction(if (delivered) ACTION_DELIVERED else ACTION_SENT)
+            .setData(Uri.parse("barpro-bootstrap-sms://${if (delivered) "delivered" else "sent"}/$nonce/$attemptAt"))
+            .putExtra(BOOTSTRAP_NONCE, nonce).putExtra(ATTEMPT_AT, attemptAt)
+
+    fun bootstrapResultIntent(context: Context, nonce: String, attemptAt: Long, delivered: Boolean): PendingIntent {
+        require(nonce.matches(Regex("[A-Za-z0-9_-]{43}")) && attemptAt > 0)
+        return PendingIntent.getBroadcast(context, nonce.hashCode() xor attemptAt.toInt(),
+            bootstrapIntent(context, nonce, attemptAt, delivered), PendingIntent.FLAG_UPDATE_CURRENT or identityFlags(delivered))
+    }
+
+    fun cancelBootstrapAttempt(context: Context, nonce: String, attemptAt: Long) {
+        for (delivered in listOf(false, true)) {
+            PendingIntent.getBroadcast(context, nonce.hashCode() xor attemptAt.toInt(),
+                bootstrapIntent(context, nonce, attemptAt, delivered), PendingIntent.FLAG_NO_CREATE or identityFlags(delivered))?.cancel()
+        }
     }
 
     fun errorMessage(result: Int): String = when (result) {

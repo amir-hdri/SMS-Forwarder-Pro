@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SmsFallbackEnvelopeTest {
+    @Test fun oversizedRelayCannotConsumeTheOutboxEvenWhenTrimmingLeavesAValidEnvelope() {
+        val encoded = SmsFallbackEnvelope.encode("09120000001", 1800000000000, "54321", "synthetic-driver-token")
+        assertNull(SmsFallbackEnvelope.parse(encoded + " ".repeat(161)))
+    }
+
     @Test fun driverScopedKeyHasStableVectorAndAcceptsBothRelayGenerations() {
         val shared = "test-webhook-token"
         val scoped = SmsFallbackEnvelope.deriveDriverKey(shared, "+989120000001")

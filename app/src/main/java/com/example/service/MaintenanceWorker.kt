@@ -9,12 +9,14 @@ import androidx.work.WorkerParameters
 import com.example.data.local.AppDatabase
 import com.example.data.repository.SmsForwardRepository
 import com.example.network.BarProContract
+import com.example.enrollment.HubInstallWorker
 import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /** Recovery and retention continue after foreground-service timeouts and reboots. */
 class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
+        HubInstallWorker.enqueue(applicationContext)
         HeartbeatAlarmManager.scheduleNext(applicationContext)
         AppDatabase.getDatabase(applicationContext).forwardLogDao()
             .clearExpiredPayloads(System.currentTimeMillis() - (BarProContract.OTP_TTL_MS + BarProContract.IRAN_DST_OFFSET_MS))
@@ -29,7 +31,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Remote Config check (safe overlay, no driver intervention)
-        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val client = com.example.update.RemoteConfigClient(com.example.BuildConfig.CONFIG_PUBLIC_KEY)
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
@@ -39,10 +41,9 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                     knownVersion = store.configVersion
                 )
                 if (fetchResult is com.example.update.ConfigFetch.Applied) {
+                    repository.updateConfig { latest -> fetchResult.snapshot.applyTo(latest) }
                     com.example.update.RemoteConfig.applyMatchingOverlay(fetchResult.snapshot)
                     store.recordConfig(fetchResult.snapshot.version)
-                    val updated = fetchResult.snapshot.applyTo(config)
-                    repository.saveConfig(updated)
 
                     // Gate against outdated versions:
                     val updateManager = com.example.update.AppUpdateManager(applicationContext, com.example.BuildConfig.CONFIG_PUBLIC_KEY)
@@ -64,7 +65,7 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Self-Update check
-        if (com.example.BuildConfig.APP_ROLE != "DRIVER" && config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if (config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
                 val updateManager = com.example.update.AppUpdateManager(

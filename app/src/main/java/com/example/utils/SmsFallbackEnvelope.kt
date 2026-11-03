@@ -27,6 +27,7 @@ object SmsFallbackEnvelope {
     }
 
     fun parse(text: String): ParsedEnvelope? {
+        if (text.length > 160) return null
         val trimmed = text.trim()
         if (!trimmed.startsWith("BP1#")) return null
         val parts = trimmed.split("#")

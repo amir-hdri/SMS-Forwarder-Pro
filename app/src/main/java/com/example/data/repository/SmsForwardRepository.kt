@@ -112,16 +112,30 @@ class SmsForwardRepository(
     val pendingCount: Flow<Int> = database.forwardLogDao().getPendingCount()
     val rulesCount: Flow<Int> = database.filterRuleDao().getRulesCount()
 
-    suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) { configAccessLock.withLock {
-        val persisted = database.forwardConfigDao().getConfig() ?: ForwardConfig()
+    suspend fun getConfig(): ForwardConfig = withContext(Dispatchers.IO) {
+        configAccessLock.withLock { getClaimedConfig() }
+    }
+
+    /** Caller owns configAccessLock; public reads/writes must not reacquire its non-reentrant mutex. */
+    private suspend fun getClaimedConfig(): ForwardConfig {
+        val persisted = database.forwardConfigDao().getConfig() ?: com.example.network.ManagedTransport.initialConfiguration()
         val restored = restoreCheckedSecrets(persisted)
         // Migrate previous plaintext config fields into the Keystore-backed store.
         if (secureStorage != null && (persisted.forwarderSecret.isNotEmpty() ||
                 persisted.authHeaderValue.isNotEmpty() || persisted.secretEncryptionKey.isNotEmpty())) {
             saveClaimedConfig(restored)
         }
-        restored
-    } }
+        return restored
+    }
+
+    /** Patch the latest private profile in the same critical section as its read and secure save. */
+    suspend fun updateConfig(patch: (ForwardConfig) -> ForwardConfig): ForwardConfig = withContext(Dispatchers.IO) {
+        configAccessLock.withLock {
+            val updated = patch(getClaimedConfig())
+            saveClaimedConfig(updated)
+            updated
+        }
+    }
 
     suspend fun saveConfig(config: ForwardConfig) = withContext(Dispatchers.IO) {
         configAccessLock.withLock {
@@ -711,10 +725,16 @@ class SmsForwardRepository(
         val relayEnvelope = com.example.utils.SmsFallbackEnvelope.parse(messageBody)
         val isRelay = relayEnvelope != null
 
-        // A structurally valid envelope whose HMAC does not verify is a forgery attempt, not a
-        // delivery. Drop it here so it never occupies an outbox slot or a network round-trip; the
-        // server performs the same check authoritatively with hmac.compare_digest.
-        if (relayEnvelope != null) {
+        if (messageBody.trimStart().startsWith("BP1#") && relayEnvelope == null) {
+            return@withContext CapturedSms(ForwardLog(sender = sender, messageBody = "[Invalid BP1 relay]",
+                receivedTimestamp = receivedTimestamp, status = ForwardStatus.SKIPPED,
+                errorMessage = "قالب یا اندازه پاکت BP1 معتبر نیست."), false)
+        }
+        // Legacy Hubs can pre-filter with the shared secret. Device-scoped Hubs possess only their
+        // own HTTP credential, so the authenticated gateway verifies the Driver HMAC authoritatively.
+        val scopedHub = com.example.BuildConfig.APP_ROLE == "HUB" &&
+            com.example.enrollment.HubInstallContract.TOKEN.matches(BarProContract.token(config))
+        if (relayEnvelope != null && !scopedHub) {
             val relaySecret = BarProContract.token(config)
             if (!com.example.utils.SmsFallbackEnvelope.verifyForHub(relayEnvelope, relaySecret)
             ) {

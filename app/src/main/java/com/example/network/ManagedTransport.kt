@@ -17,7 +17,12 @@ object ManagedTransport {
 
     fun configuration(config: ForwardConfig): ForwardConfig {
         val effective = endpoint(config.endpointUrl)
-        return if (effective != config.endpointUrl) config.copy(endpointUrl = effective, allowCleartextTransport = false)
-            else config
+        return config.copy(endpointUrl = effective,
+            allowCleartextTransport = if (effective != config.endpointUrl) false else config.allowCleartextTransport,
+            configManifestUrl = config.configManifestUrl.ifBlank { com.example.BuildConfig.DEFAULT_CONFIG_URL },
+            updateManifestUrl = config.updateManifestUrl.ifBlank { com.example.BuildConfig.DEFAULT_UPDATE_URL })
     }
+
+    fun initialConfiguration(): ForwardConfig = configuration(ForwardConfig(
+        endpointUrl = com.example.BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }))
 }
