@@ -363,7 +363,7 @@ fun ServerConfigScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = if (isConnected) "آنلاین و متصل" else "قطع ارتباط",
+                                    text = serverHealthState.statusLabelFa,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isConnected) BarProEmerald else BarProRose

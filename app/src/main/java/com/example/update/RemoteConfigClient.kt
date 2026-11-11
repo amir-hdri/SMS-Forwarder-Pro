@@ -24,7 +24,8 @@ sealed interface ConfigFetch {
  */
 class RemoteConfigClient(
     private val publicKeyBase64: String,
-    private val httpClient: OkHttpClient = defaultClient()
+    private val httpClient: OkHttpClient = defaultClient(),
+    private val onVerified: (RemoteConfigSnapshot) -> Unit = {}
 ) {
 
     suspend fun fetch(url: String, audience: String, knownVersion: Long): ConfigFetch =
@@ -63,14 +64,14 @@ class RemoteConfigClient(
             )
         }
         return try {
-            ConfigFetch.Applied(
-                RemoteConfig.parse(
-                    payload = payload,
-                    audience = audience,
-                    knownVersion = knownVersion,
-                    nowSeconds = System.currentTimeMillis() / 1000L
-                )
+            val snapshot = RemoteConfig.parse(
+                payload = payload,
+                audience = audience,
+                knownVersion = 0,
+                nowSeconds = System.currentTimeMillis() / 1000L
             )
+            if (snapshot.version >= knownVersion) onVerified(snapshot)
+            if (snapshot.version <= knownVersion) ConfigFetch.NoChange else ConfigFetch.Applied(snapshot)
         } catch (_: RemoteConfig.StaleException) {
             ConfigFetch.NoChange
         } catch (_: RemoteConfig.RejectedException) {

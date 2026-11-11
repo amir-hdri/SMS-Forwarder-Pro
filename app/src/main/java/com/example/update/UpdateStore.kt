@@ -13,6 +13,7 @@ import android.content.SharedPreferences
  * nothing stored on the handset can prevent that, and the ECDSA signature remains the real gate.)
  */
 class UpdateStore private constructor(private val prefs: SharedPreferences) {
+    @Volatile private var policyStorageFailed = false
 
     var configVersion: Long
         get() = prefs.getLong(KEY_CONFIG_VERSION, 0L)
@@ -64,8 +65,50 @@ class UpdateStore private constructor(private val prefs: SharedPreferences) {
 
     /** Set when a mandatory release is pending so the forwarder can refuse to run on a stale build. */
     var blockedByMandatoryUpdate: Boolean
-        get() = prefs.getBoolean(KEY_BLOCKED, false)
+        get() = policyStorageFailed || prefs.getBoolean(KEY_BLOCKED, false)
         set(value) = prefs.edit().putBoolean(KEY_BLOCKED, value).apply()
+
+    /** Accepted policies establish a durable version floor, independent of who installs the APK. */
+    fun recordConfigRequirement(required: Int?, installed: Int, revision: Long) =
+        recordRequirement(KEY_CONFIG_REQUIRED, required, installed, revision)
+    fun recordReleaseRequirement(required: Int, installed: Int, revision: Long) =
+        recordRequirement(KEY_RELEASE_REQUIRED, required, installed, revision)
+
+    val needsLegacyPolicy: Boolean get() = prefs.getBoolean(KEY_LEGACY_UNKNOWN,
+        blockedByMandatoryUpdate && !prefs.contains(KEY_REQUIRED))
+
+    @Synchronized private fun recordRequirement(source: String, required: Int?, installed: Int, revision: Long) {
+        require((required == null || required >= 0) && revision > 0)
+        val revisionKey = source + "_policy_revision"
+        val previousRevision = prefs.getLong(revisionKey, 0)
+        if (revision < previousRevision || (revision == previousRevision && required != null && required != prefs.getInt(source, -1))) return
+        val legacyUnknown = prefs.getBoolean(KEY_LEGACY_UNKNOWN,
+            blockedByMandatoryUpdate && !prefs.contains(KEY_REQUIRED))
+        val floor = required ?: prefs.getInt(source, -1)
+        val config = if (source == KEY_CONFIG_REQUIRED) floor else prefs.getInt(KEY_CONFIG_REQUIRED, -1)
+        val release = if (source == KEY_RELEASE_REQUIRED) floor else prefs.getInt(KEY_RELEASE_REQUIRED, -1)
+        val stillUnknown = legacyUnknown && (config < 0 || release < 0)
+        val target = maxOf(config, release, 0)
+        val blocked = if (stillUnknown || installed <= 0) blockedByMandatoryUpdate || installed < target else installed < target
+        commitPolicy(prefs.edit().putInt(source, floor).putLong(revisionKey, revision).putInt(KEY_REQUIRED, target)
+            .putBoolean(KEY_LEGACY_UNKNOWN, stillUnknown).putBoolean(KEY_BLOCKED, blocked))
+    }
+
+    @Synchronized fun reconcileInstalledVersion(installed: Int) {
+        if (installed <= 0 || prefs.getBoolean(KEY_LEGACY_UNKNOWN,
+                blockedByMandatoryUpdate && !prefs.contains(KEY_REQUIRED))) return
+        commitPolicy(prefs.edit().putBoolean(KEY_BLOCKED, installed < prefs.getInt(KEY_REQUIRED, 0)))
+    }
+
+    private fun commitPolicy(editor: SharedPreferences.Editor) {
+        try {
+            check(editor.commit()) { "Cannot persist mandatory update policy" }
+            policyStorageFailed = false
+        } catch (error: Exception) {
+            policyStorageFailed = true
+            throw error
+        }
+    }
 
     companion object {
         private const val PREFS_NAME = "barpro_update_state"
@@ -76,6 +119,10 @@ class UpdateStore private constructor(private val prefs: SharedPreferences) {
         private const val KEY_LAST_CHECK = "last_check_at"
         private const val KEY_LAST_STATUS = "last_status_fa"
         private const val KEY_BLOCKED = "blocked_by_mandatory_update"
+        private const val KEY_CONFIG_REQUIRED = "config_required_version_code"
+        private const val KEY_RELEASE_REQUIRED = "release_required_version_code"
+        private const val KEY_REQUIRED = "required_version_code"
+        private const val KEY_LEGACY_UNKNOWN = "legacy_update_requirement_unknown"
 
         @Volatile
         private var instance: UpdateStore? = null

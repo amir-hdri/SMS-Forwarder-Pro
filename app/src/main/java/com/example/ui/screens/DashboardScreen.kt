@@ -437,7 +437,8 @@ fun DashboardScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
                                     Text("سرور بارپرو", fontSize = 10.sp, color = BarProTextMuted)
-                                    Text(if (isConnected) "متصل و آنلاین" else "قطع ارتباط", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isConnected) BarProEmerald else BarProRose)
+                                    Text(serverHealthState.statusLabelFa, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                                        color = if (isConnected) BarProEmerald else if (serverHealthState.status == ServerHealthStatus.DISCONNECTED) BarProRose else BarProTextMuted)
                                 }
                             }
                         }

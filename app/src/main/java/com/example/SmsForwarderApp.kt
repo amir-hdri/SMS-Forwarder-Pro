@@ -27,6 +27,15 @@ class SmsForwarderApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
+        // A manual Android upgrade does not call our PackageInstaller result receiver.
+        // Reconcile before scheduling any outbox work; this never changes consent or identity.
+        try {
+            com.example.update.UpdateStore.getInstance(this).reconcileInstalledVersion(
+                com.example.update.AppUpdateManager(this, "").installedVersionCode())
+        } catch (error: Exception) {
+            Log.w("SmsForwarderApp", "Update policy recovery deferred: ${error.javaClass.simpleName}")
+        }
+
         // Offload database warm-up, crypto salt generation, and worker scheduling
         // to Dispatchers.IO to prevent Main Thread blocking and eliminate cold-start ANR.
         appScope.launch {

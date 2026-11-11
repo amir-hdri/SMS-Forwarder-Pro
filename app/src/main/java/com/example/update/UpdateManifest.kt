@@ -32,7 +32,8 @@ data class UpdateManifest(
     val mandatory: Boolean
 ) {
     companion object {
-        class RejectedException(message: String) : IllegalArgumentException(message)
+        open class RejectedException(message: String) : IllegalArgumentException(message)
+        class StaleException(message: String) : RejectedException(message)
 
         /** Refuse absurd downloads outright; a forwarder APK is a few tens of megabytes at most. */
         const val MAX_APK_BYTES = 150L * 1024L * 1024L
@@ -58,9 +59,6 @@ data class UpdateManifest(
 
             val version = payload.optLong("version", 0L)
             if (version <= 0L) throw RejectedException("Manifest is missing a positive version")
-            if (version <= knownVersion) {
-                throw RejectedException("Manifest version $version is not newer than $knownVersion")
-            }
 
             val issuedAt = payload.optLong("issuedAt", 0L)
             if (issuedAt <= 0L) throw RejectedException("Manifest is missing issuedAt")
@@ -94,6 +92,10 @@ data class UpdateManifest(
             }
 
             val notes = payload.optString("releaseNotesFa").trim().take(1000).ifEmpty { null }
+
+            if (version <= knownVersion) {
+                throw StaleException("Manifest version $version is not newer than $knownVersion")
+            }
 
             return UpdateManifest(
                 version = version,

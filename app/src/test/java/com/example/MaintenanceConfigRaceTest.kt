@@ -42,7 +42,7 @@ import kotlin.coroutines.Continuation
 /** Replacing the latest enrolled profile with the Worker's pre-fetch snapshot must fail this test. */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = ForwarderRoleApplication::class, sdk = [34],
-    shadows = [PausedRemoteConfigFetch::class])
+    shadows = [PausedRemoteConfigFetch::class, PausedUpdateTransfer::class])
 class MaintenanceConfigRaceTest {
     @get:Rule val secureStorage = SecureStorageTestRule()
     private val context = ApplicationProvider.getApplicationContext<Application>()
@@ -68,12 +68,17 @@ class MaintenanceConfigRaceTest {
         PausedRemoteConfigFetch.reached = CountDownLatch(1)
         PausedRemoteConfigFetch.release = CountDownLatch(1)
         PausedRemoteConfigFetch.result = null
+        PausedRemoteConfigFetch.policyOverride = null
+        PausedRemoteConfigFetch.policyHasMinimum = true
+        PausedUpdateTransfer.reset()
         repository.saveConfig(ForwardConfig(isMasterEnabled = false, userConsentGiven = false,
             configManifestUrl = "https://synthetic.example.test/config", autoUpdateEnabled = false))
     }
 
     @After fun close() {
         PausedRemoteConfigFetch.release.countDown()
+        PausedUpdateTransfer.checkRelease.countDown()
+        PausedUpdateTransfer.downloadRelease.countDown()
         db.close()
         dbSingleton.set(null, previousDb)
         repoSingleton.set(null, previousRepo)
@@ -108,6 +113,85 @@ class MaintenanceConfigRaceTest {
         }
     }
 
+    @Test fun aManualApkUpgradeReleasesTheRequiredVersionGateWithoutReenablingConsent() = runBlocking {
+        val store = UpdateStore.getInstance(context)
+        val installed = com.example.update.AppUpdateManager(context, "").installedVersionCode()
+        val required = installed + 1
+        PausedRemoteConfigFetch.release.countDown()
+        PausedRemoteConfigFetch.policyOverride = 2L to required
+        assertEquals(ListenableWorker.Result.success(), MaintenanceWorker(context, workerParameters()).doWork())
+        assertTrue(store.blockedByMandatoryUpdate)
+
+        // A manual package replacement has no callback to InstallResultReceiver.
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        info.longVersionCode = required.toLong()
+        org.robolectric.Shadows.shadowOf(context.packageManager).installPackage(info)
+        PausedRemoteConfigFetch.policyOverride = 3L to required
+        assertEquals(ListenableWorker.Result.success(), MaintenanceWorker(context, workerParameters()).doWork())
+        assertFalse("An installed compliant APK must not leave OTP forwarding permanently update-blocked",
+            store.blockedByMandatoryUpdate)
+        val config = repository.getConfig()
+        assertFalse(config.isMasterEnabled)
+        assertFalse(config.userConsentGiven)
+    }
+
+    @Test fun aTuningOverlayCannotWithdrawAnExistingRequiredVersion() = runBlocking {
+        val store = UpdateStore.getInstance(context)
+        val installed = com.example.update.AppUpdateManager(context, "").installedVersionCode()
+        PausedRemoteConfigFetch.release.countDown()
+        PausedRemoteConfigFetch.policyOverride = 2L to (installed + 1)
+        assertEquals(ListenableWorker.Result.success(), MaintenanceWorker(context, workerParameters()).doWork())
+        assertTrue(store.blockedByMandatoryUpdate)
+        PausedRemoteConfigFetch.policyOverride = 3L to 0
+        PausedRemoteConfigFetch.policyHasMinimum = false
+        assertEquals(ListenableWorker.Result.success(), MaintenanceWorker(context, workerParameters()).doWork())
+        assertTrue("An omitted minimum in a newer tuning overlay must preserve the existing requirement",
+            store.blockedByMandatoryUpdate)
+    }
+
+    @Test fun disablingAutomaticUpdatesDuringManifestFetchPreventsDownload() = runBlocking {
+        PausedRemoteConfigFetch.release.countDown()
+        PausedUpdateTransfer.checkRelease = CountDownLatch(1)
+        repository.updateConfig { it.copy(autoUpdateEnabled = true, updateManifestUrl = "https://synthetic.example.test/release") }
+        val work = async(Dispatchers.IO) { MaintenanceWorker(context, workerParameters()).doWork() }
+        try {
+            assertTrue(PausedUpdateTransfer.checkReached.await(5, TimeUnit.SECONDS))
+            repository.updateConfig { it.copy(autoUpdateEnabled = false) }
+            PausedUpdateTransfer.checkRelease.countDown()
+            assertEquals(ListenableWorker.Result.success(), withTimeout(5000) { work.await() })
+            assertEquals("Latest installation preference must authorize the download", 0, PausedUpdateTransfer.downloads)
+            assertEquals(0, PausedUpdateTransfer.installs)
+        } finally { PausedUpdateTransfer.checkRelease.countDown(); work.cancel() }
+    }
+
+    @Test fun disablingAutomaticUpdatesDuringApkDownloadPreventsInstallation() = runBlocking {
+        PausedRemoteConfigFetch.release.countDown()
+        PausedUpdateTransfer.downloadRelease = CountDownLatch(1)
+        repository.updateConfig { it.copy(autoUpdateEnabled = true, updateManifestUrl = "https://synthetic.example.test/release") }
+        val work = async(Dispatchers.IO) { MaintenanceWorker(context, workerParameters()).doWork() }
+        try {
+            assertTrue(PausedUpdateTransfer.downloadReached.await(5, TimeUnit.SECONDS))
+            repository.updateConfig { it.copy(autoUpdateEnabled = false) }
+            PausedUpdateTransfer.downloadRelease.countDown()
+            assertEquals(ListenableWorker.Result.success(), withTimeout(5000) { work.await() })
+            assertEquals(1, PausedUpdateTransfer.downloads)
+            assertEquals("Revoked installation consent must be checked after the download", 0, PausedUpdateTransfer.installs)
+        } finally { PausedUpdateTransfer.downloadRelease.countDown(); work.cancel() }
+    }
+
+    @Test fun aLegacyGateCanReadMetadataWithoutEnablingAutomaticInstallation() = runBlocking {
+        UpdateStore.getInstance(context).blockedByMandatoryUpdate = true
+        PausedRemoteConfigFetch.release.countDown()
+        PausedRemoteConfigFetch.policyOverride = 2L to 0
+        repository.updateConfig { it.copy(autoUpdateEnabled = false, updateManifestUrl = "https://synthetic.example.test/release") }
+        assertEquals(ListenableWorker.Result.success(), MaintenanceWorker(context, workerParameters()).doWork())
+        assertEquals(0L, PausedUpdateTransfer.checkReached.count)
+        assertFalse(UpdateStore.getInstance(context).blockedByMandatoryUpdate)
+        assertEquals(0, PausedUpdateTransfer.downloads)
+        assertEquals(0, PausedUpdateTransfer.installs)
+        assertFalse(repository.getConfig().autoUpdateEnabled)
+    }
+
     private fun workerParameters(): WorkerParameters {
         val executor = Executor { it.run() }
         val serial = SerialExecutorImpl(executor)
@@ -119,6 +203,45 @@ class MaintenanceConfigRaceTest {
         return WorkerParameters::class.java.constructors.single().newInstance(UUID.randomUUID(), Data.EMPTY,
             emptyList<String>(), WorkerParameters.RuntimeExtras(), 0, 0, executor, tasks,
             WorkerFactory.getDefaultWorkerFactory(), null, null) as WorkerParameters
+    }
+}
+
+/** Controlled accepted release/transfer boundary; no APK or remote service is contacted. */
+@Implements(com.example.update.AppUpdateManager::class, isInAndroidSdk = false)
+class PausedUpdateTransfer {
+    @Implementation fun check(url: String, continuation: Continuation<com.example.update.UpdateCheck>): Any {
+        check(url == "https://synthetic.example.test/release")
+        checkReached.countDown()
+        check(checkRelease.await(5, TimeUnit.SECONDS))
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        UpdateStore.getInstance(context).recordReleaseRequirement(0,
+            com.example.update.AppUpdateManager(context, "").installedVersionCode(), 70000)
+        return com.example.update.UpdateCheck.Available(com.example.update.UpdateManifest(70000, 1000, 999,
+            "synthetic", "https://synthetic.example.test/apk", "a".repeat(64), 1, null, false))
+    }
+    @Implementation fun download(manifest: com.example.update.UpdateManifest,
+        continuation: Continuation<com.example.update.StageResult>): Any {
+        downloads++
+        downloadReached.countDown()
+        check(downloadRelease.await(5, TimeUnit.SECONDS))
+        return com.example.update.StageResult.Staged(manifest.versionCode, java.io.File("synthetic-never-installed.apk"))
+    }
+    @Implementation fun install(apk: java.io.File, versionCode: Int, versionName: String?): Boolean {
+        installs++
+        return true
+    }
+    companion object {
+        lateinit var checkReached: CountDownLatch
+        lateinit var checkRelease: CountDownLatch
+        lateinit var downloadReached: CountDownLatch
+        lateinit var downloadRelease: CountDownLatch
+        @Volatile var downloads = 0
+        @Volatile var installs = 0
+        fun reset() {
+            checkReached = CountDownLatch(1); checkRelease = CountDownLatch(0)
+            downloadReached = CountDownLatch(1); downloadRelease = CountDownLatch(0)
+            downloads = 0; installs = 0
+        }
     }
 }
 
@@ -134,13 +257,21 @@ class PausedRemoteConfigFetch {
         check(release.await(5, TimeUnit.SECONDS)) { "Controlled fetch release timed out" }
         val role = if (audience.endsWith(".driver")) "driver" else "hub"
         val document = javaClass.getResourceAsStream("/maintenance-overlay-$role.signed")!!.bufferedReader().use { it.readText() }
-        return client.verify(document, audience, knownVersion).also { result = it }
+        val verified = client.verify(document, audience, 0)
+        val policy = policyOverride
+        // Unit-test policy boundary only; the race test retains the original signed snapshot.
+        return (if (policy != null && verified is ConfigFetch.Applied)
+            ConfigFetch.Applied(verified.snapshot.copy(version = policy.first, minSupportedVersionCode = policy.second,
+                minimumVersionSpecified = policyHasMinimum))
+        else client.verify(document, audience, knownVersion)).also { result = it }
     }
 
     companion object {
         lateinit var reached: CountDownLatch
         lateinit var release: CountDownLatch
         @Volatile var result: ConfigFetch? = null
+        @Volatile var policyOverride: Pair<Long, Int>? = null
+        @Volatile var policyHasMinimum: Boolean = true
     }
 }
 

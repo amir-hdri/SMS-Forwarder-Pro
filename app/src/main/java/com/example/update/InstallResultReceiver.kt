@@ -44,7 +44,7 @@ class InstallResultReceiver : BroadcastReceiver() {
 
             PackageInstaller.STATUS_SUCCESS -> {
                 store.lastStatusFa = "نسخه‌ی " + (versionName ?: versionCode.toString()) + " با موفقیت نصب شد."
-                store.blockedByMandatoryUpdate = false
+                store.reconcileInstalledVersion(AppUpdateManager(context, "").installedVersionCode())
                 store.stagedVersionCode = 0
                 UpdateNotifier.clearAll(context)
                 // The archive is dead weight once installed, and it is the largest file we keep.

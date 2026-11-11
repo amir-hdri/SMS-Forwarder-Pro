@@ -506,7 +506,7 @@ fun ManagedDriverScreen(
                                             .background(BarProEmerald)
                                     )
                                     Text(
-                                        text = "فعال و متصل",
+                                        text = "هویت ذخیره شده",
                                         color = BarProEmerald,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp

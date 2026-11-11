@@ -33,8 +33,12 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         // Periodic Remote Config check (safe overlay, no driver intervention)
         if (config.configManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
-                val client = com.example.update.RemoteConfigClient(com.example.BuildConfig.CONFIG_PUBLIC_KEY)
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
+                val updateManager = com.example.update.AppUpdateManager(applicationContext, com.example.BuildConfig.CONFIG_PUBLIC_KEY)
+                val client = com.example.update.RemoteConfigClient(com.example.BuildConfig.CONFIG_PUBLIC_KEY,
+                    onVerified = { accepted -> store.recordConfigRequirement(
+                        if (accepted.minimumVersionSpecified) accepted.minSupportedVersionCode else null,
+                        updateManager.installedVersionCode(), accepted.version) })
                 val fetchResult = client.fetch(
                     url = config.configManifestUrl,
                     audience = applicationContext.packageName,
@@ -46,10 +50,11 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                     store.recordConfig(fetchResult.snapshot.version)
 
                     // Gate against outdated versions:
-                    val updateManager = com.example.update.AppUpdateManager(applicationContext, com.example.BuildConfig.CONFIG_PUBLIC_KEY)
+                    store.recordConfigRequirement(
+                        if (fetchResult.snapshot.minimumVersionSpecified) fetchResult.snapshot.minSupportedVersionCode else null,
+                        updateManager.installedVersionCode(), fetchResult.snapshot.version)
                     if (fetchResult.snapshot.minSupportedVersionCode > 0 &&
                         updateManager.installedVersionCode() < fetchResult.snapshot.minSupportedVersionCode) {
-                        store.blockedByMandatoryUpdate = true
                         com.example.update.UpdateNotifier.showMandatory(
                             applicationContext,
                             null,
@@ -65,7 +70,8 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         // Periodic Self-Update check
-        if (config.autoUpdateEnabled && config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
+        if ((config.autoUpdateEnabled || com.example.update.UpdateStore.getInstance(applicationContext).needsLegacyPolicy) &&
+            config.updateManifestUrl.isNotBlank() && com.example.BuildConfig.CONFIG_PUBLIC_KEY.isNotBlank()) {
             try {
                 val store = com.example.update.UpdateStore.getInstance(applicationContext)
                 val updateManager = com.example.update.AppUpdateManager(
@@ -75,16 +81,21 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                 val check = updateManager.check(config.updateManifestUrl)
                 if (check is com.example.update.UpdateCheck.Available) {
                     if (check.manifest.mandatory) {
-                        store.blockedByMandatoryUpdate = true
                         com.example.update.UpdateNotifier.showMandatory(
                             applicationContext,
                             check.manifest.versionName,
                             check.manifest.releaseNotesFa
                         )
                     }
-                    val stage = updateManager.download(check.manifest)
-                    if (stage is com.example.update.StageResult.Staged) {
-                        updateManager.install(stage.apk, check.manifest.versionCode, check.manifest.versionName)
+                    if (repository.getConfig().autoUpdateEnabled) {
+                        val stage = updateManager.download(check.manifest)
+                        if (stage is com.example.update.StageResult.Staged) {
+                            repository.withCurrentConfig { latest ->
+                                if (latest.autoUpdateEnabled) {
+                                    updateManager.install(stage.apk, check.manifest.versionCode, check.manifest.versionName)
+                                }
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {

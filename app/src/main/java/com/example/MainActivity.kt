@@ -182,7 +182,8 @@ fun MainAppScreen(viewModel: MainViewModel) {
     }
     var requestedBatteryExemption by remember { mutableStateOf(false) }
     fun requestBackgroundIfNeeded() {
-        if (!requestedBatteryExemption && com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context) &&
+        if (!requestedBatteryExemption && config.isMasterEnabled && config.userConsentGiven &&
+            com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context) &&
             !com.example.utils.PermissionHelper.isBatteryOptimizationIgnored(context)) {
             requestedBatteryExemption = true
             com.example.utils.PermissionHelper.requestBatteryOptimization(context)
@@ -204,6 +205,10 @@ fun MainAppScreen(viewModel: MainViewModel) {
         } else {
             requestBackgroundIfNeeded()
         }
+    }
+
+    LaunchedEffect(config.isMasterEnabled, config.userConsentGiven) {
+        requestBackgroundIfNeeded()
     }
 
     LaunchedEffect(enrollmentStatus) {

@@ -137,6 +137,11 @@ class SmsForwardRepository(
         }
     }
 
+    /** Serialize a synchronous installation decision with current configuration writers. */
+    suspend fun <T> withCurrentConfig(action: (ForwardConfig) -> T): T = withContext(Dispatchers.IO) {
+        configAccessLock.withLock { action(getClaimedConfig()) }
+    }
+
     suspend fun saveConfig(config: ForwardConfig) = withContext(Dispatchers.IO) {
         configAccessLock.withLock {
             check(!secureStorageBlocked) { "Secure configuration requires validated recovery" }

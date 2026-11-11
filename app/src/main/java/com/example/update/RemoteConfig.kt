@@ -42,7 +42,9 @@ data class RemoteConfigSnapshot(
     /** Shown verbatim to the operator in the app; never used for control flow. */
     val operatorMessageFa: String? = null,
     /** Where to look for APK releases. Lets the update channel be moved without a new APK. */
-    val updateManifestUrl: String? = null
+    val updateManifestUrl: String? = null,
+    /** Absence preserves the previous minimum; explicit signed zero withdraws it. */
+    val minimumVersionSpecified: Boolean = false
 ) {
     /** Apply the verified overlay without changing the configured authentication scheme. */
     fun applyTo(config: ForwardConfig): ForwardConfig = config.copy(
@@ -122,6 +124,7 @@ object RemoteConfig {
             fallbackServerPhoneNumber = optionalPhone(payload, "fallbackServerPhoneNumber"),
             hubIrancellPhoneNumber = optionalPhone(payload, "hubIrancellPhoneNumber"),
             minSupportedVersionCode = optionalInt(payload, "minSupportedVersionCode", 0, 1_000_000) ?: 0,
+            minimumVersionSpecified = payload.has("minSupportedVersionCode") && !payload.isNull("minSupportedVersionCode"),
             operatorMessageFa = optionalText(payload, "operatorMessageFa", MAX_MESSAGE_LENGTH),
             updateManifestUrl = optionalEndpoint(payload, "updateManifestUrl", requireWebhookPath = false)
         )

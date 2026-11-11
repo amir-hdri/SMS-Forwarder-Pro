@@ -30,7 +30,14 @@ data class ServerHealthState(
     val lastErrorMessage: String? = null,
     val endpointUrl: String = "",
     val isAlertActive: Boolean = false
-)
+) {
+    val statusLabelFa: String get() = when (status) {
+        ServerHealthStatus.CONNECTED -> "متصل و آنلاین"
+        ServerHealthStatus.CHECKING -> "در حال بررسی"
+        ServerHealthStatus.DISCONNECTED -> "قطع ارتباط"
+        ServerHealthStatus.UNKNOWN -> "بررسی نشده"
+    }
+}
 
 object ServerHealthMonitor {
 

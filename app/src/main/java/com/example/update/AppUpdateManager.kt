@@ -84,11 +84,14 @@ class AppUpdateManager(
             )
         } catch (error: SignedPayload.InvalidSignatureException) {
             return@withContext UpdateCheck.Failed("امضای فایل نسخه معتبر نیست؛ آپدیت رد شد.")
-        } catch (error: UpdateManifest.Companion.RejectedException) {
+        } catch (error: UpdateManifest.Companion.StaleException) {
             // A non-newer manifest is the normal steady state, not an error worth alarming about.
             return@withContext UpdateCheck.UpToDate
+        } catch (error: UpdateManifest.Companion.RejectedException) {
+            return@withContext UpdateCheck.Failed("فایل امضاشدهٔ نسخه برای این برنامه معتبر نیست؛ آپدیت رد شد.")
         }
 
+        store.recordReleaseRequirement(if (manifest.mandatory) manifest.versionCode else 0, installedVersionCode(), manifest.version)
         store.recordManifest(document, manifest.version)
         if (manifest.versionCode <= installedVersionCode()) UpdateCheck.UpToDate
         else UpdateCheck.Available(manifest)
