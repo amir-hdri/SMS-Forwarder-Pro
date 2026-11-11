@@ -1,6 +1,8 @@
 # Forward BarPro 2.1.5 verification — 2026-11-11
 
-Version 2.1.5/code8 fixes update recovery and truthful operational display for both Hub and Driver. Final local native and TLS receipts are complete; GitHub publication is the remaining release action.
+Version 2.1.5/code8 fixes update recovery and truthful operational display for both Hub and Driver. Final local native and TLS receipts are complete. The public release was published on 2026-11-11 at 16:27:39UTC and independently downloaded and verified at 16:31:21UTC.
+
+Public release: https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.5. The release and tag bind application source `e00974ccd731c6fdb559a78e688c7ac63c264310`; subsequent documentation commits do not change that APK provenance. All seven public assets returned HTTP200 through the latest-download channel and matched their exact local SHA256 and size. Receipt: private `android-emulator/publication-2.1.5/published-verification.json`.
 
 ## Changes
 
