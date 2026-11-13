@@ -24,12 +24,40 @@ object BootstrapSms {
 
     fun send(context: Context, destination: String, nonce: String): Boolean = BootstrapSmsDispatch.send(context, destination, nonce)
 
-    internal fun selectedSubscription(context: Context): Int {
+    internal fun availableSubscriptions(context: Context): List<Int> {
         if (!PermissionHelper.isSendSmsGranted(context)) throw BootstrapSmsNotSent("مجوز ارسال پیامک را تأیید کنید.")
+        val list = mutableListOf<Int>()
+        try {
+            val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+            val active = subManager?.activeSubscriptionInfoList
+            if (!active.isNullOrEmpty()) {
+                for (info in active) {
+                    if (info.subscriptionId >= 0 && !list.contains(info.subscriptionId)) {
+                        list.add(info.subscriptionId)
+                    }
+                }
+            }
+        } catch (_: SecurityException) {}
+
+        val defaultSub = SubscriptionManager.getDefaultSmsSubscriptionId()
+        if (defaultSub >= 0 && defaultSub != Int.MAX_VALUE) {
+            if (!list.contains(defaultSub)) {
+                list.add(0, defaultSub)
+            } else if (list.indexOf(defaultSub) > 0) {
+                list.remove(defaultSub)
+                list.add(0, defaultSub)
+            }
+        }
+        return list
+    }
+
+    internal fun selectedSubscription(context: Context): Int {
+        val available = availableSubscriptions(context)
+        if (available.isNotEmpty()) return available.first()
         val selected = SubscriptionManager.getDefaultSmsSubscriptionId()
         // -1 is invalid; MAX_VALUE is the unresolved default-subscription sentinel.
         if (selected < 0 || selected == Int.MAX_VALUE) throw BootstrapSmsNotSent(
-            "سیم‌کارت ارسال پیامک را در تنظیمات Android انتخاب کنید؛ برنامه شماره‌ای را حدس نمی‌زند.", needsSmsSelection = true)
+            "سیم‌کارت فعالی در دستگاه یافت نشد؛ سیم‌کارت و مجوزها را بررسی کنید.", needsSmsSelection = true)
         return selected
     }
 

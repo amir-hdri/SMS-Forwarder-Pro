@@ -26,6 +26,16 @@ class HubBootstrapWorker(context: Context, parameters: WorkerParameters) : Corou
         return try {
             val config = SmsForwardRepository.getInstance(applicationContext).getConfig()
             if (!config.isMasterEnabled || !config.userConsentGiven) return Result.failure()
+            if (com.example.network.CellularEgress.isVpnActive(applicationContext)) {
+                val egress = com.example.network.CellularEgress.acquire(applicationContext, timeoutMs = 4000L)
+                if (egress != null) {
+                    egress.use { session ->
+                        BootstrapClient(EnrollmentContract.trustedServer(config.endpointUrl), session.bind(okhttp3.OkHttpClient()))
+                            .prove(origin, nonce, BarProContract.token(config))
+                    }
+                    return Result.success()
+                }
+            }
             BootstrapClient(EnrollmentContract.trustedServer(config.endpointUrl))
                 .prove(origin, nonce, BarProContract.token(config))
             Result.success()

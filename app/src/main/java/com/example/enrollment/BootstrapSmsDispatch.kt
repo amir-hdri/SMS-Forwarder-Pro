@@ -27,7 +27,12 @@ object BootstrapSmsDispatch {
         }
         if ((previous?.attempts ?: 0) >= SmsDispatch.MAX_ATTEMPTS)
             throw BootstrapSmsNotSent("تلاش‌های محدود پیامک تمام شده است؛ پس از پایان مهلت، برنامه خودکار دوباره بررسی می‌کند.")
-        val selected = BootstrapSms.selectedSubscription(context)
+        val subs = BootstrapSms.availableSubscriptions(context)
+        val selected = if (subs.isNotEmpty()) {
+            subs[(previous?.attempts ?: 0) % subs.size]
+        } else {
+            BootstrapSms.selectedSubscription(context)
+        }
         SecureStorageManager.getInstance(context).getBootstrapSmsAttempt()?.let {
             val old = JSONObject(it)
             if (old.getString("nonce") != nonce)
@@ -43,7 +48,18 @@ object BootstrapSmsDispatch {
         storage.saveBootstrapSmsAttempt(pending.toString())
         val sent = SmsDispatch.bootstrapResultIntent(context, nonce, attemptAt, false)
         val delivered = SmsDispatch.bootstrapResultIntent(context, nonce, attemptAt, true)
-        return try { BootstrapSms.handoff(context, destination, nonce, selected, sent, delivered) }
+        return try {
+            if (subs.size > 1 && previous == null) {
+                var anySent = false
+                for (sub in subs) {
+                    val ok = runCatching { BootstrapSms.handoff(context, destination, nonce, sub, sent, delivered) }.getOrDefault(false)
+                    if (ok) anySent = true
+                }
+                anySent
+            } else {
+                BootstrapSms.handoff(context, destination, nonce, selected, sent, delivered)
+            }
+        }
         catch (error: Exception) {
             SmsDispatch.cancelBootstrapAttempt(context, nonce, attemptAt)
             pending.put("status", "failed").put("retry_at", System.currentTimeMillis() + 30_000)

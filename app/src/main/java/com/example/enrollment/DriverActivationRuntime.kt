@@ -20,8 +20,28 @@ class DriverActivationRuntime private constructor(private val context: Context) 
     private val client = BootstrapClient(server)
     val progress = MutableStateFlow<String?>(null)
     private val automaticLock = Mutex()
+
+    private suspend fun <T> withEgressClient(block: suspend (BootstrapClient) -> T): T {
+        if (com.example.network.CellularEgress.isVpnActive(context)) {
+            val egress = com.example.network.CellularEgress.acquire(context, timeoutMs = 4000L)
+            if (egress != null) {
+                return egress.use { session ->
+                    val boundClient = session.bind(okhttp3.OkHttpClient())
+                    block(BootstrapClient(server, boundClient))
+                }
+            }
+        }
+        return block(client)
+    }
+
+    private suspend fun challenge(phone: String, deviceId: String, publicKey: String): org.json.JSONObject =
+        withEgressClient { it.challenge(phone, deviceId, publicKey) }
+
+    private suspend fun poll(nonce: String, deviceId: String, signature: String): org.json.JSONObject =
+        withEgressClient { it.poll(nonce, deviceId, signature) }
+
     val bootstrap = BootstrapCoordinator(server, DeviceBootstrapKey(),
-        challenge = client::challenge, poll = client::poll,
+        challenge = ::challenge, poll = ::poll,
         stage = storage::savePendingBootstrap, loadStage = storage::getPendingBootstrap,
         permissionsGranted = { PermissionHelper.areForwardingPermissionsGranted(context) },
         sendSms = { number, nonce -> BootstrapSms.send(context, number, nonce) },

@@ -80,4 +80,30 @@ class BootstrapDispatchReliabilityTest {
         assertFalse(BootstrapSmsDispatch.handleResult(context, nonce, first.attemptAt, Activity.RESULT_OK, true, null))
         assertEquals("dispatching", BootstrapSmsDispatch.state(context, nonce)!!.status)
     }
+
+    @Test fun multiSimAvailableSubscriptionsAreDispatchedWithoutDefaultSubscription() {
+        // Simulate no default subscription set in Android (SubscriptionManager returns -1 / INVALID)
+        ShadowSubscriptionManager.setDefaultSmsSubscriptionId(-1)
+        val shadowSubManager = shadowOf(context.getSystemService(android.telephony.SubscriptionManager::class.java))
+        
+        // When active subscriptions are available in the device (e.g., SIM 2 with subId 42)
+        val subInfo = ShadowSubscriptionManager.SubscriptionInfoBuilder.newBuilder()
+            .setId(42)
+            .setSimSlotIndex(1)
+            .setDisplayName("Irancell")
+            .buildSubscriptionInfo()
+        shadowSubManager.setActiveSubscriptionInfos(subInfo)
+
+        val available = BootstrapSms.availableSubscriptions(context)
+        assertTrue("Available subscriptions must find active SIM 2", available.contains(42))
+        assertEquals(42, BootstrapSms.selectedSubscription(context))
+
+        // Bootstrap send must succeed without throwing "needsSmsSelection"
+        val testNonce = "s".repeat(43)
+        assertTrue("Send must succeed on SIM 2 even without default SMS set",
+            BootstrapSms.send(context, "09120000002", testNonce))
+        val state = BootstrapSmsDispatch.state(context, testNonce)!!
+        assertEquals(42, JSONObject(SecureStorageManager.getInstance(context).getBootstrapSmsAttempt()!!).getInt("subscription_id"))
+        assertEquals("dispatching", state.status)
+    }
 }
