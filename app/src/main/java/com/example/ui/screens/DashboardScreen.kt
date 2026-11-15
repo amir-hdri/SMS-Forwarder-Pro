@@ -395,9 +395,19 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        val driverLabel = if (config.driverFullName.isNotBlank()) config.driverFullName
-                        else if (config.driverPhone.isNotBlank()) config.driverPhone
-                        else "ثبت‌نشده"
+                        val isHubApp = com.example.BuildConfig.APP_ROLE == "HUB"
+                        val topCaption = if (isHubApp) "پایانه ناوگان" else "راننده"
+                        val mainLabel = if (isHubApp) {
+                            config.deviceIdentifier.ifBlank { "BarPro Terminal 01" }
+                        } else if (config.driverFullName.isNotBlank()) {
+                            config.driverFullName
+                        } else if (config.driverPhone.isNotBlank()) {
+                            config.driverPhone
+                        } else {
+                            "ثبت‌نشده"
+                        }
+                        val pillIcon = if (isHubApp) Icons.Default.Security else Icons.Default.Person
+                        val pillIconTint = if (isHubApp) BarProEmerald else BarProCyan
 
                         Box(
                             modifier = Modifier
@@ -409,11 +419,11 @@ fun DashboardScreen(
                                 .padding(vertical = 8.dp, horizontal = 10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = BarProCyan, modifier = Modifier.size(16.dp))
+                                Icon(pillIcon, contentDescription = null, tint = pillIconTint, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
-                                    Text("راننده", fontSize = 10.sp, color = BarProTextMuted)
-                                    Text(driverLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BarProTextPrimary, maxLines = 1)
+                                    Text(topCaption, fontSize = 10.sp, color = BarProTextMuted)
+                                    Text(mainLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BarProTextPrimary, maxLines = 1)
                                 }
                             }
                         }

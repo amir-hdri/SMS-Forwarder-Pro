@@ -66,6 +66,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _driverActivationState = MutableStateFlow(DriverActivationUiState())
     val driverActivationState: StateFlow<DriverActivationUiState> = _driverActivationState.asStateFlow()
+    private var driverActivationJob: kotlinx.coroutines.Job? = null
 
     fun resolveDriver(phone: String) {
         resolveAndActivateDriver(phone)
@@ -75,28 +76,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (rawPhone.isBlank()) {
             if (_secureStorageError.value != null) return
             activationRuntime.progress.value = "در انتظار اینترنت اولیه و تأیید واقعی سیم‌کارت…"
+            _driverActivationState.value = DriverActivationUiState(
+                isLoading = true,
+                progressMessage = "در حال شناسایی و تأیید خودکار سیم‌کارت…"
+            )
             com.example.enrollment.DriverBootstrapWorker.enqueue(getApplication())
+            driverActivationJob?.cancel()
+            driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    activationRuntime.activateAutomatically()
+                    when (enrollment.status.value) {
+                        com.example.enrollment.EnrollmentStatus.ACTIVE -> {
+                            com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
+                            val resolvedName = repository.getConfig().driverFullName.ifBlank { repository.getConfig().driverPhone }
+                            _driverActivationState.value = DriverActivationUiState(
+                                isLoading = false,
+                                successMessage = "فعال‌سازی با موفقیت انجام شد.",
+                                resolvedDriverName = resolvedName
+                            )
+                        }
+                        com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> {
+                            _driverActivationState.value = DriverActivationUiState(
+                                isLoading = false,
+                                errorMessage = "برای تکمیل فعال‌سازی، مجوزهای پیامک را تأیید کنید."
+                            )
+                        }
+                        else -> {
+                            _driverActivationState.value = DriverActivationUiState(
+                                isLoading = false,
+                                errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور"
+                            )
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    _driverActivationState.value = DriverActivationUiState(
+                        isLoading = false,
+                        errorMessage = error.message ?: "خطا در فعال‌سازی خودکار سیم‌کارت"
+                    )
+                }
+            }
             return
         }
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val cleanPhone = com.example.utils.SmsParser.normalizePhoneNumber(rawPhone).filter { it.isDigit() }
-            if (!cleanPhone.matches(Regex("^09[0-9]{9}$"))) {
-                _driverActivationState.value = DriverActivationUiState(
-                    errorMessage = "شماره موبایل وارد شده نامعتبر است (فرمت صحیح: 09xxxxxxxxx)"
-                )
-                return@launch
-            }
 
-            _driverActivationState.value = DriverActivationUiState(isLoading = true)
+        val cleanPhone = com.example.utils.SmsParser.normalizePhoneNumber(rawPhone).filter { it.isDigit() }
+        if (!cleanPhone.matches(Regex("^09[0-9]{9}$"))) {
+            _driverActivationState.value = DriverActivationUiState(
+                errorMessage = "شماره موبایل وارد شده نامعتبر است (فرمت صحیح: 09xxxxxxxxx)"
+            )
+            return
+        }
 
+        _driverActivationState.value = DriverActivationUiState(
+            isLoading = true,
+            progressMessage = "در حال استعلام و فعال‌سازی شماره راننده…"
+        )
+
+        driverActivationJob?.cancel()
+        driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 enrollment.resolveDriverConfiguration(cleanPhone)
                 when (enrollment.status.value) {
                     com.example.enrollment.EnrollmentStatus.ACTIVE -> {
                         com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
+                        val resolvedName = repository.getConfig().driverFullName.ifBlank { cleanPhone }
                         _driverActivationState.value = DriverActivationUiState(
                             isLoading = false,
-                            successMessage = "فعال‌سازی با موفقیت انجام شد."
+                            successMessage = "فعال‌سازی با موفقیت انجام شد.",
+                            resolvedDriverName = resolvedName
                         )
                     }
                     com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS -> {
@@ -112,6 +160,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 _driverActivationState.value = DriverActivationUiState(
                     isLoading = false,
@@ -122,6 +172,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resetDriverActivation() {
+        driverActivationJob?.cancel()
+        _driverActivationState.value = DriverActivationUiState()
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val current = repository.getConfig()
             val resetConfig = current.copy(

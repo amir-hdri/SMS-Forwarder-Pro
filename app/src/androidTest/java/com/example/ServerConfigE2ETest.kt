@@ -100,11 +100,9 @@ class ServerConfigE2ETest {
             compose.onNodeWithContentDescription("تنظیمات").performClick()
         }
 
-        // 2. Driver phone.
-        scrollTo("driver_phone_input")
-        compose.onNodeWithTag("driver_phone_input").performTextClearance()
-        compose.onNodeWithTag("driver_phone_input").performTextInput(driverPhone)
-        compose.onNodeWithTag("driver_phone_input").assertTextContains(driverPhone)
+        // 2. Hub Terminal Profile.
+        scrollTo("hub_terminal_card")
+        compose.onNodeWithTag("hub_terminal_card").assertExists()
 
         // 3. Both Hub SIM numbers.
         scrollTo("hub_mci_input")
@@ -147,8 +145,8 @@ class ServerConfigE2ETest {
 
         // 8. Persisted values round-trip through EncryptedSharedPreferences.
         compose.onNodeWithTag("server_url_input").assertTextContains(url)
-        scrollTo("driver_phone_input")
-        compose.onNodeWithTag("driver_phone_input").assertTextContains(driverPhone)
+        scrollTo("hub_terminal_card")
+        compose.onNodeWithTag("hub_terminal_card").assertExists()
 
         // 9. Live server round-trip (HEALTH_CHECK → "ready").
         scrollTo("quick_test_button")

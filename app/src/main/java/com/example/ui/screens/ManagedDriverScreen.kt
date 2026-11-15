@@ -23,10 +23,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
@@ -39,6 +42,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -64,6 +68,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -158,9 +164,12 @@ fun ManagedDriverScreen(
 
     val isEnrolled = config.driverPhone.isNotBlank() && config.setupCompleted
 
-    LaunchedEffect(areCriticalPermissionsGranted, isEnrolled) {
-        if (areCriticalPermissionsGranted && !isEnrolled) effectiveOnActivate("")
+    var phoneInput by remember { mutableStateOf("") }
+    val cleanPhone = remember(phoneInput) {
+        SmsParser.normalizePhoneNumber(phoneInput).filter { it.isDigit() }
     }
+    val isPhoneValid = cleanPhone.matches(Regex("^09[0-9]{9}$"))
+
     var openedSmsSelection by remember { mutableStateOf(false) }
     LaunchedEffect(effectiveActivationState.needsSmsSelection) {
         if (effectiveActivationState.needsSmsSelection && !openedSmsSelection) {
@@ -324,17 +333,101 @@ fun ManagedDriverScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = "فعال‌سازی خودکار سیم‌کارت",
+                            text = "ورود مشخصات راننده",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = BarProTextPrimary
                         )
 
                         Text(
-                            text = "برنامه با سیم‌کارت انتخاب‌شده در Android یک پیامک تأیید به هاب می‌فرستد. سرور شماره واقعی راننده را از فرستنده پیامک تشخیص می‌دهد؛ برای فعال‌سازی اولیه اینترنت لازم است.",
+                            text = "شماره موبایل سیم‌کارت راننده را وارد کنید یا از تشخیص خودکار سیم‌کارت استفاده نمایید:",
                             style = MaterialTheme.typography.bodySmall,
                             color = BarProTextSecondary
                         )
+
+                        // Mobile Phone Input Field (Strict LTR input)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                OutlinedTextField(
+                                    value = phoneInput,
+                                    onValueChange = { raw ->
+                                        val filtered = raw.filter { it.isDigit() || it in "۰۱۲۳۴۵۶۷۸۹" || it == '+' }
+                                        if (filtered.length <= 14) {
+                                            phoneInput = filtered
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("driver_phone_input"),
+                                    placeholder = {
+                                        Text(
+                                            "09123456789",
+                                            color = BarProTextMuted,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Phone,
+                                            contentDescription = null,
+                                            tint = if (isPhoneValid) BarProCyan else BarProTextMuted
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (isPhoneValid) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = BarProEmerald
+                                            )
+                                        } else if (phoneInput.isNotEmpty()) {
+                                            IconButton(onClick = { phoneInput = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear,
+                                                    contentDescription = "پاک کردن",
+                                                    tint = BarProTextMuted
+                                                )
+                                            }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Phone,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = {
+                                            focusManager.clearFocus()
+                                            if (isPhoneValid && areCriticalPermissionsGranted) {
+                                                effectiveOnActivate(cleanPhone)
+                                            }
+                                        }
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = BarProSurfaceSubtle,
+                                        unfocusedContainerColor = BarProSurfaceSubtle,
+                                        focusedBorderColor = BarProCyan,
+                                        unfocusedBorderColor = BarProBorder,
+                                        focusedTextColor = BarProTextPrimary,
+                                        unfocusedTextColor = BarProTextPrimary
+                                    )
+                                )
+                            }
+
+                            // Validation Helper Text
+                            Text(
+                                text = when {
+                                    phoneInput.isEmpty() -> "شماره موبایل ۱۱ رقمی راننده (مثال: 09123456789)"
+                                    !cleanPhone.startsWith("09") -> "شماره موبایل باید با ۰۹ شروع شود"
+                                    cleanPhone.length < 11 -> "${11 - cleanPhone.length} رقم دیگر وارد کنید"
+                                    isPhoneValid -> "✓ فرمت شماره موبایل معتبر است"
+                                    else -> "فرمت شماره موبایل نامعتبر است"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isPhoneValid) BarProEmerald else if (phoneInput.isNotEmpty()) BarProAmber else BarProTextMuted
+                            )
+                        }
 
                         // Activation Error Card
                         AnimatedVisibility(
@@ -381,7 +474,11 @@ fun ManagedDriverScreen(
                             }
                         }
 
-                        // Action Button: Auto-Activation
+                        // Action Button: Primary Activation
+                        val isPhoneEntered = phoneInput.isNotBlank()
+                        val isPrimaryButtonEnabled = !effectiveActivationState.isLoading &&
+                            (!isPhoneEntered || isPhoneValid || !areCriticalPermissionsGranted)
+
                         Button(
                             onClick = {
                                 focusManager.clearFocus()
@@ -396,18 +493,20 @@ fun ManagedDriverScreen(
                                     permissionsLauncher.launch(list.toTypedArray())
                                 } else if (effectiveActivationState.needsSmsSelection) {
                                     context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
-                                } else {
+                                } else if (isPhoneValid) {
+                                    effectiveOnActivate(cleanPhone)
+                                } else if (!isPhoneEntered) {
                                     effectiveOnActivate("")
                                 }
                             },
-                            enabled = !effectiveActivationState.isLoading,
+                            enabled = isPrimaryButtonEnabled,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .testTag("btn_auto_activate"),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = BarProCyan,
+                                containerColor = if (isPhoneValid) BarProEmerald else BarProCyan,
                                 contentColor = PaletteDarkest,
                                 disabledContainerColor = BarProSurfaceElevated,
                                 disabledContentColor = BarProTextMuted
@@ -423,22 +522,64 @@ fun ManagedDriverScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = effectiveActivationState.progressMessage ?: "در حال تأیید سیم‌کارت…",
+                                    text = effectiveActivationState.progressMessage ?: "در حال اتصال به بارپرو…",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                             } else {
                                 Icon(
-                                    imageVector = Icons.Default.Check,
+                                    imageVector = if (isPhoneValid) Icons.Default.CheckCircle else Icons.Default.Check,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (effectiveActivationState.needsSmsSelection) "انتخاب سیم‌کارت پیامک در Android" else "ادامه بررسی خودکار",
+                                    text = when {
+                                        !areCriticalPermissionsGranted -> "تأیید مجوزها و فعال‌سازی"
+                                        effectiveActivationState.needsSmsSelection -> "انتخاب سیم‌کارت پیامک در Android"
+                                        isPhoneValid -> "استعلام و فعال‌سازی شماره راننده"
+                                        isPhoneEntered -> "شماره موبایل را کامل وارد کنید"
+                                        else -> "فعال‌سازی با شماره راننده یا سیم‌کارت"
+                                    },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
+                            }
+                        }
+
+                        // Fallback Auto-Detection Button (available when not loading so driver can fall back to SIM auto-activation)
+                        if (!effectiveActivationState.isLoading) {
+                            OutlinedButton(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    if (!areCriticalPermissionsGranted) {
+                                        val list = mutableListOf(
+                                            Manifest.permission.RECEIVE_SMS,
+                                            Manifest.permission.SEND_SMS
+                                        )
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            list.add(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                        permissionsLauncher.launch(list.toTypedArray())
+                                    } else if (effectiveActivationState.needsSmsSelection) {
+                                        context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
+                                    } else {
+                                        effectiveOnActivate("")
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .testTag("btn_fallback_auto_activate"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProTextSecondary),
+                                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                    brush = androidx.compose.ui.graphics.SolidColor(BarProBorder)
+                                )
+                            ) {
+                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("فعال‌سازی خودکار از طریق سیم‌کارت (پشتیبان)", fontSize = 12.sp)
                             }
                         }
                     }

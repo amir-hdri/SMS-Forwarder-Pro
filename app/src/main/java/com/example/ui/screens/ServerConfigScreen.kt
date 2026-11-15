@@ -108,9 +108,6 @@ fun ServerConfigScreen(
     }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val probeScope = rememberCoroutineScope()
-    val probeClient = remember { com.example.network.SmsForwarderClient() }
-    var probeRunning by remember { mutableStateOf(false) }
     var permissionRevision by remember { mutableStateOf(0) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -127,16 +124,12 @@ fun ServerConfigScreen(
         )
     }
 
-    var driverId by remember(config) { mutableStateOf(config.driverId) }
-    var driverFullName by remember(config) { mutableStateOf(config.driverFullName) }
-    var driverPhone by remember(config) { mutableStateOf(config.driverPhone) }
     var primarySmsRelayEnabled by remember(config) { mutableStateOf(config.primarySmsRelayEnabled) }
     var fallbackServerPhoneNumber by remember(config) { mutableStateOf(config.fallbackServerPhoneNumber) }
     var hubIrancellPhoneNumber by remember(config) { mutableStateOf(config.hubIrancellPhoneNumber) }
     var endpointUrl by remember(config) { mutableStateOf(config.endpointUrl) }
     var authHeaderValue by remember(config) { mutableStateOf(config.authHeaderValue) }
     var allowCleartextTransport by remember(config) { mutableStateOf(config.allowCleartextTransport) }
-    var testSmsProbeMessage by remember { mutableStateOf<String?>(null) }
     var showAdvancedSettings by remember {
         mutableStateOf(
             !config.endpointUrl.trim().startsWith("https://", ignoreCase = true) ||
@@ -160,13 +153,13 @@ fun ServerConfigScreen(
         }
 
         // ==========================================
-        // 1. DRIVER PROFILE CARD (مشخصات راننده)
+        // 1. HUB TERMINAL PROFILE CARD (مشخصات پایانه هاب ناوگان)
         // ==========================================
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("driver_profile_card"),
+                    .testTag("hub_terminal_card"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = BarProSurface)
             ) {
@@ -189,103 +182,90 @@ fun ServerConfigScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
+                                imageVector = Icons.Default.Security,
                                 contentDescription = null,
-                                tint = BarProCyan,
+                                tint = BarProEmerald,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "مشخصات راننده و ناوگان بارپرو",
+                                text = "پایانه درگاه هاب مرکزی (Forwarder Hub)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = BarProTextPrimary
                             )
                             Text(
-                                text = "اطلاعات هویتی جهت ثبت خودکار بارنامه‌ها در سرور",
+                                text = "درگاه متمرکز دریافت و رله پیامک‌های اعتبارسنجی ناوگان بارپرو",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = BarProTextSecondary
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    OutlinedTextField(
-                        value = driverFullName,
-                        onValueChange = {
-                            driverFullName = it
-                            onSaveConfig(config.copy(driverFullName = it))
-                        },
-                        label = { Text("نام و نام خانوادگی راننده") },
-                        placeholder = { Text("مثال: علی محمدی") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BarProCyan,
-                            unfocusedBorderColor = BarProBorder,
-                            focusedTextColor = BarProTextPrimary,
-                            unfocusedTextColor = BarProTextPrimary,
-                            focusedContainerColor = BarProSurfaceSubtle,
-                            unfocusedContainerColor = BarProSurfaceSubtle
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = driverId,
-                        onValueChange = {
-                            driverId = it
-                            onSaveConfig(config.copy(driverId = it))
-                        },
-                        label = { Text("کد ملی / شناسه راننده") },
-                        placeholder = { Text("مثال: ۰۰۱۲۳۴۵۶۷۸") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BarProCyan,
-                            unfocusedBorderColor = BarProBorder,
-                            focusedTextColor = BarProTextPrimary,
-                            unfocusedTextColor = BarProTextPrimary,
-                            focusedContainerColor = BarProSurfaceSubtle,
-                            unfocusedContainerColor = BarProSurfaceSubtle
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = driverPhone,
-                        onValueChange = {
-                            driverPhone = it
-                            onSaveConfig(config.copy(driverPhone = it))
-                        },
-                        label = { Text("شماره همراه راننده (سیم‌کارت فعال در گوشی)") },
-                        placeholder = { Text("مثال: ۰۹۱۲۳۴۵۶۷۸۹") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BarProCyan,
-                            unfocusedBorderColor = BarProBorder,
-                            focusedTextColor = BarProTextPrimary,
-                            unfocusedTextColor = BarProTextPrimary,
-                            focusedContainerColor = BarProSurfaceSubtle,
-                            unfocusedContainerColor = BarProSurfaceSubtle
-                        ),
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("driver_phone_input")
-                    )
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BarProSurfaceSubtle)
+                            .border(1.dp, BarProBorder, RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "شناسه پایانه هاب:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = BarProTextSecondary
+                                )
+                                Text(
+                                    text = config.deviceIdentifier.ifBlank { "BarPro Terminal 01" },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BarProCyan
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "نقش سامانه:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = BarProTextSecondary
+                                )
+                                Text(
+                                    text = "درگاه مشترک ناوگان (Hub Gateway)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BarProEmerald
+                                )
+                            }
+                        }
+                    }
 
-                    val normalizedPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
-                    if (driverPhone.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(BarProSurfaceSubtle)
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                    ) {
                         Text(
-                            text = "فرمت شناسایی سامانه: $normalizedPhone",
-                            fontSize = 11.sp,
-                            color = if (normalizedPhone.startsWith("09") && normalizedPhone.length == 11) BarProEmerald else BarProRose
+                            text = "این گوشی به عنوان گیرنده مرکزی ناوگان عمل می‌کند. پیامک‌های بارنامه دریافتی از رانندگان مختلف با قالب امن و امضاشده به وب‌هوک بارپرو مخابره می‌شوند و مشخصات رانندگان به صورت کاملاً خودکار شناسایی می‌شود (نیازی به تعریف راننده در این گوشی نیست).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BarProTextSecondary,
+                            lineHeight = 18.sp
                         )
                     }
                 }
@@ -727,120 +707,29 @@ fun ServerConfigScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        "تست اینترنت و گزارش مجوزها به فعال بودن کلید اصلی نیاز دارد. تست پیامکی از سیم‌کارت پیش‌فرض ارسال می‌شود؛ شماره آن باید با شماره راننده یکسان باشد. تأیید دریافت سرور به اینترنت نیاز دارد.",
+                        "بررسی سلامت سرور وضعیت اتصال وب‌هوک و گزارش دسترسی‌ها را کنترل می‌کند و برای عملکرد صحیح هاب باید وضعیت سرور در بالا آنلاین و متصل باشد.",
                         fontSize = 11.sp, color = BarProTextSecondary
                     )
-                    // Action buttons: Probe Ping & Test SMS
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            permissionRevision++
+                            onCheckServerHealth()
+                        },
+                        enabled = config.isMasterEnabled && config.endpointUrl.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BarProSurfaceElevated,
+                            contentColor = BarProEmerald
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .border(1.dp, BarProEmerald.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
                     ) {
-                        Button(
-                            onClick = {
-                                permissionRevision++
-                                onCheckServerHealth()
-                            },
-                            enabled = config.isMasterEnabled && config.endpointUrl.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = BarProSurfaceElevated,
-                                contentColor = BarProEmerald
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .border(1.dp, BarProEmerald.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("تست سلامت و اتصال", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            enabled = !probeRunning,
-                            onClick = {
-                                permissionRevision++
-                                val normDriverPhone = com.example.utils.SmsParser.normalizePhoneNumber(driverPhone)
-                                val hubRoute = com.example.utils.CarrierDetector.resolveRoute(
-                                    driverPhone = normDriverPhone,
-                                    hubMciNumber = fallbackServerPhoneNumber,
-                                    hubIrancellNumber = hubIrancellPhoneNumber,
-                                    context = context
-                                )
-                                val destination = if (hubRoute.primaryNumber.isNotBlank()) hubRoute.primaryNumber else fallbackServerPhoneNumber.ifBlank { hubIrancellPhoneNumber }
-                                if (destination.isBlank()) {
-                                    testSmsProbeMessage = "ابتدا شماره سیم‌کارت درگاه سرور را در بالا وارد کنید."
-                                } else if (!normDriverPhone.matches(Regex("09[0-9]{9}"))) {
-                                    testSmsProbeMessage = "ابتدا شماره سیم‌کارت راننده را به صورت ۱۱ رقمی (۰۹...) وارد کنید."
-                                } else if (!com.example.utils.PermissionHelper.isSendSmsGranted(context)) {
-                                    testSmsProbeMessage = "ابتدا مجوز ارسال پیامک (SEND_SMS) را اعطا کنید."
-                                } else {
-                                    val timestamp = System.currentTimeMillis()
-                                    val ok = com.example.utils.SmsRelayHelper.sendFallbackSms(
-                                        context = context,
-                                        destinationPhone = destination,
-                                        driverId = config.driverId,
-                                        driverPhone = normDriverPhone,
-                                        code = "TEST",
-                                        smsType = "TEST",
-                                        simSlot = -1,
-                                        receivedTimestamp = timestamp,
-                                        webhookSecret = com.example.network.BarProContract.token(config)
-                                    )
-                                    testSmsProbeMessage = if (ok) {
-                                        "درخواست به مودم تحویل شد؛ در انتظار تأیید دریافت سرور…"
-                                    } else {
-                                        "خطا در تحویل درخواست پیامک آزمایشی به مودم."
-                                    }
-                                    if (ok) {
-                                        probeRunning = true
-                                        probeScope.launch {
-                                            try {
-                                                val received = withTimeoutOrNull(30_000) {
-                                                    repeat(6) {
-                                                        delay(2000)
-                                                        val receipt = probeClient.checkSmsProbeReceipt(config, timestamp)
-                                                        if (receipt.isSuccess) return@withTimeoutOrNull true
-                                                        if (receipt.httpStatusCode != 200) return@withTimeoutOrNull false
-                                                    }
-                                                    false
-                                                } ?: false
-                                                testSmsProbeMessage = if (received) {
-                                                    "✅ سرور دریافت همین پیامک آزمایشی را تأیید کرد."
-                                                } else {
-                                                    "تحویل درخواست به مودم انجام شد؛ دریافت سرور تأیید نشد. ممکن است اینترنت، درگاه یا ارسال پیامک در دسترس نباشد. پیامک خودکار تکرار نمی‌شود."
-                                                }
-                                            } finally {
-                                                probeRunning = false
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = BarProSurfaceElevated,
-                                contentColor = BarProCyan
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
-                                .border(1.dp, BarProBorderCyan, RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(imageVector = Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (probeRunning) "در انتظار رسید…" else "ارسال پیامک تستی", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    testSmsProbeMessage?.let { msg ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = msg,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (msg.startsWith("✅")) BarProEmerald else BarProAmber
-                        )
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("بررسی سلامت و اتصال به سرور بارپرو", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

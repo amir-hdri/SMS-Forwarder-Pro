@@ -35,7 +35,7 @@ class DriverBootstrapWorker(context: Context, parameters: WorkerParameters) : Co
             val request = OneTimeWorkRequestBuilder<DriverBootstrapWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS).build()
-            WorkManager.getInstance(context).enqueueUniqueWork("driver-device-bootstrap", ExistingWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniqueWork("driver-device-bootstrap", ExistingWorkPolicy.REPLACE, request)
         }
     }
 }

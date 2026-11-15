@@ -70,8 +70,12 @@ class DriverActivationRuntime private constructor(private val context: Context) 
             storage.savePendingEnrollment(null)
         } else {
             enrollment.resume()
-            if (enrollment.status.value != EnrollmentStatus.ACTIVE && storage.getPendingEnrollment() == null)
-                enrollment.resolveDriverConfiguration("")
+            if (enrollment.status.value != EnrollmentStatus.ACTIVE && storage.getPendingEnrollment() == null) {
+                val pendingPhone = storage.getPendingBootstrap()?.let {
+                    runCatching { org.json.JSONObject(it).optString("phone", "") }.getOrDefault("")
+                } ?: ""
+                enrollment.resolveDriverConfiguration(pendingPhone)
+            }
         }
         if (enrollment.status.value == EnrollmentStatus.ACTIVE) {
             storage.getBootstrapSmsAttempt()?.let {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.6 — 2026-11-15
+
+- Restore direct manual driver phone entry in `ManagedDriverScreen.kt` with LTR isolation, Persian digit normalization (`۰۹...`), and 1-tap instant resolution, eliminating carrier-bound bootstrap deadlocks.
+- Fix WorkManager unique work scheduling in `DriverBootstrapWorker.kt` by switching from `ExistingWorkPolicy.KEEP` to `ExistingWorkPolicy.REPLACE`, resolving no-op UI lockouts after transient network failures.
+- Eliminate unprompted auto-trigger loop on initial launch, ensuring UI remains responsive and interactive immediately upon grant of SMS permissions.
+- Resolve concurrency race between manual phone resolution coroutines and background worker dispatch in `MainViewModel.kt`, preventing pending phone challenge clobbering in Redis and `HTTP 410` errors.
+- Synchronously reset UI state and cancel ongoing activation coroutines on `resetDriverActivation()`.
+- Refactor `ServerConfigScreen.kt` to present a dedicated Hub terminal card for `APP_ROLE == "HUB"` while cleanly delegating `APP_ROLE == "DRIVER"` to `ManagedDriverScreen.kt`.
+- All 65 test tasks pass 100% green (`testDriverDebugUnitTest` 57 test suites, `testHubDebugUnitTest` 33 tasks).
+- Produce optimized, R8-minified production Driver release APK (`4.2 MB`) under `app/build/outputs/distribution/Forward-BarPro-Driver-driverRelease.apk`.
+- Full evidence and verification details: [RELEASE_2_1_6.md](RELEASE_2_1_6.md).
+
 ## 2.1.4 — 2026-11-03
 
 - Publish the reviewed code7 Driver/Hub APKs and signed update manifests before the public tuning overlays; all six latest-download URLs returned HTTP200 with exact artifact hashes.
