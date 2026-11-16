@@ -69,7 +69,9 @@ Native Codex Security diff54e041df-bfcd-4a02-9459-dca550090864 completed/sealed/
 - [x] Read back completed JVM/build/native/upgrade evidence and fresh APK signer/input preservation checks.
 - [x] Complete the requested native source-diff security workflow without persistent configuration changes.
 - [x] Prepare dated purpose/evidence documentation, current agent knowledge and a plain Persian installation guide.
-- [ ] Publish reviewed source with SMS-owned STATE, bind public v2.1.8 to its verified source commit and verify exact downloads/signed channels.
-- [ ] Record publication readback and close only this SMS-owned session.
+- [x] Publish reviewed source with SMS-owned STATE, bind public v2.1.8 to its verified source commit and verify exact downloads/signed channels.
+- [x] Record publication readback; the final documentation push closes only this SMS-owned session.
 
 Public release/channel work is now authorized by the current human request; old session text remains evidence only. BarPro publication/deployment, physical carrier delivery, real phone installation and government issuance remain with the parent task and their own witnesses. Later documentation/channel changes do not alter compiled inputs and are verified separately from the sealed native source scan.
+
+Public v2.1.8/tag source 581a2865efbb7ee991d0a5a5ee71a982d2233a6a was published at 16:04:41 UTC. Exact ten assets were verified through tag/latest downloads at 16:09:44 UTC; all four version 11 documents are retained-key signed, source/audience/APK bound and optional. Both checksum lists and eight downloaded signatures pass. An initial pre-HTTP latest-Hub TLS timeout is preserved alongside its successful targeted retry. See releases/v2.1.8/PUBLICATION.json and RELEASE_2_1_8.fa.md. Original private receipts, interrupted runner attempts, keys and profile data remain private and unchanged.

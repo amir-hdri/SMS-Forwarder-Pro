@@ -1,0 +1,67 @@
+{
+  "verified_at_utc": "2026-11-16T16:09:44.137057+00:00",
+  "release_url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.8",
+  "published_at_utc": "2026-11-16T16:04:41Z",
+  "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+  "asset_count": 10,
+  "tag_and_latest_pairs_verified": 20,
+  "actual_public_get_attempts": 21,
+  "http200_matching_attempts": 20,
+  "initial_failed_attempts": 1,
+  "initial_failure": "latest Hub APK curl28 SSL connection timeout before HTTP; fixed-version Hub APK passed in the initial run",
+  "targeted_retry_passed": true,
+  "certificate_verification_kept_enabled": true,
+  "signed_documents_verified": 8,
+  "both_checksum_lists_verified": true,
+  "tag_and_latest_bind_exact_delivered_apks": true,
+  "asset_sha256": {
+    "Forward-BarPro-Driver-2.1.8.apk": {
+      "sha256": "0c85b4778ea444a54156444943b3a1aee12ebac28f0f7d821bb7362236e0a87c",
+      "bytes": 4387796
+    },
+    "Forward-BarPro-Hub-2.1.8.apk": {
+      "sha256": "b53f8a231588a78c6b80a94172bba9778fc6fa4cd800f89e5d07ded599563734",
+      "bytes": 4436944
+    },
+    "INSTALL.fa.md": {
+      "sha256": "d6868c0e778fca7af20309409a3fc3df3a82626a9290fd047bbcf77f906341b1",
+      "bytes": 3081
+    },
+    "SHA256SUMS": {
+      "sha256": "9927cad5fe34c56ea5629ac14be212818489e77277f7fd81d2be3399d19c2581",
+      "bytes": 812
+    },
+    "SOURCE_INPUTS.json": {
+      "sha256": "b45be41e83b656c1f855391c86e0052440837cb65de9da00da7c7c44ee093ee8",
+      "bytes": 26337
+    },
+    "VERIFICATION.json": {
+      "sha256": "830e27e06d55b75d492c05f6a409a6eb2b593ccf7ce1b6c4cc534fe866aa4569",
+      "bytes": 7237
+    },
+    "barpro-driver.config.signed": {
+      "sha256": "bd24745fe688ca03b86cffdf4346db1bc360bebe10c95be220b12868c5c0a1f9",
+      "bytes": 660
+    },
+    "barpro-driver.update.signed": {
+      "sha256": "a2a7cf84ca6280ea363e59fa08d47134066eba33ac5d9138b9b43fddfa67961a",
+      "bytes": 1041
+    },
+    "barpro-hub.config.signed": {
+      "sha256": "2898287c0be167749585d44cbdb0d102e864cf39bab039f0b83eb91b1460e5bb",
+      "bytes": 653
+    },
+    "barpro-hub.update.signed": {
+      "sha256": "d944911809d7d60b5ac851714e31451060dc5912d2bc6196d960f83bfc729bc5",
+      "bytes": 1030
+    }
+  },
+  "schema": "forward-barpro/publication-readback/v1",
+  "source_tag": "v2.1.8",
+  "source_tag_object": "3ce758146eeaefe9ad332c133363f1237ef11608",
+  "source_origin_main_equal_after_initial_push": true,
+  "source_input_count": 201,
+  "source_inputs_json_sha256": "b45be41e83b656c1f855391c86e0052440837cb65de9da00da7c7c44ee093ee8",
+  "later_documentation_changes_compiled_inputs": false,
+  "public_upload_allowlist_contains_no_private_asset_or_raw_log": true
+}

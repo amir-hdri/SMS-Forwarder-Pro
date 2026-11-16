@@ -2,9 +2,8 @@
   "schema": "forward-barpro/release-verification/v1",
   "verified_at_utc": "2026-11-16T15:54:40.909244+00:00",
   "artifact_status": "verified_exact_delivered_apks",
-  "publication_status": "prepared",
   "release_tag": "v2.1.8",
-  "source_commit": null,
+  "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
   "version_code": 11,
   "version_name": "2.1.8",
   "apks": [
@@ -120,5 +119,74 @@
   "install_guide": "INSTALL.fa.md",
   "checksums": "SHA256SUMS",
   "apk_signer_certificate_dn": "C=US, O=Android, CN=Android Debug",
-  "apk_signer_policy": "Retained installed-app signer; both APKs are nondebuggable and release builds refuse a missing retained signer."
+  "apk_signer_policy": "Retained installed-app signer; both APKs are nondebuggable and release builds refuse a missing retained signer.",
+  "source_commit_inputs_verified": 201,
+  "publication_preparation_at_utc": "2026-11-16T16:01:07.248573+00:00",
+  "signed_public_channels": {
+    "version": 11,
+    "previous_version": 8,
+    "signature_algorithm": "ECDSA-P256-SHA256 DER over literal ASCII first segment",
+    "optional_update": true,
+    "minimum_supported_version_code": 0,
+    "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+    "assets": [
+      {
+        "name": "barpro-driver.update.signed",
+        "role": "driver",
+        "kind": "update",
+        "sha256": "a2a7cf84ca6280ea363e59fa08d47134066eba33ac5d9138b9b43fddfa67961a",
+        "bytes": 1041,
+        "version": 11,
+        "audience": "ir.barpro.fleet.smsforwarder.driver",
+        "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": null
+      },
+      {
+        "name": "barpro-driver.config.signed",
+        "role": "driver",
+        "kind": "config",
+        "sha256": "bd24745fe688ca03b86cffdf4346db1bc360bebe10c95be220b12868c5c0a1f9",
+        "bytes": 660,
+        "version": 11,
+        "audience": "ir.barpro.fleet.smsforwarder.driver",
+        "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": 0
+      },
+      {
+        "name": "barpro-hub.update.signed",
+        "role": "hub",
+        "kind": "update",
+        "sha256": "d944911809d7d60b5ac851714e31451060dc5912d2bc6196d960f83bfc729bc5",
+        "bytes": 1030,
+        "version": 11,
+        "audience": "ir.barpro.fleet.smsforwarder.hub",
+        "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": null
+      },
+      {
+        "name": "barpro-hub.config.signed",
+        "role": "hub",
+        "kind": "config",
+        "sha256": "2898287c0be167749585d44cbdb0d102e864cf39bab039f0b83eb91b1460e5bb",
+        "bytes": 653,
+        "version": 11,
+        "audience": "ir.barpro.fleet.smsforwarder.hub",
+        "source_commit": "581a2865efbb7ee991d0a5a5ee71a982d2233a6a",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": 0
+      }
+    ],
+    "retained_key_bytes_unchanged": true
+  }
 }

@@ -8,6 +8,7 @@
 - Keep the proved driver's name with its identity, show loading only for a current activation, and provide retry/reset/cancel actions. Network selection does not prove an Iranian egress or successful carrier delivery.
 - Reject public webhook authority in build properties and require the retained release signer. Both nondebuggable Release APKs are code11, version2.1.8, and byte-identical to the delivered files.
 - Read back 576 passing JVM tests, exact Release builds/owned Android16 installations, native controls and upgrade preservation. Native Codex Security diff review is sealed with 21 reviewed surfaces and no reportable finding; later documentation/channel publication is verified separately.
+- Publish [v2.1.8](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.8) at source `581a2865efbb7ee991d0a5a5ee71a982d2233a6a`. All ten public assets match through both tag/latest URLs; one initial latest-Hub TLS timeout passed its targeted retry. Both checksum lists and all eight downloaded signed documents verify. Version 11 channels remain optional with minimum 0.
 - Purpose, dated evidence and limits: [RELEASE_2_1_8.fa.md](RELEASE_2_1_8.fa.md). Installation steps: [INSTALL_2_1_8.fa.md](INSTALL_2_1_8.fa.md). Earlier latency and unconditional WorkManager claims below are historical statements, not acceptance for this release.
 
 ## 2.1.6 — 2026-11-15
