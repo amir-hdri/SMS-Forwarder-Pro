@@ -1,0 +1,124 @@
+{
+  "schema": "forward-barpro/release-verification/v1",
+  "verified_at_utc": "2026-11-16T15:54:40.909244+00:00",
+  "artifact_status": "verified_exact_delivered_apks",
+  "publication_status": "prepared",
+  "release_tag": "v2.1.8",
+  "source_commit": null,
+  "version_code": 11,
+  "version_name": "2.1.8",
+  "apks": [
+    {
+      "role": "driver",
+      "application_id": "ir.barpro.fleet.smsforwarder.driver",
+      "version_code": 11,
+      "version_name": "2.1.8-driver",
+      "sha256": "0c85b4778ea444a54156444943b3a1aee12ebac28f0f7d821bb7362236e0a87c",
+      "bytes": 4387796,
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false,
+      "file_name": "Forward-BarPro-Driver-2.1.8.apk"
+    },
+    {
+      "role": "hub",
+      "application_id": "ir.barpro.fleet.smsforwarder.hub",
+      "version_code": 11,
+      "version_name": "2.1.8-hub",
+      "sha256": "b53f8a231588a78c6b80a94172bba9778fc6fa4cd800f89e5d07ded599563734",
+      "bytes": 4436944,
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false,
+      "file_name": "Forward-BarPro-Hub-2.1.8.apk"
+    }
+  ],
+  "source_inputs": {
+    "count": 201,
+    "source_inputs_asset": "SOURCE_INPUTS.json",
+    "source_inputs_sha256": "b45be41e83b656c1f855391c86e0052440837cb65de9da00da7c7c44ee093ee8",
+    "sealed_build_manifest_sha256": "49fb92a30937252ec1779c6261d71810d5834ff650e691db69655cb353a93f0d",
+    "matching_count": 201
+  },
+  "retained_channel_anchor": {
+    "public_der_sha256": "c753f1e8e22f82baf34089d409c871682ac87053178a5ef709e57c5036db5555",
+    "retained_private_key_matches_backup": true,
+    "private_key_material_published": false
+  },
+  "build": {
+    "actual_release_build_exit_code": 0,
+    "missing_retained_keystore_driver_refused": true,
+    "missing_retained_keystore_hub_refused": true,
+    "missing_keystore_negative_exit_code": 1
+  },
+  "jvm_tests": {
+    "passed": 576,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native": {
+    "environment": "owned Android16/API36 emulator; synthetic fixtures and isolated network",
+    "core": {
+      "passed": 9,
+      "failed": 0,
+      "skipped": 1,
+      "skip_reason": "Hub-only loopback test is not applicable to Driver flavor"
+    },
+    "stopped_profile_fixture_stages": {
+      "passed": 2,
+      "failed": 0
+    },
+    "exact_release_upgrade_preservation": {
+      "driver_passed": true,
+      "hub_passed": true,
+      "checks": [
+        "stopped profile and consent",
+        "encrypted credential",
+        "outbox key",
+        "unchanged RSA public key",
+        "actual RSA private-key signature"
+      ],
+      "fixture": "Synthetic stopped profile on owned emulator; APK replacement preserves the same app data"
+    },
+    "installed_apks_equal_delivery": true,
+    "cold_launches": {
+      "driver": true,
+      "hub": true
+    },
+    "owned_environment_cleaned": true
+  },
+  "public_asset_checks": {
+    "private_provisioning_assets": false,
+    "old_shared_root_token_matches_in_either_archive": 0,
+    "private_native_probe_in_public_apks": false
+  },
+  "protected_inputs": {
+    "count": 6,
+    "changed_count": 0,
+    "values_published": false
+  },
+  "security_diff": {
+    "scan_id": "54e041df-bfcd-4a02-9459-dca550090864",
+    "status": "completed",
+    "reviewed_surfaces": 21,
+    "reportable_findings": 0,
+    "deferred": 0,
+    "source_snapshot_digest": "codex-security-snapshot/v1:sha256:a11d4fe5946c817097216ab5922289783b12856845e709eb3e518139bdd586c5",
+    "manifest_sha256": "d836cc842820cadf1a80b390efd925f047cbcda6651011565e6fedf1c93722d1",
+    "findings_sha256": "3555862536e3ff6e05556ac393cfe2ae576ae3cdb6fe488a7202c624a0d72b1b",
+    "coverage_sha256": "5a45710c3adbdef61497f494688b1f7ce2d60c2b5dda4cba2b89f5d57e7e54f1",
+    "native_inventory_count": 1,
+    "manual_git_hash_inventory_included": true,
+    "reviewer_mode": "sequential",
+    "token_usage": "unavailable",
+    "scope": "20 changed build/source/test inputs and one task plan; later publication/docs verified separately"
+  },
+  "limits": [
+    "No physical phone installation or genuine carrier SMS was performed.",
+    "Owned loopback/synthetic tests do not prove live enrollment, production health, OTP delivery or government issuance.",
+    "Cellular NOT_VPN selection does not prove egress country or VPN-lockdown bypass."
+  ],
+  "install_guide": "INSTALL.fa.md",
+  "checksums": "SHA256SUMS",
+  "apk_signer_certificate_dn": "C=US, O=Android, CN=Android Debug",
+  "apk_signer_policy": "Retained installed-app signer; both APKs are nondebuggable and release builds refuse a missing retained signer."
+}

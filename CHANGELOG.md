@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.8 — 2026-11-16
+
+- Keep manual phone entry and require an authentic carrier-origin, device-bound grant for first activation; rediscovery reuses only the same registered phone's scoped credential.
+- Share one activation owner across UI, background work and late callbacks. Persist the selected phone/device and explicit stop across restart; reset keeps the private profile while revoking readiness and consent.
+- Use WorkManager KEEP for recovery of existing pending work and REPLACE for an explicit retry. One modem owns each SMS attempt; Hub work binds actual carrier origin plus nonce and rechecks current consent/profile after network acquisition.
+- Keep the proved driver's name with its identity, show loading only for a current activation, and provide retry/reset/cancel actions. Network selection does not prove an Iranian egress or successful carrier delivery.
+- Reject public webhook authority in build properties and require the retained release signer. Both nondebuggable Release APKs are code11, version2.1.8, and byte-identical to the delivered files.
+- Read back 576 passing JVM tests, exact Release builds/owned Android16 installations, native controls and upgrade preservation. Native Codex Security diff review is sealed with 21 reviewed surfaces and no reportable finding; later documentation/channel publication is verified separately.
+- Purpose, dated evidence and limits: [RELEASE_2_1_8.fa.md](RELEASE_2_1_8.fa.md). Installation steps: [INSTALL_2_1_8.fa.md](INSTALL_2_1_8.fa.md). Earlier latency and unconditional WorkManager claims below are historical statements, not acceptance for this release.
+
 ## 2.1.6 — 2026-11-15
 
 - Restore direct manual driver phone entry in `ManagedDriverScreen.kt` with LTR isolation, Persian digit normalization (`۰۹...`), and 1-tap instant resolution, eliminating carrier-bound bootstrap deadlocks.

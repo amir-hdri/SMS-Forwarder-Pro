@@ -349,7 +349,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
             secureStorageError?.let { message ->
                 SecureStorageFailureCard(message, viewModel::retrySecureStorage)
             }
-            if (enrollmentStatus != com.example.enrollment.EnrollmentStatus.IDLE) {
+            if (!isDriver && enrollmentStatus != com.example.enrollment.EnrollmentStatus.IDLE) {
                 Card(modifier = Modifier.fillMaxWidth().padding(12.dp).testTag("enrollment_status")) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(text = when (enrollmentStatus) {

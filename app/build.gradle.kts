@@ -66,6 +66,9 @@ val defaultEndpoint = providers.gradleProperty("BARPRO_DEFAULT_ENDPOINT").orNull
 val defaultConfigUrl = providers.gradleProperty("BARPRO_CONFIG_URL").orNull ?: ""
 val defaultUpdateUrl = providers.gradleProperty("BARPRO_UPDATE_URL").orNull ?: ""
 val privateHubProfile = providers.gradleProperty("BARPRO_HUB_PROVISIONING_PROFILE_FILE")
+require(providers.gradleProperty("BARPRO_DRIVER_WEBHOOK_TOKEN").orNull.isNullOrBlank()) {
+  "Public Driver builds cannot embed webhook authority; use the device's scoped enrollment grant"
+}
 
 android {
   namespace = "com.example"
@@ -88,6 +91,7 @@ android {
     buildConfigField("boolean", "HAS_PRIVATE_HUB_PROFILE", "false")
     buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
     buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
+    buildConfigField("String", "DEFAULT_WEBHOOK_TOKEN", "\"\"")
   }
 
   flavorDimensions += "role"
@@ -105,6 +109,7 @@ android {
       val hubIrancell = providers.gradleProperty("BARPRO_HUB_PHONE_IRANCELL").orNull ?: ""
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"$hubMci\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"$hubIrancell\"")
+      buildConfigField("String", "DEFAULT_WEBHOOK_TOKEN", "\"\"")
     }
     create("hub") {
       dimension = "role"
@@ -118,6 +123,7 @@ android {
       buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$hubUpdateUrl\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_MCI", "\"\"")
       buildConfigField("String", "DEFAULT_HUB_PHONE_IRANCELL", "\"\"")
+      buildConfigField("String", "DEFAULT_WEBHOOK_TOKEN", "\"\"")
     }
   }
 
@@ -141,12 +147,9 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      val releaseKeystore = file(keystorePath)
-      if (releaseKeystore.exists()) {
-        signingConfig = signingConfigs.getByName("release")
-      } else {
-        signingConfig = signingConfigs.getByName("debug")
-      }
+      // A missing retained signer must fail release validation. A new machine's
+      // debug key cannot silently replace the update channel's established key.
+      signingConfig = signingConfigs.getByName("release")
     }
     // Use Android's generated per-developer debug keystore.
   }

@@ -81,6 +81,25 @@ class BootstrapDispatchReliabilityTest {
         assertEquals("dispatching", BootstrapSmsDispatch.state(context, nonce)!!.status)
     }
 
+    @Test fun multipleActiveSimsHaveOneOwnedModemHandoffPerAttempt() {
+        val subscriptions = shadowOf(context.getSystemService(android.telephony.SubscriptionManager::class.java))
+        subscriptions.setActiveSubscriptionInfos(
+            ShadowSubscriptionManager.SubscriptionInfoBuilder.newBuilder().setId(17).setSimSlotIndex(0).buildSubscriptionInfo(),
+            ShadowSubscriptionManager.SubscriptionInfoBuilder.newBuilder().setId(42).setSimSlotIndex(1).buildSubscriptionInfo())
+        val firstModem = context.getSystemService(SmsManager::class.java).createForSubscriptionId(17)
+        val otherModem = context.getSystemService(SmsManager::class.java).createForSubscriptionId(42)
+        shadowOf(firstModem).clearLastSentTextMessageParams()
+        shadowOf(otherModem).clearLastSentTextMessageParams()
+
+        assertTrue(BootstrapSms.send(context, "09120000002", nonce))
+        val first = BootstrapSmsDispatch.state(context, nonce)!!
+        assertNotNull(shadowOf(firstModem).lastSentTextMessageParams)
+        assertNull("A second SIM cannot share this modem attempt's one-shot callback", shadowOf(otherModem).lastSentTextMessageParams)
+        assertTrue(BootstrapSms.send(context, "09120000002", nonce))
+        assertEquals(first, BootstrapSmsDispatch.state(context, nonce))
+        assertNull(shadowOf(otherModem).lastSentTextMessageParams)
+    }
+
     @Test fun multiSimAvailableSubscriptionsAreDispatchedWithoutDefaultSubscription() {
         // Simulate no default subscription set in Android (SubscriptionManager returns -1 / INVALID)
         ShadowSubscriptionManager.setDefaultSmsSubscriptionId(-1)

@@ -17,10 +17,17 @@ class EnrollmentCredentials(
     val endpointUrl: String,
     val webhookToken: String,
     val hubMci: String,
-    val hubIrancell: String
+    val hubIrancell: String,
+    val driverName: String = ""
 ) {
     fun applyTo(config: ForwardConfig, deviceId: String): ForwardConfig = config.copy(
-        driverPhone = driverPhone, endpointUrl = endpointUrl,
+        driverPhone = driverPhone,
+        driverFullName = driverName.ifBlank {
+            if (SmsParser.normalizePhoneNumber(config.driverPhone) == SmsParser.normalizePhoneNumber(driverPhone)) {
+                config.driverFullName
+            } else ""
+        },
+        endpointUrl = endpointUrl,
         authType = AuthType.CUSTOM_HEADER, authHeaderKey = BarProContract.TOKEN_HEADER,
         authHeaderValue = webhookToken, forwarderSecret = webhookToken,
         fallbackServerPhoneNumber = hubMci, hubIrancellPhoneNumber = hubIrancell,
@@ -38,6 +45,7 @@ class EnrollmentCredentials(
         put("webhook_token", webhookToken)
         put("hub_phone_mci", hubMci)
         put("hub_phone_irancell", hubIrancell)
+        if (driverName.isNotBlank()) put("driver_name", driverName)
     }.toString()
 }
 
@@ -111,7 +119,8 @@ object EnrollmentContract {
         val mci = hub("hub_phone_mci")
         val irancell = hub("hub_phone_irancell")
         require(mci.isNotEmpty() || irancell.isNotEmpty()) { "No Hub SMS route available" }
-        return EnrollmentCredentials(phone, endpoint.toString(), token, mci, irancell)
+        val name = json.optString("driver_name", "")
+        return EnrollmentCredentials(phone, endpoint.toString(), token, mci, irancell, name)
     }
 
     fun permissionsAllowActivation(role: String, receiveSms: Boolean, sendSms: Boolean): Boolean =

@@ -7,6 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.BuildConfig
@@ -30,12 +31,18 @@ class DriverBootstrapWorker(context: Context, parameters: WorkerParameters) : Co
     }
 
     companion object {
-        fun enqueue(context: Context) {
-            if (BuildConfig.APP_ROLE != "DRIVER" || !PermissionHelper.areForwardingPermissionsGranted(context)) return
+        fun enqueue(context: Context, userInitiated: Boolean = false): Operation? {
+            if (BuildConfig.APP_ROLE != "DRIVER" || !PermissionHelper.areForwardingPermissionsGranted(context)) return null
+            if (!DriverActivationRuntime.hasPendingActivation(context)) return null
             val request = OneTimeWorkRequestBuilder<DriverBootstrapWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS).build()
-            WorkManager.getInstance(context).enqueueUniqueWork("driver-device-bootstrap", ExistingWorkPolicy.REPLACE, request)
+            val policy = if (userInitiated) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
+            return WorkManager.getInstance(context).enqueueUniqueWork("driver-device-bootstrap", policy, request)
+        }
+
+        fun cancel(context: Context) {
+            runCatching { WorkManager.getInstance(context).cancelUniqueWork("driver-device-bootstrap") }
         }
     }
 }

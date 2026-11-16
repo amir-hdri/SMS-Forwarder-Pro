@@ -49,16 +49,9 @@ object BootstrapSmsDispatch {
         val sent = SmsDispatch.bootstrapResultIntent(context, nonce, attemptAt, false)
         val delivered = SmsDispatch.bootstrapResultIntent(context, nonce, attemptAt, true)
         return try {
-            if (subs.size > 1 && previous == null) {
-                var anySent = false
-                for (sub in subs) {
-                    val ok = runCatching { BootstrapSms.handoff(context, destination, nonce, sub, sent, delivered) }.getOrDefault(false)
-                    if (ok) anySent = true
-                }
-                anySent
-            } else {
-                BootstrapSms.handoff(context, destination, nonce, selected, sent, delivered)
-            }
+            // One modem owns this attempt and its callbacks. A later owned
+            // retry rotates through subscriptions after its persisted deadline.
+            BootstrapSms.handoff(context, destination, nonce, selected, sent, delivered)
         }
         catch (error: Exception) {
             SmsDispatch.cancelBootstrapAttempt(context, nonce, attemptAt)

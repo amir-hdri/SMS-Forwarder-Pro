@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -468,6 +469,41 @@ fun ManagedDriverScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = BarProTextPrimary
                                             )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        if (isPhoneValid) effectiveOnActivate(cleanPhone)
+                                                        else effectiveOnActivate("")
+                                                    },
+                                                    modifier = Modifier.weight(1f).height(36.dp),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProRose),
+                                                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                                        brush = androidx.compose.ui.graphics.SolidColor(BarProRose.copy(alpha = 0.5f))
+                                                    )
+                                                ) {
+                                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("تلاش مجدد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                OutlinedButton(
+                                                    onClick = effectiveOnReset,
+                                                    modifier = Modifier.weight(1f).height(36.dp),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProTextSecondary),
+                                                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                                        brush = androidx.compose.ui.graphics.SolidColor(BarProBorder)
+                                                    )
+                                                ) {
+                                                    Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("بازنشانی", fontSize = 12.sp)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -547,6 +583,26 @@ fun ManagedDriverScreen(
                             }
                         }
 
+                        // Cancel Loading / Reset Button (Shown during loading to prevent UI lockout)
+                        if (effectiveActivationState.isLoading) {
+                            OutlinedButton(
+                                onClick = effectiveOnReset,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .testTag("btn_cancel_loading"),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProAmber),
+                                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                    brush = androidx.compose.ui.graphics.SolidColor(BarProAmber.copy(alpha = 0.5f))
+                                )
+                            ) {
+                                Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("لغو فرآیند و بازنشانی وضعیت", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         // Fallback Auto-Detection Button (available when not loading so driver can fall back to SIM auto-activation)
                         if (!effectiveActivationState.isLoading) {
                             OutlinedButton(
@@ -584,6 +640,7 @@ fun ManagedDriverScreen(
                         }
                     }
                 }
+
             } else {
                 // =================================================================
                 // OPERATIONAL / ACTIVE DASHBOARD VIEW (ENROLLED DRIVER)
@@ -824,4 +881,20 @@ private fun PermissionStatusPill(
             )
         }
     }
+}
+
+internal fun normalizeActivationLink(raw: String, serverBase: String = "https://87.107.160.251/"): String {
+    val trimmed = raw.trim()
+    if (trimmed.startsWith("barpro-forwarder://enroll#")) return trimmed
+    if (trimmed.contains("ticket=")) {
+        val ticket = trimmed.substringAfter("ticket=").substringBefore("&").substringBefore("#")
+        val server = if (trimmed.contains("server=")) {
+            trimmed.substringAfter("server=").substringBefore("&").substringBefore("#")
+        } else serverBase
+        return "barpro-forwarder://enroll#ticket=$ticket&server=${java.net.URLEncoder.encode(server, "UTF-8")}"
+    }
+    if (trimmed.length in 20..1024 && !trimmed.contains(" ") && !trimmed.contains("/")) {
+        return "barpro-forwarder://enroll#ticket=$trimmed&server=${java.net.URLEncoder.encode(serverBase, "UTF-8")}"
+    }
+    return trimmed
 }

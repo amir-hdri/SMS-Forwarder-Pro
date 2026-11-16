@@ -15,22 +15,18 @@ import okhttp3.Dns
 import okhttp3.OkHttpClient
 
 /**
- * Guarantees that UTCMS relay traffic egresses from the driver's REAL Iranian
- * cellular (non-VPN) network and never through a VPN/proxy the driver may have
- * enabled — so the egress IP cannot change to another country.
+ * Requests a cellular network marked NOT_VPN and binds a caller's transport to
+ * that network. This capability does not measure the egress IP or its country.
  *
  * Mechanism: request an [android.net.Network] that has
  * `TRANSPORT_CELLULAR + NET_CAPABILITY_INTERNET + NET_CAPABILITY_NOT_VPN`, then
  * bind the per-request OkHttp client's socket factory AND DNS resolver to that
- * physical network, with [Proxy.NO_PROXY]. Binding to the underlying NOT_VPN
- * network bypasses any app/always-on VPN overlay and any Wi-Fi HTTP proxy.
+ * selected network, with [Proxy.NO_PROXY]. Android VPN lockdown may still deny
+ * the socket connection; acquiring a network is not proof of successful delivery.
  *
- * Fail-closed contract: if no NOT_VPN cellular network can be acquired (airplane
- * mode, cellular off, or an always-on "block connections without VPN" lockdown),
- * [acquire] returns `null`. Callers MUST then abandon device submission and let
- * the server fall back to its own egress — we never silently leak through a VPN.
- * (Under VPN lockdown, acquisition may still succeed but the later socket connect
- * fails; the HTTP layer surfaces that error and the same fallback applies.)
+ * If no requested network becomes available, [acquire] returns `null`. Callers
+ * own their documented fallback and consent checks; this helper does not choose
+ * a fallback transport or establish BarPro server-side UTCMS egress authority.
  *
  * All APIs used here are available at minSdk 24. Requires the
  * `CHANGE_NETWORK_STATE` permission to request a specific network while on Wi-Fi.
@@ -104,8 +100,7 @@ object CellularEgress {
 }
 
 /**
- * A held non-VPN cellular network. Binds OkHttp sockets + DNS to this network so
- * every request leaves via the driver's real Iranian cellular IP. [close]
+ * A held non-VPN cellular network. Binds OkHttp sockets + DNS to this network. [close]
  * releases the underlying network request; always use within `.use { }`.
  */
 class CellularEgressSession internal constructor(

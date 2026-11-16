@@ -73,18 +73,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun resolveAndActivateDriver(rawPhone: String) {
+        if (_secureStorageError.value != null) return
         if (rawPhone.isBlank()) {
-            if (_secureStorageError.value != null) return
             activationRuntime.progress.value = "در انتظار اینترنت اولیه و تأیید واقعی سیم‌کارت…"
             _driverActivationState.value = DriverActivationUiState(
                 isLoading = true,
                 progressMessage = "در حال شناسایی و تأیید خودکار سیم‌کارت…"
             )
-            com.example.enrollment.DriverBootstrapWorker.enqueue(getApplication())
             driverActivationJob?.cancel()
             driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    activationRuntime.activateAutomatically()
+                    activationRuntime.activate("")
                     when (enrollment.status.value) {
                         com.example.enrollment.EnrollmentStatus.ACTIVE -> {
                             com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
@@ -136,7 +135,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         driverActivationJob?.cancel()
         driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                enrollment.resolveDriverConfiguration(cleanPhone)
+                activationRuntime.activate(cleanPhone)
                 when (enrollment.status.value) {
                     com.example.enrollment.EnrollmentStatus.ACTIVE -> {
                         com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
@@ -171,26 +170,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun resetDriverActivation() {
+    fun resetDriverActivation(): kotlinx.coroutines.Job {
         driverActivationJob?.cancel()
         _driverActivationState.value = DriverActivationUiState()
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val current = repository.getConfig()
-            val resetConfig = current.copy(
-                driverPhone = "",
-                driverFullName = "",
-                setupCompleted = false,
-                isMasterEnabled = false,
-                userConsentGiven = false
-            )
-            repository.saveConfig(resetConfig)
-            com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
-            _driverActivationState.value = DriverActivationUiState()
+        return viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                activationRuntime.reset()
+                _driverActivationState.value = DriverActivationUiState()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                showSecureStorageFailure(error)
+            }
         }
     }
 
     fun activateFromLink(value: String) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { enrollment.receive(value) }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { activationRuntime.receive(value) }
     }
 
     fun refreshEnrollmentPermissions() {
@@ -235,10 +231,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(enrollment.status, enrollment.errorMessage,
                 activationRuntime.progress, enrollment.needsSmsSelection) { status, error, progress, selection ->
-                DriverActivationUiState(isLoading = status == com.example.enrollment.EnrollmentStatus.ACTIVATING ||
-                    (status == com.example.enrollment.EnrollmentStatus.IDLE && progress != null),
-                    errorMessage = error, progressMessage = progress, needsSmsSelection = selection)
-            }.collect { _driverActivationState.value = it }
+                status to DriverActivationUiState(isLoading = status == com.example.enrollment.EnrollmentStatus.ACTIVATING,
+                    errorMessage = error,
+                    progressMessage = progress.takeIf { status == com.example.enrollment.EnrollmentStatus.ACTIVATING },
+                    needsSmsSelection = selection)
+            }.collect { (status, state) ->
+                _driverActivationState.update { previous ->
+                    state.copy(
+                        successMessage = previous.successMessage.takeIf { status == com.example.enrollment.EnrollmentStatus.ACTIVE },
+                        resolvedDriverName = previous.resolvedDriverName.takeIf { status == com.example.enrollment.EnrollmentStatus.ACTIVE }
+                    )
+                }
+            }
         }
     }
     private val configRefresh = MutableStateFlow(0L)
