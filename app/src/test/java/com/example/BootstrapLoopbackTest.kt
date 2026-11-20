@@ -52,7 +52,7 @@ class BootstrapLoopbackTest {
             redeem = { _, _ -> error("No link required") }, getConfig = repository::getConfig, saveConfig = repository::saveConfig,
             stage = storage::savePendingEnrollment, loadStage = storage::getPendingEnrollment,
             permissionsGranted = { true }, onActivated = { health++ },
-            resolve = { _, _ -> error("Missing secret must bootstrap directly") }, bootstrap = coordinator::start)
+            resolve = { _, _, _ -> error("Missing secret must bootstrap directly") }, bootstrap = coordinator::start)
         try {
             repository.saveConfig(ForwardConfig())
             manager.resolveDriverConfiguration("09120000001")

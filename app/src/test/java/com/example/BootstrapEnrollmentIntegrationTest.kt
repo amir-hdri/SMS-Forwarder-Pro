@@ -78,7 +78,7 @@ class BootstrapEnrollmentIntegrationTest {
             getConfig = repository::getConfig, saveConfig = repository::saveConfig,
             stage = store::savePendingEnrollment, loadStage = store::getPendingEnrollment,
             permissionsGranted = { permitted }, onActivated = { health++ },
-            resolve = { _, _ -> throw ActivationRequiredException() }, bootstrap = coordinator::start)
+            resolve = { _, _, _ -> throw ActivationRequiredException() }, bootstrap = coordinator::start)
         try {
             manager.resolveDriverConfiguration(fixture.getString("phone"))
             assertEquals(EnrollmentStatus.FAILED, manager.status.value)

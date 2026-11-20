@@ -403,7 +403,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { stagedDoc },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
+            resolve = { phone, devId, _ -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
         )
 
         manager.resolveDriverConfiguration(validPhone)
@@ -519,7 +519,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { stagedDoc },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId ->
+            resolve = { phone, devId, _ ->
                 client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
@@ -550,7 +550,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { null },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId ->
+            resolve = { phone, devId, _ ->
                 client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
@@ -579,7 +579,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { null },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId ->
+            resolve = { phone, devId, _ ->
                 client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
@@ -608,7 +608,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { null },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId ->
+            resolve = { phone, devId, _ ->
                 client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken)
             }
         )
@@ -651,7 +651,7 @@ class DriverResolutionAdversarialChallengeTest {
             loadStage = { staged },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { phone, devId -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
+            resolve = { phone, devId, _ -> client.resolve(phone, EnrollmentContract.trustedServer(endpoint), devId, validToken) }
         )
 
         // Fire 10 sequential rapid resolutions

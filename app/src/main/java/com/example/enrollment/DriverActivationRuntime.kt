@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.security.MessageDigest
 import java.util.UUID
 import org.json.JSONObject
 
@@ -78,7 +79,7 @@ class DriverActivationRuntime private constructor(private val context: Context) 
         }
 
     /** Only the user's activation action creates an intent; lifecycle recovery never invents one. */
-    suspend fun activate(driverPhone: String) {
+    suspend fun activate(driverPhone: String, driverFullName: String = "") {
         require(BuildConfig.APP_ROLE == "DRIVER")
         val phone = SmsParser.normalizePhoneNumber(driverPhone)
         require(phone.isEmpty() || phone.matches(Regex("09[0-9]{9}")))
@@ -93,19 +94,21 @@ class DriverActivationRuntime private constructor(private val context: Context) 
             }
             if (phone.isNotEmpty() && pendingGrant != null && pendingGrant.driverPhone != phone)
                 storage.savePendingEnrollment(null)
-            val pending = storage.getPendingBootstrap()?.let(::JSONObject)
+            var pending = storage.getPendingBootstrap()?.let(::JSONObject)
             if (pending == null || pending.optString("phone") != phone || pending.optString("device_id") != id) {
                 cancelBootstrapCallbacks()
                 storage.saveBootstrapSmsAttempt(null)
-                storage.savePendingBootstrap(JSONObject().put("phone", phone).put("device_id", id).toString())
+                pending = JSONObject().put("phone", phone).put("device_id", id)
             }
+            // This is a request constraint, not a proved profile field. It survives a settings trip/restart.
+            storage.savePendingBootstrap(requireNotNull(pending).put("requested_name", driverFullName.trim()).toString())
             check(preferences.edit().putBoolean(STOPPED, false).commit())
         }
         DriverBootstrapWorker.cancel(context)
         try {
             automaticLock.withLock {
                 enrollment.withGeneration(expected) { Unit }
-                enrollment.resolveDriverConfiguration(phone)
+                enrollment.resolveDriverConfiguration(phone, driverName = driverFullName.trim())
                 finishActivation(expected)
             }
         } finally {
@@ -115,17 +118,54 @@ class DriverActivationRuntime private constructor(private val context: Context) 
 
     suspend fun receive(value: String) {
         require(BuildConfig.APP_ROLE == "DRIVER")
+        val linkHash = if (value.length <= 4096) MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray()).joinToString("") { "%02x".format(it) } else ""
         val expected = enrollment.cancelActiveOperation()
-        enrollment.withGeneration(expected) {
+        val (selected, recoverWorkingProfile) = enrollment.withGeneration(expected) {
+            val wasStopped = isActivationStopped(context)
+            // A process death or unreadable stage during replacement must leave the older intent stopped.
+            check(preferences.edit().putBoolean(STOPPED, true).commit())
+            val pending = storage.getPendingBootstrap()?.let(::JSONObject)
+            val document = storage.getPendingEnrollment()
+            val grant = document?.let { runCatching { EnrollmentContract.parseCredentials(it, server) }.getOrNull() }
+            val accepted = pending?.takeIf {
+                linkHash.isNotEmpty() && it.optString("accepted_link_sha256") == linkHash &&
+                    it.optString("device_id") == deviceId() && it.optString("phone").matches(Regex("09[0-9]{9}")) &&
+                    (document == null || grant?.driverPhone == it.optString("phone"))
+            }
+            val recoverProfile = pending == null && document == null && !wasStopped
+            // A new link replaces the previous request, even across process death or a permission trip.
             progress.value = null
+            cancelBootstrapCallbacks()
+            storage.savePendingBootstrap(accepted?.toString())
+            storage.saveBootstrapSmsAttempt(null)
+            // An exact accepted link retains only its selected phone/device intent. Its own token or
+            // genuine carrier proof must still be validated before forwarding can become active.
+            if (accepted != null) check(preferences.edit().putBoolean(STOPPED, false).commit())
+            accepted to recoverProfile
         }
         DriverBootstrapWorker.cancel(context)
         try {
             automaticLock.withLock {
                 enrollment.withGeneration(expected) { Unit }
-                enrollment.receive(value)
+                if (selected != null) enrollment.resolveDriverConfiguration(selected.getString("phone"))
+                else enrollment.receive(value)
+                val current = if (enrollment.status.value == EnrollmentStatus.IDLE && recoverWorkingProfile)
+                    repository.getConfig() else null
                 enrollment.withGeneration(expected) {
-                    if (enrollment.status.value in setOf(EnrollmentStatus.ACTIVE, EnrollmentStatus.NEEDS_PERMISSIONS))
+                    if (enrollment.status.value == EnrollmentStatus.NEEDS_PERMISSIONS) {
+                        val document = storage.getPendingEnrollment()
+                        if (document != null) {
+                            val grant = EnrollmentContract.parseCredentials(document, server)
+                            // Only successful redemption may bind a new link to a durable selected phone.
+                            storage.savePendingBootstrap(JSONObject().put("phone", grant.driverPhone)
+                                .put("device_id", deviceId()).put("requested_name", "")
+                                .put("accepted_link_sha256", linkHash).toString())
+                        } else check(selected != null) { "Missing accepted activation intent" }
+                    }
+                    if (enrollment.status.value in setOf(EnrollmentStatus.ACTIVE, EnrollmentStatus.NEEDS_PERMISSIONS) ||
+                        (current != null && EnrollmentContract.isEnrolledDriver(current) &&
+                            current.isMasterEnabled && current.userConsentGiven))
                         check(preferences.edit().putBoolean(STOPPED, false).commit())
                 }
                 finishActivation(expected)
@@ -145,6 +185,17 @@ class DriverActivationRuntime private constructor(private val context: Context) 
         storage.saveBootstrapSmsAttempt(null)
     })
 
+    /** A forwarding stop revokes outstanding activation without rewriting the private profile. */
+    internal fun stopPendingActivation() {
+        val expected = enrollment.cancelActiveOperation()
+        enrollment.withGeneration(expected) {
+            check(preferences.edit().putBoolean(STOPPED, true).commit())
+            progress.value = null
+            DriverBootstrapWorker.cancel(context)
+            cancelBootstrapCallbacks()
+        }
+    }
+
     suspend fun activateAutomatically() {
         if (isActivationStopped(context)) return
         val expected = enrollment.currentGeneration()
@@ -154,19 +205,20 @@ class DriverActivationRuntime private constructor(private val context: Context) 
             }
             val current = repository.getConfig()
             enrollment.withGeneration(expected) { Unit }
-            if (EnrollmentContract.isEnrolledDriver(current)) {
+            val pending = enrollment.withGeneration(expected) { storage.getPendingBootstrap()?.let(::JSONObject) }
+            if (pending != null) {
+                val phone = pending.getString("phone")
+                require(phone.isEmpty() || phone.matches(Regex("09[0-9]{9}"))) { "Invalid pending activation identity" }
+                require(pending.getString("device_id") == deviceId()) { "Pending activation device changed" }
+                enrollment.resolveDriverConfiguration(phone, driverName = pending.optString("requested_name", ""))
+            } else if (EnrollmentContract.isEnrolledDriver(current)) {
                 // A retained grant cannot undo a later explicit forwarding/consent stop.
+                if (!current.isMasterEnabled || !current.userConsentGiven) return@withLock
                 enrollment.resolveDriverConfiguration("")
                 enrollment.withGeneration(expected) { storage.savePendingEnrollment(null) }
             } else if (storage.getPendingEnrollment() != null) {
                 enrollment.resume()
-            } else {
-                val pending = storage.getPendingBootstrap()?.let(::JSONObject) ?: return@withLock
-                val phone = pending.getString("phone")
-                require(phone.isEmpty() || phone.matches(Regex("09[0-9]{9}"))) { "Invalid pending activation identity" }
-                require(pending.getString("device_id") == deviceId()) { "Pending activation device changed" }
-                enrollment.resolveDriverConfiguration(phone)
-            }
+            } else return@withLock
             finishActivation(expected)
         }
     }

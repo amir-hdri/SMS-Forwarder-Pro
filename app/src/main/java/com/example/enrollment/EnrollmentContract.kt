@@ -52,6 +52,18 @@ class EnrollmentCredentials(
 object EnrollmentContract {
     const val PROTOCOL = "barpro-driver-v1"
 
+    /** Full-name equality accepts common Persian keyboard forms, never partial/fuzzy identity. */
+    private fun normalizedName(value: String): String = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
+        .replace('ي', 'ی').replace('ى', 'ی').replace('ك', 'ک')
+        .replace(Regex("[\\s\\p{Z}]+"), " ").trim()
+
+    fun requireNameMatch(credentials: EnrollmentCredentials, requestedName: String) {
+        if (requestedName.isBlank()) return
+        val requested = normalizedName(requestedName)
+        val registered = normalizedName(credentials.driverName)
+        if (requested.isEmpty() || registered.isEmpty() || requested != registered) throw DriverNameMismatchException()
+    }
+
     fun isEnrolledDriver(config: ForwardConfig): Boolean {
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
         return config.setupCompleted && phone.matches(Regex("09[0-9]{9}")) &&
@@ -126,3 +138,6 @@ object EnrollmentContract {
     fun permissionsAllowActivation(role: String, receiveSms: Boolean, sendSms: Boolean): Boolean =
         receiveSms && (role != "DRIVER" || sendSms)
 }
+
+class DriverNameMismatchException : IllegalArgumentException(
+    "نام و نام خانوادگی واردشده با نام تأییدشده ناوگان مطابقت ندارد یا نام تأییدشده دریافت نشده است؛ مشخصات را اصلاح و دوباره تلاش کنید.")

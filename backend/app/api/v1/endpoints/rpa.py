@@ -69,11 +69,13 @@ api_key_header_scheme = APIKeyHeader(
 )
 
 def verify_forwarder_secret(
+    request: Request,
     secret: Optional[str] = Security(api_key_header_scheme)
 ) -> str:
     """
     FastAPI Security Dependency:
-    Validates incoming X-Forwarder-Secret header against configured server secret.
+    Validates incoming X-Forwarder-Secret, X-Webhook-Token, or X-OTP-Webhook-Token header
+    against configured server secret.
     Enforces constant-time comparison, fail-closed semantics for empty or insecure secrets,
     and never exposes secrets in logs or responses.
     """
@@ -101,25 +103,49 @@ def verify_forwarder_secret(
             detail="Authentication failed: Server secret using insecure placeholder."
         )
 
-    # Missing header
-    if not secret or not secret.strip():
-        safe_log_otp_event("sms_webhook_unauthorized", extra={"reason": "missing_header"})
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed: Missing or empty X-Forwarder-Secret header."
-        )
+    tokens = [value for name in (
+        "X-Forwarder-Secret", "X-Webhook-Token", "X-OTP-Webhook-Token", "X-Gateway-Secret"
+    ) for value in request.headers.getlist(name)]
+    if secret is not None and isinstance(secret, str) and secret not in tokens:
+        tokens.append(secret)
+    if not tokens or any(not value.strip() for value in tokens):
+        raise HTTPException(401, "Authentication failed: Missing or empty webhook token.")
+    provided = tokens[0].strip().encode("utf-8")
+    if any(not hmac.compare_digest(provided, value.strip().encode("utf-8")) for value in tokens):
+        raise HTTPException(401, "Authentication failed: Conflicting authentication tokens.")
+    request.state.forwarder_phone = None
+    if not hmac.compare_digest(configured.strip().encode("utf-8"), provided):
+        # Only a phone-specific path can carry an existing scoped credential.
+        raw_phone = request.path_params.get("phone")
+        clean_phone = otp_vault_service.normalize_iranian_phone(raw_phone) if isinstance(raw_phone, str) else None
+        if not clean_phone or not hmac.compare_digest(
+            otp_vault_service.driver_webhook_token(clean_phone).encode(), provided
+        ):
+            raise HTTPException(401, "Authentication failed: Invalid authentication token.")
+        request.state.forwarder_phone = clean_phone
+    return tokens[0]
 
-    # Constant-time comparison
-    expected_bytes = configured.strip().encode("utf-8")
-    provided_bytes = secret.strip().encode("utf-8")
-    if not hmac.compare_digest(expected_bytes, provided_bytes):
-        safe_log_otp_event("sms_webhook_unauthorized", extra={"reason": "secret_mismatch"})
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed: Invalid X-Forwarder-Secret."
-        )
 
-    return secret
+def validate_phone_identity(request: Request, body: dict, path_phone: Optional[str] = None) -> Optional[str]:
+    """Reject conflicting aliases before the schema selects one representation."""
+    raw_values = [path_phone, request.headers.get("X-Driver-Phone"), getattr(request.state, "forwarder_phone", None)]
+    raw_values.extend(request.headers.getlist("X-Driver-Phone"))
+    containers = [body]
+    if isinstance(body.get("data"), dict):
+        containers.append(body["data"])
+    for container in containers:
+        raw_values.extend(container[name] for name in ("phone", "driver_phone") if name in container)
+    phones = []
+    for raw in raw_values:
+        if raw is None:
+            continue
+        normalized = otp_vault_service.normalize_iranian_phone(raw) if isinstance(raw, str) else None
+        if not normalized:
+            raise HTTPException(422, "Invalid Iranian mobile phone number format in identity fields")
+        phones.append(normalized)
+    if len(set(phones)) > 1:
+        raise HTTPException(422, "Conflicting driver phone identities")
+    return phones[0] if phones else None
 
 @router.post(
     "/sms-forwarder",
@@ -139,9 +165,13 @@ def verify_forwarder_secret(
     summary="Ingest incoming SMS from Android Forwarder for UTCMS RPA Waybill Automation",
     description="Authenticates forwarder, validates replay protection, extracts strictly 5-digit OTP, stores authoritatively in Redis, enqueues to Redis Streams, and handles deduplication."
 )
+@router.post("/webhook", response_model=SmsForwarderCanonicalResponse, include_in_schema=False)
+@router.post("/sms-forwarder/{phone}", response_model=SmsForwarderCanonicalResponse, include_in_schema=False)
+@router.post("/webhook/{phone}", response_model=SmsForwarderCanonicalResponse, include_in_schema=False)
 @limiter.limit("60/minute")
 async def ingest_sms_forwarder(
     request: Request,
+    phone: Optional[str] = None,
     _auth: str = Depends(verify_forwarder_secret)
 ):
     """
@@ -189,6 +219,12 @@ async def ingest_sms_forwarder(
             detail=f"Malformed JSON payload: {str(parse_err)}"
         )
 
+    if not isinstance(body_dict, dict):
+        raise HTTPException(422, "Payload must be a JSON object")
+    identity_phone = validate_phone_identity(request, body_dict, phone)
+    if identity_phone:
+        body_dict = {**body_dict, "phone": identity_phone}
+
     # 4. Pydantic Schema Validation
     try:
         validated_payload = SmsForwarderRequest.model_validate(body_dict)
@@ -220,6 +256,8 @@ async def ingest_sms_forwarder(
             detail=f"Invalid Iranian mobile phone number format: '{validated_payload.phone}'"
         )
 
+    received_at = otp_vault_service.sms_received_at(validated_payload.timestamp)
+
     # 6. Execute OTP Vault Ingestion Pipeline
     success, valid_phone, otp, is_duplicate, msg = await otp_vault_service.process_and_store_otp(
         raw_phone=validated_payload.phone,
@@ -228,7 +266,8 @@ async def ingest_sms_forwarder(
         timestamp=validated_payload.timestamp,
         document_id=validated_payload.document_id,
         driver_id=validated_payload.driver_id,
-        ttl_seconds=settings.UTCMS_OTP_TTL_SECONDS
+        ttl_seconds=settings.UTCMS_OTP_TTL_SECONDS,
+        received_at=received_at
     )
 
     # 7. Handle Redis Failure (Fail-Safe requirement 7)
@@ -327,7 +366,14 @@ class RpaWebhookHandler:
         Maintains backward compatibility with Phase 2 tests while adhering to security rules.
         """
         # 1. Constant-Time Authentication check
-        secret_header = headers.get("X-Forwarder-Secret") or headers.get("x-forwarder-secret")
+        secret_header = (
+            headers.get("X-Forwarder-Secret")
+            or headers.get("x-forwarder-secret")
+            or headers.get("X-Webhook-Token")
+            or headers.get("x-webhook-token")
+            or headers.get("X-OTP-Webhook-Token")
+            or headers.get("x-otp-webhook-token")
+        )
         if not cls.verify_secret(secret_header):
             safe_log_otp_event(
                 event_type="sms_webhook_unauthorized",
@@ -438,117 +484,104 @@ class RpaWebhookHandler:
 rpa_webhook_handler = RpaWebhookHandler()
 
 
+@router.post("/sms-gateway", tags=["RPA Inbound SMS Relay"])
 @router.post("/sms-gateway/webhook", tags=["RPA Inbound SMS Relay"])
+@router.post("/sms-gateway/{phone}", tags=["RPA Inbound SMS Relay"], include_in_schema=False)
 @router.post("/sms-inbound-relay", tags=["RPA Inbound SMS Relay"])
 async def receive_inbound_sms_relay(
     request: Request,
-    x_forwarder_secret: Optional[str] = Header(None, alias="X-Forwarder-Secret"),
-    x_gateway_secret: Optional[str] = Header(None, alias="X-Gateway-Secret"),
+    phone: Optional[str] = None,
+    _auth: str = Depends(verify_forwarder_secret),
 ):
-    """
-    Inbound SMS Relay Endpoint:
-    Receives forwarded SMS from either:
-    1. GSM Modem connected to the server running serial port / AT command listener.
-    2. Operator SMS Gateway Webhook (Kavenegar, Magfa, Farapayamak, etc.).
-    3. Emergency Fallback SMS from driver's phone formatted as BARPRO#<driverId>#<driverPhone>#<smsType>#<code>.
-    
-    Parses and ingests into OTP Vault, then broadcasts to Redis pub/sub channel for instant Playwright consumption.
-    """
-    # 1. Secret verification if configured
-    expected_secret = getattr(settings, "SMS_FORWARDER_SECRET", "")
-    provided_secret = x_forwarder_secret or x_gateway_secret or request.query_params.get("secret") or request.query_params.get("api_key")
-    if expected_secret and provided_secret and provided_secret != expected_secret:
-        safe_log_otp_event("inbound_sms_unauthorized", extra={"reason": "secret_mismatch"})
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Gateway Secret")
-
-    # 2. Extract payload from JSON or Form Data
-    content_type = request.headers.get("content-type", "").lower()
-    raw_sender = ""
-    raw_text = ""
-    driver_id = None
-    document_id = None
-
+    """Standalone relay intake; canonical enrollment and durable probes belong to BarPro."""
+    raw_body = await request.body()
+    if len(raw_body) > MAX_PAYLOAD_BYTES:
+        raise HTTPException(413, "Gateway payload is too large")
     try:
-        if "application/json" in content_type:
-            body_json = await request.json()
-            raw_sender = body_json.get("from") or body_json.get("sender") or body_json.get("phone") or body_json.get("from_number") or ""
-            raw_text = body_json.get("text") or body_json.get("message") or body_json.get("content") or body_json.get("msg") or ""
-            driver_id = body_json.get("driver_id")
-            document_id = body_json.get("document_id")
+        if "application/json" in request.headers.get("content-type", "").lower():
+            data = await request.json()
         else:
-            form_data = await request.form()
-            raw_sender = form_data.get("from") or form_data.get("sender") or form_data.get("phone") or form_data.get("from_number") or ""
-            raw_text = form_data.get("text") or form_data.get("message") or form_data.get("content") or form_data.get("msg") or ""
-            driver_id = form_data.get("driver_id")
-            document_id = form_data.get("document_id")
-    except Exception as e:
-        safe_log_otp_event("inbound_sms_parse_error", extra={"error": str(e)})
-        raise HTTPException(status_code=400, detail=f"Failed to parse inbound SMS payload: {str(e)}")
-
-    if not raw_text:
-        raise HTTPException(status_code=422, detail="Empty SMS message content received")
-
-    # 3. Handle BARPRO format (BARPRO#driverId#driverPhone#smsType#code)
-    clean_text = raw_text.strip()
-    norm_digits_text = otp_vault_service.normalize_digits(clean_text)
-    extracted_otp = None
-    target_phone = raw_sender
-
-    if norm_digits_text.upper().startswith("BARPRO#") or (norm_digits_text.upper().startswith("BARPRO") and "#" in norm_digits_text):
-        parts = norm_digits_text.split("#")
-        # Format: BARPRO # driverId # driverPhone # smsType # code
-        if len(parts) >= 5:
-            driver_id = driver_id or parts[1].strip()
-            extracted_driver_phone = parts[2].strip()
-            if extracted_driver_phone:
-                target_phone = extracted_driver_phone
-            extracted_otp = parts[4].strip()
-        elif len(parts) >= 3:
-            # Shortened fallback: BARPRO#phone#code
-            target_phone = parts[1].strip()
-            extracted_otp = parts[2].strip()
-
-    # 4. If not extracted via format, run standard OTP extraction
-    if not extracted_otp or not otp_vault_service.validate_otp(extracted_otp):
-        extracted_otp = otp_vault_service.extract_5digit_otp(norm_digits_text)
-
-    # 5. Normalize target phone number
-    normalized_phone = otp_vault_service.normalize_iranian_phone(target_phone)
-    if not normalized_phone and raw_sender:
-        normalized_phone = otp_vault_service.normalize_iranian_phone(raw_sender)
-
-    if not normalized_phone:
-        normalized_phone = "09333702137"
-
-    # 6. Ingest into OTP Vault
-    success, valid_phone, otp, is_duplicate, msg = await otp_vault_service.process_and_store_otp(
-        raw_phone=normalized_phone,
+            data = dict(await request.form())
+        if not isinstance(data, dict):
+            raise ValueError("Expected an object")
+        raw_sender = data.get("from") or data.get("sender") or data.get("from_number") or data.get("phone") or ""
+        raw_text = data.get("text") or data.get("message") or data.get("content") or data.get("msg") or ""
+        if not isinstance(raw_text, str) or not isinstance(raw_sender, str):
+            raise ValueError("Invalid SMS fields")
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, "Invalid inbound SMS payload") from exc
+    if not raw_text.strip():
+        raise HTTPException(422, "Empty SMS message content received")
+    origins = []
+    for name in ("from", "sender", "from_number"):
+        if name in data:
+            value = data[name]
+            if not isinstance(value, str) or not value.strip():
+                raise HTTPException(422, "Invalid relay SMS origin")
+            origins.append(
+                otp_vault_service.normalize_iranian_phone(value)
+                or otp_vault_service.normalize_digits(value.strip())
+            )
+    if len(set(origins)) > 1:
+        raise HTTPException(422, "Conflicting relay SMS origins")
+    identity = validate_phone_identity(request, data, phone)
+    if otp_vault_service.is_bp1_text(raw_text):
+        envelope_phone, timestamp, code = otp_vault_service.verify_signed_envelope(raw_text, raw_sender)
+        for name in ("from", "sender", "from_number"):
+            if name in data and (
+                not isinstance(data[name], str)
+                or otp_vault_service.normalize_iranian_phone(data[name]) != envelope_phone
+            ):
+                raise HTTPException(422, "Conflicting signed SMS origins")
+        if identity and envelope_phone != identity:
+            raise HTTPException(422, "Signed SMS phone does not match driver identity")
+        identity = envelope_phone
+        if code in {"HEALTH_CHECK", "TEST"}:
+            # RedisManager here is an in-memory legacy adapter. It cannot persist
+            # the genuine probe receipt required for canonical health acceptance.
+            raise HTTPException(503, "Probe receipt persistence unavailable; use the canonical BarPro gateway")
+    else:
+        supplied_clocks = [data[name] for name in ("timestamp", "receivedTimestamp") if name in data]
+        if any(value is None for value in supplied_clocks):
+            raise HTTPException(422, "Invalid SMS timestamp")
+        timestamp = supplied_clocks[0] if supplied_clocks else None
+        clock_now = time.time()
+        received_clocks = [otp_vault_service.sms_received_at(value, now=clock_now) for value in supplied_clocks]
+        if len(set(received_clocks)) > 1:
+            raise HTTPException(422, "Conflicting SMS timestamps")
+        normalized_text = otp_vault_service.normalize_digits(raw_text.strip())
+        if normalized_text.upper().startswith("BARPRO#"):
+            parts = normalized_text.split("#")
+            candidate = parts[2] if len(parts) == 5 else parts[1] if len(parts) == 3 else None
+            envelope_phone = otp_vault_service.normalize_iranian_phone(candidate) if candidate else None
+            if not envelope_phone or (identity and identity != envelope_phone):
+                raise HTTPException(422, "Invalid relay driver identity")
+            identity = envelope_phone
+        sender_phone = otp_vault_service.normalize_iranian_phone(raw_sender)
+        if sender_phone and identity and sender_phone != identity:
+            raise HTTPException(422, "Relay sender does not match driver identity")
+        identity = identity or sender_phone
+    if not identity:
+        raise HTTPException(422, "Unresolved relay driver identity")
+    received_at = otp_vault_service.sms_received_at(timestamp)
+    success, valid_phone, otp, duplicate, message = await otp_vault_service.process_and_store_otp(
+        raw_phone=identity,
         raw_text=raw_text,
         raw_sender=raw_sender or "GSM_MODEM",
-        timestamp=int(time.time()),
-        document_id=document_id,
-        driver_id=driver_id,
-        ttl_seconds=settings.UTCMS_OTP_TTL_SECONDS
+        timestamp=timestamp if timestamp is not None else received_at,
+        document_id=data.get("document_id"),
+        driver_id=data.get("driver_id"),
+        ttl_seconds=settings.UTCMS_OTP_TTL_SECONDS,
+        received_at=received_at,
     )
-
-    safe_log_otp_event(
-        "inbound_sms_relay_processed",
-        phone=normalized_phone,
-        extra={
-            "otp_detected": otp is not None,
-            "is_duplicate": is_duplicate,
-            "driver_id": driver_id
-        }
-    )
-
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={
-            "success": True,
-            "status": "duplicate" if is_duplicate else ("success" if otp else "no_otp"),
-            "phone": mask_phone(normalized_phone),
-            "otp_detected": otp is not None,
-            "is_duplicate": is_duplicate,
-            "message": "Inbound SMS relay received and processed successfully."
-        }
-    )
+    if message == "STORAGE_FAILURE":
+        raise HTTPException(503, "OTP storage unavailable; retry delivery")
+    return {
+        "success": bool(success and otp),
+        "status": "success" if success and otp else "no_otp",
+        "phone": mask_phone(valid_phone or identity),
+        "otp_detected": bool(otp),
+        "is_duplicate": duplicate,
+        "received_at": received_at,
+        "message": "OTP accepted by standalone vault" if success and otp else "No valid OTP detected",
+    }

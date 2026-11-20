@@ -66,8 +66,10 @@ val defaultEndpoint = providers.gradleProperty("BARPRO_DEFAULT_ENDPOINT").orNull
 val defaultConfigUrl = providers.gradleProperty("BARPRO_CONFIG_URL").orNull ?: ""
 val defaultUpdateUrl = providers.gradleProperty("BARPRO_UPDATE_URL").orNull ?: ""
 val privateHubProfile = providers.gradleProperty("BARPRO_HUB_PROVISIONING_PROFILE_FILE")
-require(providers.gradleProperty("BARPRO_DRIVER_WEBHOOK_TOKEN").orNull.isNullOrBlank()) {
-  "Public Driver builds cannot embed webhook authority; use the device's scoped enrollment grant"
+require(listOf("BARPRO_DRIVER_WEBHOOK_TOKEN", "BARPRO_HUB_WEBHOOK_TOKEN").all {
+  providers.gradleProperty(it).orNull.isNullOrBlank()
+}) {
+  "Public builds cannot embed webhook authority; use the device's scoped enrollment grant"
 }
 
 android {
@@ -128,12 +130,9 @@ android {
   }
 
   val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-
   signingConfigs {
     create("release") {
-      // The signing key is the whole update channel: Android refuses an update signed by a
-      // different key, so rotating it would force every driver to uninstall and lose their data.
-      // Generate once, back up offline, never replace.
+      // The retained Android signer owns upgrade compatibility; a missing key must fail Release.
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
@@ -147,8 +146,6 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      // A missing retained signer must fail release validation. A new machine's
-      // debug key cannot silently replace the update channel's established key.
       signingConfig = signingConfigs.getByName("release")
     }
     // Use Android's generated per-developer debug keystore.

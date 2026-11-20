@@ -75,6 +75,7 @@ class DriverActivationViewModelTest {
             redeem = { _, _ -> error("No activation link") }, getConfig = repository::getConfig,
             saveConfig = repository::saveConfig, stage = storage::savePendingEnrollment,
             loadStage = storage::getPendingEnrollment, permissionsGranted = { true }, onActivated = {},
+            resolve = { _, _, _ -> throw com.example.enrollment.ActivationRequiredException() },
             bootstrap = { phone, _ ->
                 requestedPhone = phone
                 bootstrapReached.complete(Unit)
@@ -136,6 +137,37 @@ class DriverActivationViewModelTest {
 
     @Test fun validPhoneWaitsForItsGrantBeforeClaimingActivation() = runBlocking { completeActivation("09120000001", "09120000001") }
 
+    @Test fun enteredNameRemainsUnprovedUntilTheAuthenticatedGrantArrives() = runBlocking {
+        withTimeout(5000) {
+            viewModel.resolveAndActivateDriver("09120000001", "Registered name")
+            bootstrapReached.await()
+            assertEquals("", repository.getConfig().driverFullName)
+            assertEquals("Registered name", org.json.JSONObject(SecureStorageManager.getInstance(app).getPendingBootstrap()!!).getString("requested_name"))
+            assertNull(viewModel.driverActivationState.value.resolvedDriverName)
+            grant.complete(EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                "a".repeat(64), "09120000002", "09350000003", driverName = "Registered name"))
+            activationJob()!!.join()
+            testDispatcher.scheduler.runCurrent()
+            assertEquals("Registered name", repository.getConfig().driverFullName)
+            assertEquals("Registered name", viewModel.driverActivationState.value.resolvedDriverName)
+        }
+    }
+
+    @Test fun missingRegisteredNameNeverPresentsTheTypedNameAsResolved() = runBlocking {
+        withTimeout(5000) {
+            viewModel.resolveAndActivateDriver("09120000001", "Unproved typed name")
+            bootstrapReached.await()
+            grant.complete(EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                "a".repeat(64), "09120000002", "09350000003"))
+            activationJob()!!.join()
+            testDispatcher.scheduler.runCurrent()
+            assertEquals("", repository.getConfig().driverFullName)
+            assertNull(viewModel.driverActivationState.value.resolvedDriverName)
+            assertNotNull("Missing registered name cannot be described as a completed match", viewModel.driverActivationState.value.errorMessage)
+            assertFalse(repository.getConfig().setupCompleted)
+        }
+    }
+
     @Test fun persianDigitsReachTheOwnedActivationAsAnAsciiPhone() = runBlocking { completeActivation("۰۹۱۲۰۰۰۰۰۰۱", "09120000001") }
 
     @Test fun internationalFormatReachesTheOwnedActivationAsAnIranianPhone() = runBlocking { completeActivation("+989120000001", "09120000001") }
@@ -150,6 +182,36 @@ class DriverActivationViewModelTest {
         assertNull(state.successMessage)
         assertFalse(repository.getConfig().setupCompleted)
         assertNull(SecureStorageManager.getInstance(app).getPendingBootstrap())
+    }
+
+    @Test fun anExplicitMasterStopRevokesThePendingGrantBeforeItCanEnableForwarding() = runBlocking {
+        withTimeout(5000) {
+            val established = EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                "a".repeat(64), "09120000002", "09350000003", "Established driver").applyTo(ForwardConfig(), "synthetic-device")
+            repository.saveConfig(established)
+            viewModel.resolveAndActivateDriver("09120000001")
+            bootstrapReached.await()
+            viewModel.toggleMasterSwitch(false)
+            while (repository.getConfig().isMasterEnabled) kotlinx.coroutines.yield()
+            grant.complete(EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                "a".repeat(64), "09120000002", "09350000003", "Established driver"))
+            activationJob()!!.join()
+            assertFalse("A late grant must never reverse explicit stop", repository.getConfig().isMasterEnabled)
+            assertFalse(repository.getConfig().userConsentGiven)
+            assertTrue(DriverActivationRuntime.isActivationStopped(app))
+        }
+    }
+
+    @Test fun aMasterStopPatchesThePrivateProfileEvenWhenTheUiFlowIsUnsubscribed() = runBlocking {
+        withTimeout(5000) {
+            val established = EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+                "a".repeat(64), "09120000002", "09350000003", "Established driver").applyTo(ForwardConfig(), "synthetic-device")
+            repository.saveConfig(established)
+            val previous = repository.getConfig()
+            viewModel.toggleMasterSwitch(false)
+            while (repository.getConfig().isMasterEnabled) kotlinx.coroutines.yield()
+            assertEquals(previous.copy(isMasterEnabled = false, userConsentGiven = false), repository.getConfig())
+        }
     }
 
     @Test fun normalizeActivationLinkHandlesStandardAndCustomFormats() {
@@ -178,7 +240,7 @@ class DriverActivationViewModelTest {
             loadStage = { staged },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { _, _ -> throw com.example.enrollment.ActivationRequiredException() },
+            resolve = { _, _, _ -> throw com.example.enrollment.ActivationRequiredException() },
             bootstrap = { _, _ -> throw com.example.enrollment.BootstrapPending() }
         )
 
@@ -205,7 +267,7 @@ class DriverActivationViewModelTest {
             loadStage = { stagedDoc },
             permissionsGranted = { true },
             onActivated = {},
-            resolve = { _, _ -> error("A fresh install has no rediscovery credential") },
+            resolve = { _, _, _ -> error("A fresh install has no rediscovery credential") },
             bootstrap = { phone, _ ->
                 provedPhone = phone
                 com.example.enrollment.EnrollmentCredentials(

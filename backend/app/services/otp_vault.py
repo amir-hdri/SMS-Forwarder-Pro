@@ -1,8 +1,12 @@
 import hashlib
+import hmac
+import math
 import json
 import re
 import time
+import unicodedata
 from typing import Optional, Tuple, Dict, Any
+from fastapi import HTTPException
 from app.core.config import settings
 from app.core.redis import redis_manager
 from app.core.logging import safe_log_otp_event, mask_phone
@@ -172,7 +176,26 @@ class OtpVaultService:
         digits_only = re.sub(r"\D", "", normalized)
 
         # Never filter authentic BarPro, UTCMS or RMTO transit senders
-        if "barpro" in normalized or "utcms" in normalized or "rmto" in normalized or digits_only in ("10001234", "7777000982", "20007777", "30001923") or digits_only.startswith("7777"):
+        whitelisted_digits = (
+            "10001234", "7777000982", "20007777", "30001923", "10008545",
+            "30002128002150", "50002710040127"
+        )
+        norm_digits = digits_only
+        if norm_digits.startswith("0098"):
+            norm_digits = norm_digits[4:]
+        elif norm_digits.startswith("98") and len(norm_digits) > 4:
+            norm_digits = norm_digits[2:]
+
+        if (
+            "barpro" in normalized
+            or "utcms" in normalized
+            or "rmto" in normalized
+            or "ircars" in normalized
+            or digits_only in whitelisted_digits
+            or norm_digits in whitelisted_digits
+            or digits_only.startswith("7777")
+            or norm_digits.startswith("7777")
+        ):
             return False
 
         # 1. Known bank sender names / English shortcodes
@@ -221,6 +244,69 @@ class OtpVaultService:
             return True
         return False
 
+    @staticmethod
+    def is_bp1_text(text: str) -> bool:
+        # Classify disguised signed envelopes before generic OTP extraction.
+        # Verification still uses the exact original five fields and bytes.
+        normalized = unicodedata.normalize("NFKC", text)
+        visible = "".join(
+            char for char in normalized
+            if not char.isspace() and not unicodedata.category(char).startswith("C")
+        )
+        return bool(re.search(r"bp1(?:\s*#|\b)", OtpVaultService.normalize_digits(visible), re.IGNORECASE))
+
+    @staticmethod
+    def driver_webhook_token(phone: str) -> str:
+        """Match canonical BarPro scoped credentials; this service never enrolls a driver."""
+        secret = settings.SMS_FORWARDER_SECRET.strip()
+        if not secret:
+            raise HTTPException(503, "OTP webhook is not configured")
+        return hmac.new(secret.encode(), f"barpro-driver-v1:{phone}".encode(), "sha256").hexdigest()
+
+    @staticmethod
+    def sms_received_at(value: Any, now: Optional[float] = None) -> float:
+        now = time.time() if now is None else now
+        if value is None:
+            return now  # Compatibility for authenticated third-party plain SMS.
+        try:
+            if isinstance(value, bool):
+                raise ValueError
+            timestamp = float(value)
+            if timestamp > 100_000_000_000:
+                timestamp /= 1000
+            if not math.isfinite(timestamp) or timestamp <= 0:
+                raise ValueError
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise HTTPException(422, "Invalid SMS timestamp") from exc
+        if timestamp > now + 90:
+            raise HTTPException(422, "SMS timestamp is in the future")
+        if now - timestamp >= settings.UTCMS_OTP_TTL_SECONDS:
+            raise HTTPException(410, "SMS OTP has expired")
+        return min(timestamp, now)
+
+    @classmethod
+    def verify_signed_envelope(cls, text: str, origin: str) -> Tuple[str, str, str]:
+        parts = text.strip().split("#")
+        if len(parts) != 5 or parts[0] != "BP1":
+            raise HTTPException(422, "Invalid signed SMS envelope")
+        _, phone, timestamp, code, signature = parts
+        if (not re.fullmatch(r"09[0-9]{9}", phone)
+                or cls.normalize_iranian_phone(origin) != phone
+                or not re.fullmatch(r"[0-9]{1,16}", timestamp)
+                or not (re.fullmatch(r"[0-9]{5,6}", code) or code in {"HEALTH_CHECK", "TEST"})
+                or not re.fullmatch(r"[0-9a-f]{32}", signature)):
+            raise HTTPException(422, "Invalid signed SMS identity or fields")
+        secret = settings.SMS_FORWARDER_SECRET.strip()
+        if not secret:
+            raise HTTPException(503, "OTP webhook is not configured")
+        message = "#".join(parts[:4]).encode("ascii")
+        legacy_signature = hmac.new(secret.encode(), message, "sha256").hexdigest()[:32]
+        scoped_signature = hmac.new(cls.driver_webhook_token(phone).encode(), message, "sha256").hexdigest()[:32]
+        if not (hmac.compare_digest(signature, legacy_signature) or hmac.compare_digest(signature, scoped_signature)):
+            raise HTTPException(401, "Invalid SMS signature")
+        cls.sms_received_at(timestamp)
+        return phone, timestamp, code
+
     @classmethod
     def extract_utcms_otp(cls, text: str, sender: Optional[str] = None) -> Optional[str]:
         """
@@ -248,7 +334,12 @@ class OtpVaultService:
             if not any(k in normalized for k in ("کد ورود", "کد تایید", "کد تأیید", "رمز یکبار", "کد اعتبارسنجی", "کد احراز")):
                 return None
 
-        # Phase 0: Direct BarPro Emergency Fallback Format (e.g. BARPRO#DRV-102#09333...#OTP#39182)
+        # A generic extractor has no authority to verify an envelope. Only the
+        # shared ingestion boundary may extract its code after HMAC verification.
+        if cls.is_bp1_text(text):
+            return None
+
+        # Phase 0b: Direct BarPro Emergency Fallback Format (e.g. BARPRO#DRV-102#09333...#OTP#39182)
         if "barpro#" in normalized or (normalized.startswith("barpro") and "#" in normalized):
             for part in normalized.split("#"):
                 clean_part = part.strip()
@@ -354,7 +445,8 @@ class OtpVaultService:
         timestamp: int,
         document_id: Optional[str] = None,
         driver_id: Optional[str] = None,
-        ttl_seconds: Optional[int] = None
+        ttl_seconds: Optional[int] = None,
+        received_at: Optional[float] = None
     ) -> Tuple[bool, Optional[str], Optional[str], bool, str]:
         """
         Full foundational ingestion pipeline:
@@ -391,7 +483,15 @@ class OtpVaultService:
             return False, normalized_phone, None, False, f"Sender '{raw_sender}' is recognized as a bank or advertising sender and was ignored."
 
         # 3. Extract & Validate OTP (EXACTLY 5 DIGITS)
-        extracted_otp = cls.extract_utcms_otp(normalized_text, sender=normalized_sender)
+        if cls.is_bp1_text(raw_text):
+            envelope_phone, timestamp, extracted_otp = cls.verify_signed_envelope(raw_text, raw_sender)
+            if envelope_phone != normalized_phone:
+                raise HTTPException(422, "Signed SMS phone does not match recipient")
+            received_at = cls.sms_received_at(timestamp)
+            if extracted_otp in {"HEALTH_CHECK", "TEST"}:
+                raise HTTPException(503, "Probe receipt persistence unavailable")
+        else:
+            extracted_otp = cls.extract_utcms_otp(normalized_text, sender=normalized_sender)
         if not extracted_otp or not cls.validate_otp(extracted_otp):
             safe_log_otp_event(
                 event_type="otp_rejected",
@@ -429,15 +529,13 @@ class OtpVaultService:
                 )
                 return True, normalized_phone, extracted_otp, True, "Duplicate SMS event acknowledged (idempotent)."
 
-            # Record idempotency fingerprint
-            await redis_manager.setex(
-                idempotency_key, 
-                settings.IDEMPOTENCY_TTL_SECONDS, 
-                json.dumps({"processed_at": int(time.time()), "phone": normalized_phone})
-            )
-
             # 6. Authoritative Storage in Redis OTP Vault
             effective_ttl = ttl_seconds or settings.UTCMS_OTP_TTL_SECONDS
+            if received_at is not None:
+                remaining = received_at + effective_ttl - time.time()
+                if remaining <= 0:
+                    raise HTTPException(410, "SMS OTP has expired")
+                effective_ttl = max(1, math.ceil(remaining))
             vault_payload = {
                 "otp": extracted_otp,
                 "phone": normalized_phone,
@@ -450,12 +548,16 @@ class OtpVaultService:
             
             # Primary Authoritative Key: rpa:otp:{correlation_key}
             vault_key = redis_manager.vault_key(correlation_key)
-            await redis_manager.setex(vault_key, effective_ttl, json.dumps(vault_payload))
+            if not await redis_manager.setex(vault_key, effective_ttl, json.dumps(vault_payload)):
+                raise ConnectionError("OTP storage refused")
             
             # Also maintain phone-level pointer if bound to document to allow phone lookup
             if active_doc:
                 phone_vault_key = redis_manager.vault_key(normalized_phone)
-                await redis_manager.setex(phone_vault_key, effective_ttl, json.dumps(vault_payload))
+                if not await redis_manager.setex(phone_vault_key, effective_ttl, json.dumps(vault_payload)):
+                    raise ConnectionError("OTP pointer storage refused")
+        except HTTPException:
+            raise
         except Exception as storage_err:
             safe_log_otp_event(
                 event_type="otp_rejected",
@@ -477,8 +579,14 @@ class OtpVaultService:
         }
 
         try:
-            await redis_manager.ensure_consumer_group()
-            await redis_manager.xadd(redis_manager.OTP_STREAM, stream_payload)
+            if not await redis_manager.ensure_consumer_group():
+                raise ConnectionError("OTP stream group unavailable")
+            if not await redis_manager.xadd(redis_manager.OTP_STREAM, stream_payload):
+                raise ConnectionError("OTP stream storage refused")
+            # An incomplete write must never install an accepted duplicate marker.
+            marker_ttl = max(settings.IDEMPOTENCY_TTL_SECONDS, effective_ttl + 90) if received_at is not None else settings.IDEMPOTENCY_TTL_SECONDS
+            if not await redis_manager.setex(idempotency_key, marker_ttl, json.dumps({"processed_at": int(time.time()), "phone": normalized_phone})):
+                raise ConnectionError("OTP duplicate receipt storage refused")
             safe_log_otp_event(
                 event_type="STREAM_OTP_ENQUEUED",
                 phone=normalized_phone,
@@ -490,8 +598,9 @@ class OtpVaultService:
                 event_type="STREAM_ENQUEUE_WARNING",
                 phone=normalized_phone,
                 correlation_key=correlation_key,
-                extra={"error": str(stream_err)}
+                extra={"error": type(stream_err).__name__}
             )
+            return False, normalized_phone, None, False, "STORAGE_FAILURE"
 
         # Fast-Path Broadcast via Redis Pub/Sub (maintained for backward compatibility)
         channel = redis_manager.channel_name(correlation_key)

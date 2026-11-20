@@ -17,10 +17,13 @@ object BarProContract {
     const val IRAN_DST_OFFSET_MS = 3_600_000L
     const val MAX_CLOCK_SKEW_MS = 180_000L
 
-    fun token(config: ForwardConfig): String = when {
-        config.authType == AuthType.CUSTOM_HEADER &&
-            config.authHeaderKey.equals(TOKEN_HEADER, ignoreCase = true) -> config.authHeaderValue.trim()
-        else -> config.forwarderSecret.trim()
+    fun token(config: ForwardConfig): String {
+        val t = when {
+            config.authType == AuthType.CUSTOM_HEADER &&
+                config.authHeaderKey.equals(TOKEN_HEADER, ignoreCase = true) -> config.authHeaderValue.trim()
+            else -> config.forwarderSecret.trim()
+        }
+        return t
     }
 
     fun webhookTokenError(value: String): String? {

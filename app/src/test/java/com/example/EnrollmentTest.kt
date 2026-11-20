@@ -68,6 +68,20 @@ class EnrollmentTest {
         assertEquals("No anonymous discovery request", 0, requests)
     }
 
+    @Test fun aTypedNameCannotAuthorizeAnonymousRediscovery() = runBlocking {
+        var requests = 0
+        val client = EnrollmentClient(OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK").body(document().toResponseBody("application/json".toMediaType())).build()
+        }.build())
+        var rejected = false
+        try { client.resolve("09120000001", server, "device-synthetic", driverName = "Publicly known driver name") }
+        catch (_: ActivationRequiredException) { rejected = true }
+        assertTrue("A name is request data, never enrollment authority", rejected)
+        assertEquals("Name-only activation must use carrier bootstrap", 0, requests)
+    }
+
     @Test fun rediscoveryUsesCredentialHeadersForPostAndGetFallback() = runBlocking {
         val requests = mutableListOf<Request>()
         val client = EnrollmentClient(OkHttpClient.Builder().addInterceptor { chain ->
@@ -189,7 +203,13 @@ class EnrollmentTest {
             redemptions++
             check(!failRedeem)
             EnrollmentContract.parseCredentials(test.document(), EnrollmentContract.trustedServer(test.endpoint))
-        }, { config }, { config = it; writes++ }, { pending = it }, { pending }, { granted }, { healthDispatches++ })
+        }, { config }, { config = it; writes++ }, { pending = it }, { pending }, { granted }, { healthDispatches++ },
+            resolve = { phone, _, token ->
+                val credentials = EnrollmentContract.parseCredentials(test.document(), EnrollmentContract.trustedServer(test.endpoint))
+                assertEquals(credentials.driverPhone, phone)
+                assertEquals(credentials.webhookToken, token)
+                credentials
+            })
     }
 
     @Test fun permissionDenialLeavesExistingConfigUntilGrantsThenSendsHealthOnce() = runBlocking {

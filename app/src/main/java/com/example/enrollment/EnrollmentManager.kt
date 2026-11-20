@@ -26,8 +26,7 @@ class EnrollmentManager(
     private val loadStage: () -> String?,
     private val permissionsGranted: () -> Boolean,
     private val onActivated: suspend () -> Unit,
-    private val resolve: suspend (phone: String, deviceId: String) -> EnrollmentCredentials = { phone, devId ->
-        val token = getConfig().let { it.forwarderSecret.ifBlank { it.authHeaderValue } }
+    private val resolve: suspend (phone: String, deviceId: String, token: String) -> EnrollmentCredentials = { phone, devId, token ->
         EnrollmentClient().resolve(phone, EnrollmentContract.trustedServer(defaultEndpoint), devId, token)
     },
     private val bootstrap: (suspend (String, String) -> EnrollmentCredentials)? = null
@@ -107,11 +106,11 @@ class EnrollmentManager(
     }
 
     /**
-     * Automated resolution triggered by entering the driver's phone number.
+     * Automated resolution triggered by entering the driver's phone number and full name.
      * Queries BarPro /api/v1/otp/resolve-driver, parses credentials, stages to Keystore,
      * and atomically activates forwarding.
      */
-    suspend fun resolveDriverConfiguration(driverPhone: String, baseUrl: String? = null) = owned { owner ->
+    suspend fun resolveDriverConfiguration(driverPhone: String, baseUrl: String? = null, driverName: String = "") = owned { owner ->
         try {
             require(role == "DRIVER") { "تنها در حالت راننده (DRIVER) امکان فعال‌سازی وجود دارد." }
             val cleanPhone = SmsParser.normalizePhoneNumber(driverPhone)
@@ -125,40 +124,33 @@ class EnrollmentManager(
                 mutableNeedsSmsSelection.value = false
                 failureRetryable = true
             }
-            if (cleanPhone.isEmpty() && EnrollmentContract.isEnrolledDriver(current)) {
-                writeOwned(owner) { mutableStatus.value = EnrollmentStatus.ACTIVE }
-                return@owned
-            }
+            writeOwned(owner) { mutableStatus.value = EnrollmentStatus.ACTIVATING }
             val staged = writeOwned(owner) { loadStage() }
             if (staged != null) {
                 val pending = EnrollmentContract.parseCredentials(staged, EnrollmentContract.trustedServer(defaultEndpoint))
                 if (cleanPhone.isEmpty() || pending.driverPhone == cleanPhone) {
-                    activatePending(owner)
+                    activatePending(owner, driverName)
                     return@owned
                 }
                 writeOwned(owner) { stage(null) }
             }
-            writeOwned(owner) { mutableStatus.value = EnrollmentStatus.ACTIVATING }
-
-            val id = deviceId()
             val effectiveToken = current.let { it.forwarderSecret.ifBlank { it.authHeaderValue } }
             val existingPhone = SmsParser.normalizePhoneNumber(current.driverPhone)
-
-            val credential = try {
-                if (cleanPhone.isNotBlank() && cleanPhone == existingPhone && effectiveToken.isNotBlank()) {
-                    resolve(cleanPhone, id)
-                } else if (bootstrap != null) {
-                    bootstrap.invoke(cleanPhone, id)
-                } else {
-                    resolve(cleanPhone, id)
-                }
-            } catch (required: ActivationRequiredException) {
-                bootstrap?.invoke(cleanPhone, id) ?: throw required
+            val retained = cleanPhone.isEmpty() && driverName.isBlank() && EnrollmentContract.isEnrolledDriver(current)
+            val requestedPhone = if (retained) existingPhone else cleanPhone
+            val resolution = resolveWithCarrierRecovery(owner, requestedPhone,
+                effectiveToken.takeIf { requestedPhone.isNotEmpty() && requestedPhone == existingPhone }.orEmpty())
+            val credential = resolution.credentials
+            if (retained && !resolution.carrierProof) {
+                // Read-only authentication of a working profile preserves consent, flags and modem cadence.
+                writeOwned(owner) { mutableStatus.value = EnrollmentStatus.ACTIVE }
+                return@owned
             }
             require(cleanPhone.isEmpty() || credential.driverPhone == cleanPhone) { "پاسخ فعال‌سازی متعلق به این شماره نیست." }
+            EnrollmentContract.requireNameMatch(credential, driverName)
             // Pending secrets use Keystore storage; Room stays untouched until activation
             writeOwned(owner) { stage(credential.document()) }
-            activatePending(owner)
+            activatePending(owner, driverName, validateCached = false)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (required: BootstrapNeedsPermissions) {
@@ -175,7 +167,7 @@ class EnrollmentManager(
         } catch (error: Exception) {
             writeOwned(owner) {
                 mutableNeedsSmsSelection.value = error is BootstrapSmsNotSent && error.needsSmsSelection
-                failureRetryable = !mutableNeedsSmsSelection.value &&
+                failureRetryable = !mutableNeedsSmsSelection.value && error !is DriverNameMismatchException &&
                     !(error is BootstrapHttpException && error.code in setOf(400, 401, 403, 422))
                 mutableErrorMessage.value = error.message ?: "خطا در استعلام مشخصات راننده از سرور"
                 mutableStatus.value = EnrollmentStatus.FAILED
@@ -205,7 +197,7 @@ class EnrollmentManager(
             val credential = redeem(link, deviceId())
             // Pending secrets use the same Keystore storage; Room and the working config stay untouched.
             writeOwned(owner) { stage(credential.document()) }
-            activatePending(owner)
+            activatePending(owner, validateCached = false)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -235,22 +227,56 @@ class EnrollmentManager(
         }
     }
 
-    suspend fun resume() = owned { owner ->
+    suspend fun resume(driverName: String = "") = owned { owner ->
         try {
-            if (role == "DRIVER" && writeOwned(owner) { loadStage() } != null) activatePending(owner)
+            if (role == "DRIVER" && writeOwned(owner) { loadStage() } != null) activatePending(owner, driverName)
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (required: BootstrapNeedsPermissions) {
+            writeOwned(owner) {
+                mutableErrorMessage.value = required.message
+                mutableStatus.value = EnrollmentStatus.NEEDS_PERMISSIONS
+            }
         } catch (error: Exception) {
             writeOwned(owner) {
                 mutableErrorMessage.value = error.message
                 mutableStatus.value = EnrollmentStatus.FAILED
+                failureRetryable = error !is DriverNameMismatchException
             }
         }
     }
 
-    private suspend fun activatePending(owner: Owner) {
+    private class CredentialResolution(val credentials: EnrollmentCredentials, val carrierProof: Boolean)
+
+    private suspend fun resolveWithCarrierRecovery(owner: Owner, phone: String, token: String): CredentialResolution {
+        writeOwned(owner) { Unit }
+        val id = deviceId()
+        val resolution = try {
+            if (token.isNotBlank()) CredentialResolution(resolve(phone, id, token), false)
+            else if (bootstrap != null) CredentialResolution(bootstrap.invoke(phone, id), true)
+            else CredentialResolution(resolve(phone, id, token), false)
+        } catch (required: ActivationRequiredException) {
+            // Revocation closes only the rejected stage; the private working profile remains intact.
+            writeOwned(owner) { stage(null) }
+            CredentialResolution(bootstrap?.invoke(phone, id) ?: throw required, true)
+        }
+        writeOwned(owner) { Unit }
+        require(phone.isEmpty() || resolution.credentials.driverPhone == phone) { "پاسخ فعال‌سازی متعلق به این شماره نیست." }
+        return resolution
+    }
+
+    private suspend fun activatePending(owner: Owner, requestedName: String = "", validateCached: Boolean = true) {
         val document = writeOwned(owner) { loadStage() } ?: return
-        val credentials = EnrollmentContract.parseCredentials(document, EnrollmentContract.trustedServer(defaultEndpoint))
+        val pending = EnrollmentContract.parseCredentials(document, EnrollmentContract.trustedServer(defaultEndpoint))
+        val credentials = if (validateCached) {
+            writeOwned(owner) { mutableStatus.value = EnrollmentStatus.ACTIVATING }
+            // Authenticate the candidate's own phone/token, never an unrelated retained profile's token.
+            resolveWithCarrierRecovery(owner, pending.driverPhone, pending.webhookToken).credentials.also {
+                EnrollmentContract.requireNameMatch(it, requestedName)
+                writeOwned(owner) { stage(it.document()) }
+            }
+        } else pending
+        EnrollmentContract.requireNameMatch(credentials, requestedName)
         if (!permissionsGranted()) {
             writeOwned(owner) { mutableStatus.value = EnrollmentStatus.NEEDS_PERMISSIONS }
             return

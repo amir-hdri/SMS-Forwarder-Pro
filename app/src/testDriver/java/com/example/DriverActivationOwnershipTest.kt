@@ -88,18 +88,46 @@ class DriverActivationOwnershipTest {
         installManager()
     }
 
-    private fun installManager(getConfig: suspend () -> ForwardConfig = repository::getConfig) {
+    private fun installManager(getConfig: suspend () -> ForwardConfig = repository::getConfig,
+        resolveCredentials: suspend (String, String, String) -> EnrollmentCredentials = { requestedPhone, _, token ->
+            require(token == "a".repeat(64))
+            credentials(requestedPhone)
+        }) {
         val storage = SecureStorageManager.getInstance(context)
         val manager = EnrollmentManager(endpoint, "DRIVER", { "synthetic-device" },
             redeem = { _, _ -> error("No activation link") }, getConfig = getConfig,
             saveConfig = repository::saveConfig, stage = storage::savePendingEnrollment,
             loadStage = storage::getPendingEnrollment, permissionsGranted = { true }, onActivated = {},
+            resolve = resolveCredentials,
             bootstrap = { provedPhone, _ -> credentials(provedPhone.ifBlank { phone }) })
         DriverActivationRuntime::class.java.getDeclaredField("enrollment").apply { isAccessible = true }.set(runtime, manager)
     }
 
     private fun credentials(provedPhone: String = phone) = EnrollmentCredentials(provedPhone,
         "https://87.107.160.251/api/v1/otp/sms-forwarder/$provedPhone", "a".repeat(64), "09120000002", "09350000003")
+
+    @Test fun aDurableStopDuringRetainedValidationRejectsTheLateGrant() = runBlocking {
+        withTimeout(5000) {
+            repository.saveConfig(credentials().applyTo(ForwardConfig(), "synthetic-device"))
+            val previous = repository.getConfig()
+            val reached = CompletableDeferred<Unit>()
+            val response = CompletableDeferred<EnrollmentCredentials>()
+            installManager(resolveCredentials = { _, _, _ ->
+                reached.complete(Unit)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { response.await() }
+            })
+            val activation = launch(start = CoroutineStart.UNDISPATCHED) { runtime.activateAutomatically() }
+            reached.await()
+            runtime.stopPendingActivation()
+            repository.updateConfig { it.copy(isMasterEnabled = false) }
+            response.complete(credentials())
+            activation.join()
+            assertTrue(DriverActivationRuntime.isActivationStopped(context))
+            assertEquals(previous.copy(isMasterEnabled = false), repository.getConfig())
+            assertNull(SecureStorageManager.getInstance(context).getPendingEnrollment())
+            assertEquals(EnrollmentStatus.IDLE, runtime.enrollment.status.value)
+        }
+    }
 
     @After fun close() {
         workManager?.workDatabase?.close()
@@ -141,6 +169,14 @@ class DriverActivationOwnershipTest {
         assertFalse(stored.isMasterEnabled)
         assertEquals("", stored.driverPhone)
         assertEquals(EnrollmentStatus.IDLE, runtime.enrollment.status.value)
+    }
+
+    @Test fun anInvalidNamedRequestCannotModifyTheRetainedPrivateProfile() = runBlocking(Dispatchers.IO) {
+        val previous = repository.getConfig().copy(driverFullName = "Established driver")
+        repository.saveConfig(previous)
+        try { runtime.activate("0912", "Unproved entered name"); fail("Invalid phone must be rejected") }
+        catch (_: IllegalArgumentException) { }
+        assertEquals(previous, repository.getConfig())
     }
 
     @Test fun freshInstallResumeDoesNotEnqueueAnActivationWorker() = runBlocking(Dispatchers.IO) {
@@ -211,6 +247,20 @@ class DriverActivationOwnershipTest {
         assertEquals("A stale grant cannot revoke the persisted user stop after process restart",
             previous.copy(setupCompleted = false, isMasterEnabled = false, userConsentGiven = false), repository.getConfig())
         assertEquals(EnrollmentStatus.IDLE, runtime.enrollment.status.value)
+    }
+
+    @Test fun restartCannotIgnoreTheExpectedNameBecauseAnOlderProfileIsEnrolled() = runBlocking(Dispatchers.IO) {
+        val storage = SecureStorageManager.getInstance(context)
+        val grant = EnrollmentCredentials(phone, endpoint, "a".repeat(64), "09120000002", "09350000003", "Registered driver")
+        repository.saveConfig(grant.applyTo(ForwardConfig(), "synthetic-device"))
+        val previous = repository.getConfig()
+        storage.savePendingEnrollment(grant.document())
+        storage.savePendingBootstrap(JSONObject().put("phone", phone).put("device_id", "synthetic-device")
+            .put("requested_name", "Different driver").toString())
+        runtime.activateAutomatically()
+        assertEquals(previous, repository.getConfig())
+        assertEquals(EnrollmentStatus.FAILED, runtime.enrollment.status.value)
+        assertFalse(runtime.enrollment.failureRetryable)
     }
 
     @Test fun genuineSamePhonePendingGrantSurvivesProcessRestart() = runBlocking(Dispatchers.IO) {

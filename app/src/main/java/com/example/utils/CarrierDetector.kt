@@ -87,6 +87,20 @@ object CarrierDetector {
         if (androidx.core.content.ContextCompat.checkSelfPermission(context, permission) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) return ""
         return try {
+            // 1. Check all active SIM subscriptions (SIM 1 and SIM 2) via SubscriptionManager
+            val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
+            val subList = subManager?.activeSubscriptionInfoList
+            if (!subList.isNullOrEmpty()) {
+                for (info in subList) {
+                    // Keep the optional existing subscription hint; the modern phone-number
+                    // permission is not declared, so normal modern installs return above.
+                    val num = info.number
+                    val norm = SmsParser.normalizePhoneNumber(num ?: "")
+                    if (norm.matches(Regex("09[0-9]{9}"))) return norm
+                }
+            }
+
+            // 2. Fallback to default TelephonyManager line1Number
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             val line1 = tm?.line1Number ?: ""
             val norm = SmsParser.normalizePhoneNumber(line1)

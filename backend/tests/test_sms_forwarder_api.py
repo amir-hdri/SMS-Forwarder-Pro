@@ -3,6 +3,7 @@ import os
 import unittest
 import asyncio
 import json
+import time
 from unittest.mock import patch, MagicMock
 
 # Add backend directory to sys.path
@@ -64,7 +65,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود شما: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload)
         self.assertEqual(res.status_code, 401)
@@ -77,7 +78,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود شما: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         headers = {"X-Forwarder-Secret": "wrong-secret-value-xyz"}
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
@@ -90,7 +91,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "سامانه بارنامه شهرداری: کد ورود ۳۹۱۸۲ می باشد.",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         headers = {"X-Forwarder-Secret": self.secret}
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
@@ -106,7 +107,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         headers = {"X-Forwarder-Secret": ""}
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
@@ -124,7 +125,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         headers = {"X-Forwarder-Secret": "change-me-to-a-secure-random-token"}
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
@@ -179,7 +180,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "02188776655", # Landline
             "text": "کد تایید: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 422)
@@ -196,7 +197,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": huge_text,
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         })
         res = self.client.post("/api/v1/rpa/sms-forwarder", content=huge_payload, headers=headers)
         self.assertEqual(res.status_code, 413)
@@ -208,7 +209,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود: 12345 " + ("X" * 2100),
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 422)
@@ -226,7 +227,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "driver_phone": "09333702137",
             "message_body": "کد ورود شما: 45678",
             "phone_number": "10008545",
-            "receivedTimestamp": 1725538341000
+            "receivedTimestamp": int(time.time() * 1000)
         }
         res1 = self.client.post("/api/v1/rpa/sms-forwarder", json=payload1, headers=headers)
         self.assertEqual(res1.status_code, 200)
@@ -240,7 +241,7 @@ class TestSmsForwarderApi(unittest.TestCase):
                 "phone": "09121112233",
                 "text": "کد تایید سامانه بارنامه: 89012",
                 "sender": "10008545",
-                "timestamp": 1725538342000
+                "timestamp": int(time.time() * 1000)
             }
         }
         res2 = self.client.post("/api/v1/rpa/sms-forwarder", json=payload2, headers=headers)
@@ -258,7 +259,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "سامانه بارنامه شهرداری: کد ورود شما 39182 می باشد.",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)
@@ -283,7 +284,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09123456789",
             "text": "کد تأیید ورود شما به سامانه بار برگ ۳۹۱۸۲ است.",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)
@@ -302,7 +303,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09123456789",
             "text": "کد ورود: ٣٩١٨٢",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)
@@ -329,7 +330,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "بارنامه شما با موفقیت صادر گردید. شماره رهگیری ۹۸۷۶۵۴۳۲۱",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)
@@ -360,7 +361,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود: 39182",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
 
         # Simulate Redis storage exception
@@ -385,7 +386,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود: 39182",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
 
         # Request 1: Fresh ingestion
@@ -411,7 +412,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود شما: 39182",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
 
         import concurrent.futures
@@ -443,7 +444,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "سامانه بارنامه شهرداری: کد ورود شما ۳۹۱۸۲ می باشد.",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)
@@ -475,7 +476,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "کد ورود شما: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload)
         self.assertEqual(res.status_code, 401)
@@ -496,7 +497,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "02188776655", # Landline
             "text": "کد تایید: 12345",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 422)
@@ -521,7 +522,7 @@ class TestSmsForwarderApi(unittest.TestCase):
             "phone": "09333702137",
             "text": "سامانه بارنامه: کد ورود ۴۸۲۹۱ است",
             "sender": "10008545",
-            "timestamp": 1725538341000
+            "timestamp": int(time.time() * 1000)
         }
         res = self.client.post("/api/v1/rpa/sms-forwarder", json=payload, headers=headers)
         self.assertEqual(res.status_code, 200)

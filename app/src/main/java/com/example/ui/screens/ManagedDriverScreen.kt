@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -121,6 +122,7 @@ fun ManagedDriverScreen(
     viewModel: MainViewModel? = null,
     activationState: DriverActivationUiState? = null,
     onActivateDriver: ((phone: String) -> Unit)? = null,
+    onActivateDriverWithName: ((phone: String, fullName: String) -> Unit)? = null,
     onResetActivation: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -160,16 +162,35 @@ fun ManagedDriverScreen(
 
     val vmState by (resolvedVm?.driverActivationState ?: MutableStateFlow(DriverActivationUiState())).collectAsState()
     val effectiveActivationState = activationState ?: vmState
-    val effectiveOnActivate: (String) -> Unit = onActivateDriver ?: { phone -> resolvedVm?.resolveAndActivateDriver(phone) }
+    val effectiveOnActivate: (String, String) -> Unit = { phone, name ->
+        if (onActivateDriverWithName != null) {
+            onActivateDriverWithName(phone, name)
+        } else if (onActivateDriver != null) {
+            onActivateDriver(phone)
+        } else {
+            resolvedVm?.resolveAndActivateDriver(phone, name)
+        }
+    }
     val effectiveOnReset: () -> Unit = onResetActivation ?: { resolvedVm?.resetDriverActivation() }
 
     val isEnrolled = config.driverPhone.isNotBlank() && config.setupCompleted
 
-    var phoneInput by remember { mutableStateOf("") }
+    var driverFullNameInput by remember {
+        mutableStateOf(runCatching {
+            com.example.crypto.SecureStorageManager.getInstance(context).getPendingBootstrap()
+                ?.let { org.json.JSONObject(it).optString("requested_name", "") }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: config.driverFullName)
+    }
+    var phoneInput by remember {
+        mutableStateOf(config.driverPhone.ifBlank {
+            com.example.utils.CarrierDetector.detectPhoneNumberFromDevice(context)
+        })
+    }
     val cleanPhone = remember(phoneInput) {
         SmsParser.normalizePhoneNumber(phoneInput).filter { it.isDigit() }
     }
     val isPhoneValid = cleanPhone.matches(Regex("^09[0-9]{9}$"))
+    val isNameValid = driverFullNameInput.trim().length >= 3
 
     var openedSmsSelection by remember { mutableStateOf(false) }
     LaunchedEffect(effectiveActivationState.needsSmsSelection) {
@@ -341,13 +362,87 @@ fun ManagedDriverScreen(
                         )
 
                         Text(
-                            text = "شماره موبایل سیم‌کارت راننده را وارد کنید یا از تشخیص خودکار سیم‌کارت استفاده نمایید:",
+                            text = "شماره موبایل راننده و نام کامل ثبت‌شده ناوگان را وارد کنید؛ تطبیق نام پس از تأیید سیم‌کارت انجام می‌شود:",
                             style = MaterialTheme.typography.bodySmall,
                             color = BarProTextSecondary
                         )
 
-                        // Mobile Phone Input Field (Strict LTR input)
+                        // 1. Driver Full Name Input Field (RTL input)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "نام و نام خانوادگی راننده:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BarProTextPrimary
+                            )
+                            OutlinedTextField(
+                                value = driverFullNameInput,
+                                onValueChange = { driverFullNameInput = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("driver_name_input"),
+                                placeholder = {
+                                    Text(
+                                        "مثال: علی احمدی",
+                                        color = BarProTextMuted,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (isNameValid) BarProCyan else BarProTextMuted
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (isNameValid) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = BarProEmerald
+                                        )
+                                    } else if (driverFullNameInput.isNotEmpty()) {
+                                        IconButton(onClick = { driverFullNameInput = "" }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Clear,
+                                                contentDescription = "پاک کردن",
+                                                tint = BarProTextMuted
+                                            )
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Text,
+                                    imeAction = ImeAction.Next
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = BarProSurfaceSubtle,
+                                    unfocusedContainerColor = BarProSurfaceSubtle,
+                                    focusedBorderColor = BarProCyan,
+                                    unfocusedBorderColor = BarProBorder,
+                                    focusedTextColor = BarProTextPrimary,
+                                    unfocusedTextColor = BarProTextPrimary
+                                )
+                            )
+                            Text(
+                                text = if (isNameValid) "✓ نام و نام خانوادگی وارد شده است"
+                                       else "نام کامل با نام تأییدشده ناوگان تطبیق داده می‌شود؛ نوشتن نام مجوز فعال‌سازی نیست",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isNameValid) BarProEmerald else BarProTextMuted
+                            )
+                        }
+
+                        // 2. Mobile Phone Input Field (Strict LTR input)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "شماره موبایل راننده:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BarProTextPrimary
+                            )
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                 OutlinedTextField(
                                     value = phoneInput,
@@ -400,7 +495,7 @@ fun ManagedDriverScreen(
                                         onDone = {
                                             focusManager.clearFocus()
                                             if (isPhoneValid && areCriticalPermissionsGranted) {
-                                                effectiveOnActivate(cleanPhone)
+                                                effectiveOnActivate(cleanPhone, driverFullNameInput.trim())
                                             }
                                         }
                                     ),
@@ -476,8 +571,8 @@ fun ManagedDriverScreen(
                                             ) {
                                                 OutlinedButton(
                                                     onClick = {
-                                                        if (isPhoneValid) effectiveOnActivate(cleanPhone)
-                                                        else effectiveOnActivate("")
+                                                        if (isPhoneValid) effectiveOnActivate(cleanPhone, driverFullNameInput.trim())
+                                                        else effectiveOnActivate("", driverFullNameInput.trim())
                                                     },
                                                     modifier = Modifier.weight(1f).height(36.dp),
                                                     shape = RoundedCornerShape(8.dp),
@@ -530,9 +625,9 @@ fun ManagedDriverScreen(
                                 } else if (effectiveActivationState.needsSmsSelection) {
                                     context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
                                 } else if (isPhoneValid) {
-                                    effectiveOnActivate(cleanPhone)
+                                    effectiveOnActivate(cleanPhone, driverFullNameInput.trim())
                                 } else if (!isPhoneEntered) {
-                                    effectiveOnActivate("")
+                                    effectiveOnActivate("", driverFullNameInput.trim())
                                 }
                             },
                             enabled = isPrimaryButtonEnabled,
@@ -573,9 +668,10 @@ fun ManagedDriverScreen(
                                     text = when {
                                         !areCriticalPermissionsGranted -> "تأیید مجوزها و فعال‌سازی"
                                         effectiveActivationState.needsSmsSelection -> "انتخاب سیم‌کارت پیامک در Android"
+                                        isPhoneValid && isNameValid -> "تأیید سیم‌کارت و تطبیق نام ناوگان"
                                         isPhoneValid -> "استعلام و فعال‌سازی شماره راننده"
                                         isPhoneEntered -> "شماره موبایل را کامل وارد کنید"
-                                        else -> "فعال‌سازی با شماره راننده یا سیم‌کارت"
+                                        else -> "فعال‌سازی با مشخصات راننده یا سیم‌کارت"
                                     },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
@@ -620,7 +716,7 @@ fun ManagedDriverScreen(
                                     } else if (effectiveActivationState.needsSmsSelection) {
                                         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
                                     } else {
-                                        effectiveOnActivate("")
+                                        effectiveOnActivate("", "")
                                     }
                                 },
                                 modifier = Modifier

@@ -41,7 +41,8 @@ class AutomaticDriverScreenTest {
                 onActivateDriver = { claims.add(it) }, onResetActivation = {}) }
         }
         compose.waitForIdle()
-        compose.onAllNodes(hasSetTextAction(), useUnmergedTree = true).assertCountEquals(1)
+        compose.onAllNodes(hasSetTextAction(), useUnmergedTree = true).assertCountEquals(2)
+        compose.onNodeWithTag("driver_name_input").assertExists()
         compose.onNodeWithTag("driver_phone_input").assertExists()
         compose.onNodeWithTag("btn_auto_activate").assertExists()
         compose.onNodeWithTag("btn_fallback_auto_activate").assertExists()
@@ -92,5 +93,30 @@ class AutomaticDriverScreenTest {
         compose.waitForIdle()
 
         assertEquals("Fallback button triggers auto-activation with empty phone", listOf(""), claims)
+    }
+
+    @Test fun enteringDriverNameAndPhoneTriggersResolutionWithName() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(context).grantPermissions(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS,
+            Manifest.permission.POST_NOTIFICATIONS)
+        val claims = mutableListOf<Pair<String, String>>()
+        compose.setContent {
+            MaterialTheme { ManagedDriverScreen(ForwardConfig(), {}, {}, {}, activationState = DriverActivationUiState(),
+                onActivateDriverWithName = { phone, name -> claims.add(phone to name) }, onResetActivation = {}) }
+        }
+        compose.waitForIdle()
+
+        compose.onNodeWithTag("driver_name_input").performScrollTo().performTextInput("محمد رضایی")
+        compose.waitForIdle()
+        compose.onNodeWithTag("driver_name_input").assertTextContains("محمد رضایی")
+
+        compose.onNodeWithTag("driver_phone_input").performScrollTo().performTextInput("09121112233")
+        compose.waitForIdle()
+        compose.onNodeWithTag("driver_phone_input").assertTextContains("09121112233")
+
+        compose.onNodeWithTag("btn_auto_activate").performScrollTo().performClick()
+        compose.waitForIdle()
+
+        assertEquals(listOf("09121112233" to "محمد رضایی"), claims)
     }
 }

@@ -20,7 +20,7 @@ class AutomaticEnrollmentManagerTest {
         val manager = EnrollmentManager(config.endpointUrl, "DRIVER", { "synthetic-device" },
             redeem = { _, _ -> error("No links") }, getConfig = { config }, saveConfig = { config = it },
             stage = { pending = it }, loadStage = { pending }, permissionsGranted = { true }, onActivated = {},
-            resolve = { _, _ -> error("No anonymous credential rediscovery") }, bootstrap = { phone, _ ->
+            resolve = { _, _, _ -> error("No anonymous credential rediscovery") }, bootstrap = { phone, _ ->
                 assertEquals("", phone); bootstrapCalls++
                 EnrollmentCredentials("09120000001", "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
                     "a".repeat(64), "09120000002", "09350000003")

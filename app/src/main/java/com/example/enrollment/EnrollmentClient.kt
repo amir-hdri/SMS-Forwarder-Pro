@@ -42,21 +42,23 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
         driverPhone: String,
         serverUrl: String,
         deviceId: String,
-        webhookToken: String = ""
+        webhookToken: String = "",
+        driverName: String = ""
     ): EnrollmentCredentials {
         val parsed = requireNotNull(serverUrl.toHttpUrlOrNull()) { "آدرس سرور نامعتبر است: $serverUrl" }
-        return resolve(driverPhone, parsed, deviceId, webhookToken)
+        return resolve(driverPhone, parsed, deviceId, webhookToken, driverName)
     }
 
     /**
-     * Resolves driver webhook endpoint and Hub configuration from BarPro by phone number.
+     * Resolves driver webhook endpoint and Hub configuration from BarPro by phone number and driver name.
      * Executes HTTP POST /api/v1/otp/resolve-driver with GET fallback only for HTTP 405.
      */
     suspend fun resolve(
         driverPhone: String,
         serverUrl: HttpUrl,
         deviceId: String,
-        webhookToken: String = ""
+        webhookToken: String = "",
+        driverName: String = ""
     ): EnrollmentCredentials = withContext(Dispatchers.IO) {
         if (webhookToken.isBlank()) throw ActivationRequiredException()
         require(deviceId.isNotBlank() && deviceId.length <= 128) { "شناسه دستگاه نامعتبر است" }
@@ -74,12 +76,17 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
         val payload = JSONObject().apply {
             put("driver_phone", cleanPhone)
             put("device_id", deviceId)
+            if (driverName.isNotBlank()) {
+                put("driver_name", driverName.trim())
+            }
         }
         val postRequest = Request.Builder()
             .url(postUrl)
             .header("Content-Type", "application/json")
             .header("X-Device-Id", deviceId)
-            .header("X-OTP-Webhook-Token", webhookToken)
+            .apply {
+                if (webhookToken.isNotBlank()) header("X-OTP-Webhook-Token", webhookToken)
+            }
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -95,8 +102,10 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
         val (status, document) = execute(postRequest)
         // Only method negotiation may use the legacy GET endpoint; auth/network errors cannot.
         val resolved = if (status == 405) {
-            val getRequest = postRequest.newBuilder().url(canonicalServer.newBuilder()
-                .encodedPath("/api/v1/otp/resolve-driver/$cleanPhone").build()).get().build()
+            val getUrl = canonicalServer.newBuilder()
+                .encodedPath("/api/v1/otp/resolve-driver/$cleanPhone")
+            if (driverName.isNotBlank()) getUrl.addQueryParameter("driver_name", driverName.trim())
+            val getRequest = postRequest.newBuilder().url(getUrl.build()).get().build()
             execute(getRequest).second
         } else document
         check(resolved != null) {

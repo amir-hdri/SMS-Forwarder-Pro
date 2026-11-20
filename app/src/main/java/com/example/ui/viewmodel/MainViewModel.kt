@@ -72,7 +72,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         resolveAndActivateDriver(phone)
     }
 
-    fun resolveAndActivateDriver(rawPhone: String) {
+    fun resolveAndActivateDriver(rawPhone: String, driverFullName: String = "") {
         if (_secureStorageError.value != null) return
         if (rawPhone.isBlank()) {
             activationRuntime.progress.value = "در انتظار اینترنت اولیه و تأیید واقعی سیم‌کارت…"
@@ -83,7 +83,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             driverActivationJob?.cancel()
             driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    activationRuntime.activate("")
+                    activationRuntime.activate("", driverFullName.trim())
                     when (enrollment.status.value) {
                         com.example.enrollment.EnrollmentStatus.ACTIVE -> {
                             com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
@@ -129,13 +129,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         _driverActivationState.value = DriverActivationUiState(
             isLoading = true,
-            progressMessage = "در حال استعلام و فعال‌سازی شماره راننده…"
+            progressMessage = if (driverFullName.isNotBlank()) "در حال تأیید سیم‌کارت و تطبیق نام ثبت‌شده ناوگان…"
+                              else "در حال استعلام و فعال‌سازی شماره راننده…"
         )
 
         driverActivationJob?.cancel()
         driverActivationJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
-                activationRuntime.activate(cleanPhone)
+                activationRuntime.activate(cleanPhone, driverFullName.trim())
                 when (enrollment.status.value) {
                     com.example.enrollment.EnrollmentStatus.ACTIVE -> {
                         com.example.crypto.SecureStorageManager.getInstance(getApplication()).savePendingBootstrap(null)
@@ -420,15 +421,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isOtpInquiryLoading: StateFlow<Boolean> = _isOtpInquiryLoading.asStateFlow()
 
     fun toggleMasterSwitch(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = config.value
+        if (!enabled && com.example.BuildConfig.APP_ROLE == "DRIVER") {
+            driverActivationJob?.cancel()
+            try { activationRuntime.stopPendingActivation() }
+            catch (error: Exception) { showSecureStorageFailure(error) }
+            _driverActivationState.value = DriverActivationUiState()
+        }
+        launchSecureAction {
             if (enabled && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(getApplication())) {
                 openPermissions()
-                return@launch
+                return@launchSecureAction
             }
             // This explicit switch is the user's opt-in to forwarding.
-            val updated = current.copy(isMasterEnabled = enabled, userConsentGiven = enabled)
-            if (!saveConfigSafely(updated)) return@launch
+            val updated = repository.updateConfig { current ->
+                current.copy(isMasterEnabled = enabled, userConsentGiven = enabled)
+            }
 
             if (enabled) {
                 com.example.service.HeartbeatAlarmManager.scheduleNext(getApplication(), updated.healthCheckIntervalMinutes)

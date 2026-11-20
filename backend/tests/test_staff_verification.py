@@ -62,7 +62,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         """Missing header returns 401."""
         res = self.client.post(
             "/api/v1/rpa/sms-forwarder",
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res.status_code, 401)
         self.assertNotIn(self.secret, res.text)
@@ -72,7 +72,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         res = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"X-Forwarder-Secret": "invalid-secret-token"},
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res.status_code, 401)
         self.assertNotIn(self.secret, res.text)
@@ -83,7 +83,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         res = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"X-Forwarder-Secret": ""},
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res.status_code, 401)
 
@@ -92,7 +92,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         res = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"X-Forwarder-Secret": self.secret},
-            json={"phone": "09333702137", "text": "کد ورود شما: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد ورود شما: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res.status_code, 200)
 
@@ -101,14 +101,14 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         # ?X-Forwarder-Secret=...
         res1 = self.client.post(
             f"/api/v1/rpa/sms-forwarder?X-Forwarder-Secret={self.secret}",
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res1.status_code, 401)
 
         # ?secret=...
         res2 = self.client.post(
             f"/api/v1/rpa/sms-forwarder?secret={self.secret}",
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res2.status_code, 401)
 
@@ -117,14 +117,14 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         res1 = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"Authorization": f"Bearer {self.secret}"},
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res1.status_code, 401)
 
         res2 = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"X-Api-Key": self.secret},
-            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res2.status_code, 401)
 
@@ -133,7 +133,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
         res = self.client.post(
             "/api/v1/rpa/sms-forwarder",
             headers={"x-forwarder-secret": self.secret},
-            json={"phone": "09333702137", "text": "کد ورود شما: 12345", "sender": "1000", "timestamp": 1000}
+            json={"phone": "09333702137", "text": "کد ورود شما: 12345", "sender": "1000", "timestamp": int(time.time() * 1000)}
         )
         self.assertEqual(res.status_code, 200)
 
@@ -288,7 +288,7 @@ class TestStaffEngineerVerification(unittest.IsolatedAsyncioTestCase):
             res = self.client.post(
                 "/api/v1/rpa/sms-forwarder",
                 headers={"X-Forwarder-Secret": self.secret},
-                json={"phone": "09333702137", "text": "کد ورود: 33445", "sender": "1000", "timestamp": 1000}
+                json={"phone": "09333702137", "text": "کد ورود: 33445", "sender": "1000", "timestamp": int(time.time() * 1000)}
             )
             self.assertEqual(res.status_code, 503)
             data = res.json()
