@@ -1,3 +1,9 @@
+## Published recovery release — 2026-11-21
+
+Public v2.1.9/code12 is published at immutable APK source 26e0800d289e4684b2a6dca6e8a2ddf264926999. Ten assets, 20 actual exact-byte HTTP200 tag/latest downloads, eight signed documents and four tamper negatives are verified. Optional update, minimum0 and retained signing/channel keys remain. Recorded acceptance is 612 JVM passes, three optional skips and four lint variants with zero errors/82 warnings each. The 203-file frozen base/test set excludes separately verified R8 and external/private build inputs. [Publication](releases/v2.1.9/PUBLICATION.json), [input scope](releases/v2.1.9/BUILD_INPUT_SUPPLEMENT.json), [purpose](RELEASE_2_1_9.fa.md) and [installation](INSTALL_2_1_9.fa.md).
+
+Both repositories/GitHub and four BarPro source checkouts use main only with verified private recovery bundles. BarPro runtime cb92c171 is accepted on eight roles, each 486 files/six pins, with independent root401, TLS, IR egress, consumers and Beat readbacks. Forward-BarPro-Hub-Private-2.1.9.apk is built outside Git/public assets with the retained package/signer, nondebuggable and no shared root; its one-use capability is unredeemed and phones are uninstalled. Human witness: no received/entered SMS or new installation; latest 29 drivers/zero active forwarders/Hub disconnected. Preserve STOP, consent, RSA, profile, original clocks and private keys. Keep the immutable tag at its APK source; private capability/profile/APK stay outside publication. Earlier paragraphs remain snapshots.
+
 # Forward BarPro agent reference
 
 ## Verified recovery source candidate — 2026-11-21

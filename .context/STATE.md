@@ -1,5 +1,29 @@
 <!--schema:2.0.0-->
 <!--agent:codex-robot-forwarder-stability-20261120-->
+<!--timestamp:2026-11-21T02:06:07.177230+00:00-->
+
+# هدف جاری
+تحویل نرم‌افزاری۲.۱.۹/code12 وHub خصوصی؛ ثبت/push مستندات نهایی وشاهدهای گوشی باقی‌اند.
+
+## کارهای انجام‌شده
+main-only محلی/GitHub وtag ثابت26e0800d باbundle خصوصی بازیابیrefهایحذف‌شده تأیید شدند. دهasset،20GET دقیق200،هشتامضا وچهارtampernegative باoptional/minimum0 وکلیدنگه‌داشته‌شده ثبت‌اند.612JVM،سهskipاختیاری وچهارlint صفرخطا/82هشدار.203ورودی پایه ثابت وR8 مستقل؛ backend جدا194آزمون/25nativeinputs دریافت‌کنندهٔproduction نیست. BarProcb92 رویهشتنقش/چهارسرور×486فایل باroot401/TLS تأیید شد. Hub خصوصی پسازcutover ساخته و خارجGit نگهداری شده؛ redeem/نصب نشده است.
+
+## فایل‌های تغییریافته
+AGENTS،README،CHANGELOG،RELEASE،INSTALL،STATE وmetadata دقیقreleases/v2.1.9 به‌علاوهٔمکملR8. filename خصوصی اصلاح شد. APK/tag/source/کلید/profile ثابت‌اند؛ IDE/cache/.agents/GradleJVM نامرتبط وstaging محفوظ‌اند.
+
+## تسک دقیق بعدی
+کامیت/push صریح همراهSTATE وreadback main/tag/latest؛حفظignored لازم وarchiveworktree مالکیت‌دار. نصب درجاHub خصوصی با مجوز،رضایت واینترنت، سپسDriver وhealth/SMS/binding واقعی. قابلیت مصرف‌شده/منقضی دوبارهredeem یاmint نمی‌شود.
+
+## تصمیمات فنی و چرایی
+metadata/tag/publicassets ثابت‌اند؛تصحیح دامنه203/R8 درمکمل جدا ثبت شد. privateprofile/capability/APK بیرونGit/public می‌مانند. subjectAndroidDebug باdebuggableAPK یکی نیست؛signer قبلی حفظ شد. شکست کپیR8،system-onlyTLS وO_EXCL دررسیدها محفوظ‌اند.
+
+## نکات حساس و موانع
+انسان SMS دریافت/وارد نکرده ونسخهٔجدید نصبنشده است.29راننده/صفرactive،Hub قطع وصدور تازهٔربات صفر؛پنجissued آنcohort همگیexternal هستند. eligible،بیشینه وclearance نامعلوم‌اند. STOP/consent/RSA/profile وکلیدها محفوظ‌اند؛قابلیت وinstaller خصوصی درGit/public نیستند.
+
+<!-- Earlier dated checkpoints preserved below. -->
+
+<!--schema:2.0.0-->
+<!--agent:codex-robot-forwarder-stability-20261120-->
 <!--timestamp:2026-11-20T22:26:41.786282+00:00-->
 
 # فورواردر ۲.۱.۹، کد ۱۲ — پذیرش نهایی سورس و APK

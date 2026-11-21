@@ -1,0 +1,175 @@
+{
+  "schema": "forward-barpro/release-verification/v2",
+  "verified_at_utc": "2026-11-20T23:04:34.819168+00:00",
+  "artifact_status": "verified_exact_public_apks",
+  "release_tag": "v2.1.9",
+  "source_commit": "26e0800d289e4684b2a6dca6e8a2ddf264926999",
+  "version_code": 12,
+  "version_name": "2.1.9",
+  "apks": [
+    {
+      "role": "driver",
+      "file_name": "Forward-BarPro-Driver-2.1.9.apk",
+      "sha256": "84de7e5c84bbfa4e58366a48693ce8c594d8808da5cc1ac3d176a3ef9869f24e",
+      "bytes": 4404176,
+      "application_id": "ir.barpro.fleet.smsforwarder.driver",
+      "version_code": 12,
+      "version_name": "2.1.9-driver",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    },
+    {
+      "role": "hub",
+      "file_name": "Forward-BarPro-Hub-2.1.9.apk",
+      "sha256": "22e84153a0cd49f04add75dff1e48654d6be980e5fdfeb478f9bf455867b9cb6",
+      "bytes": 4436944,
+      "application_id": "ir.barpro.fleet.smsforwarder.hub",
+      "version_code": 12,
+      "version_name": "2.1.9-hub",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    }
+  ],
+  "source_inputs": {
+    "count": 203,
+    "matching_commit_input_count": 203,
+    "source_inputs_asset": "SOURCE_INPUTS.json",
+    "source_inputs_sha256": "6b88ddb47c0430109c41c21f6ce17d185ca22f3b769874326f00c2d2c8aeeefe",
+    "unchanged_after_build": true
+  },
+  "retained_channel_anchor": {
+    "public_der_sha256": "c753f1e8e22f82baf34089d409c871682ac87053178a5ef709e57c5036db5555",
+    "private_key_matches_retained_backup": true,
+    "private_key_bytes_unchanged": true,
+    "private_key_material_published": false
+  },
+  "build": {
+    "actual_release_build_exit_code": 0,
+    "missing_retained_keystore_driver_refused": true,
+    "missing_retained_keystore_hub_refused": true
+  },
+  "jvm_tests": {
+    "cases": 615,
+    "passed": 612,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 3,
+    "scope": "Final native Driver/Hub JVM suites; optional loopback skips",
+    "driver": {
+      "tests": 337,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2
+    },
+    "hub": {
+      "tests": 278,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    }
+  },
+  "lint": {
+    "driverDebug": {
+      "errors": 0,
+      "warnings": 82
+    },
+    "hubDebug": {
+      "errors": 0,
+      "warnings": 82
+    },
+    "driverRelease": {
+      "errors": 0,
+      "warnings": 82
+    },
+    "hubRelease": {
+      "errors": 0,
+      "warnings": 82
+    }
+  },
+  "public_asset_checks": {
+    "private_provisioning_assets": false,
+    "old_shared_root_occurrences": 0,
+    "public_credentials": false
+  },
+  "standalone_backend": {
+    "passed": 194,
+    "native_cases": 159,
+    "independent_cases": 35,
+    "failed": 0,
+    "skipped": 0,
+    "native_input_count": 25,
+    "is_barpro_production_receiver": false
+  },
+  "signed_public_channels": {
+    "version": 12,
+    "previous_version": 11,
+    "optional_update": true,
+    "minimum_supported_version_code": 0,
+    "signature_algorithm": "ECDSA-P256-SHA256 DER over literal ASCII first segment",
+    "assets": [
+      {
+        "name": "barpro-driver.config.signed",
+        "role": "driver",
+        "kind": "config",
+        "version": 12,
+        "previous_version": 11,
+        "sha256": "7d75b6378273431c832af1826567d0f1fe8ef25592ca5c3c909111bc7fad62b5",
+        "bytes": 659,
+        "audience": "ir.barpro.fleet.smsforwarder.driver",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": 0
+      },
+      {
+        "name": "barpro-driver.update.signed",
+        "role": "driver",
+        "kind": "update",
+        "version": 12,
+        "previous_version": 11,
+        "sha256": "e14be17c5382c961f543f1595f9068285dd886b9b32e6a0d9c310b3836bce75f",
+        "bytes": 1069,
+        "audience": "ir.barpro.fleet.smsforwarder.driver",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": null
+      },
+      {
+        "name": "barpro-hub.config.signed",
+        "role": "hub",
+        "kind": "config",
+        "version": 12,
+        "previous_version": 11,
+        "sha256": "8c06e21adb9346ba0167d137ebed97dc1fc3404f53d2b07c757d7ef9faaf0a66",
+        "bytes": 652,
+        "audience": "ir.barpro.fleet.smsforwarder.hub",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": 0
+      },
+      {
+        "name": "barpro-hub.update.signed",
+        "role": "hub",
+        "kind": "update",
+        "version": 12,
+        "previous_version": 11,
+        "sha256": "45408e3d2cfb4bd9bc065707853f60646d1338a79168735c8b77f60a8e310244",
+        "bytes": 1055,
+        "audience": "ir.barpro.fleet.smsforwarder.hub",
+        "signature_verified": true,
+        "tampered_payload_refused": true,
+        "mandatory": false,
+        "minimum_supported_version_code": null
+      }
+    ]
+  },
+  "limits": [
+    "No physical phone installation, genuine carrier SMS receipt or entry, or fresh government issuance has been observed in this verification.",
+    "Software verification and signed publication do not establish Hub private provisioning or runtime deployment; those require separate receipts.",
+    "Cellular NOT_VPN selection does not establish egress country or VPN-lockdown bypass."
+  ],
+  "install_guide": "INSTALL.fa.md",
+  "checksums": "SHA256SUMS"
+}

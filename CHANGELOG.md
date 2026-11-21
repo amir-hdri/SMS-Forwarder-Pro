@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.9 — 2026-11-21
+
+- Authenticate cached registered profiles/grants with their own scoped credential. Preserve request generation, STOP, consent, RSA and the proved profile after awaits. Accepted duplicate links resume the selected phone without redeeming a consumed ticket.
+- Public APKs exclude shared-root authority and private installer assets; retained signer and nondebuggable code12 packages are verified.
+- Recorded acceptance:612 JVM passes/three optional skips, four lint variants with zero errors/82 warnings each, and194 standalone-backend controls (159native +35independent). That adapter is not BarPro production.
+- Publish immutable [v2.1.9](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.9) at26e0800d: ten assets, 20 exact-byte HTTP200 tag/latest reads, eight signed documents and four tamper negatives. Optional update/minimum0 and retained channel keys remain.
+- Clarify203 as the frozen base/test input set, with R8 separately bound in [BUILD_INPUT_SUPPLEMENT.json](releases/v2.1.9/BUILD_INPUT_SUPPLEMENT.json). Immutable assets/tag are unchanged.
+- Build and privately retain the one-use Hub after cutover; correct its filename in [installation steps](INSTALL_2_1_9.fa.md). It is unredeemed/uninstalled; handset/SMS/new issuance remain unverified. [Measured limits](RELEASE_2_1_9.fa.md).
+
 ## 2.1.8 — 2026-11-16
 
 - Keep manual phone entry and require an authentic carrier-origin, device-bound grant for first activation; rediscovery reuses only the same registered phone's scoped credential.

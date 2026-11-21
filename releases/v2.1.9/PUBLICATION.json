@@ -1,0 +1,407 @@
+{
+  "schema": "forward-barpro/publication-readback/v2",
+  "verified_at_utc": "2026-11-20T23:29:43.150394+00:00",
+  "release_url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.9",
+  "published_at_utc": "2026-11-20T23:20:46Z",
+  "source_commit": "26e0800d289e4684b2a6dca6e8a2ddf264926999",
+  "source_tag": "v2.1.9",
+  "source_tag_object": "26e0800d289e4684b2a6dca6e8a2ddf264926999",
+  "asset_count": 10,
+  "source_input_count": 203,
+  "tag_and_latest_pairs_verified": 20,
+  "actual_public_get_attempts": 20,
+  "http200_matching_attempts": 20,
+  "initial_failed_attempts": 0,
+  "certificate_verification_kept_enabled": true,
+  "signed_documents_verified": 8,
+  "both_checksum_lists_verified": true,
+  "tag_and_latest_bind_exact_delivered_apks": true,
+  "optional_update": true,
+  "minimum_supported_version_code": 0,
+  "public_upload_allowlist_contains_no_private_asset_or_raw_log": true,
+  "later_documentation_changes_compiled_inputs": false,
+  "asset_sha256": {
+    "Forward-BarPro-Driver-2.1.9.apk": {
+      "sha256": "84de7e5c84bbfa4e58366a48693ce8c594d8808da5cc1ac3d176a3ef9869f24e",
+      "bytes": 4404176
+    },
+    "Forward-BarPro-Hub-2.1.9.apk": {
+      "sha256": "22e84153a0cd49f04add75dff1e48654d6be980e5fdfeb478f9bf455867b9cb6",
+      "bytes": 4436944
+    },
+    "INSTALL.fa.md": {
+      "sha256": "d9ad049e5c8e65386b8bf67d4631e01844bb049edb66b10018c1ff63a9275f49",
+      "bytes": 1720
+    },
+    "SHA256SUMS": {
+      "sha256": "360668b6337122774cd3f0c752b4e4145bf8525575569456d520306409260e77",
+      "bytes": 812
+    },
+    "SOURCE_INPUTS.json": {
+      "sha256": "6b88ddb47c0430109c41c21f6ce17d185ca22f3b769874326f00c2d2c8aeeefe",
+      "bytes": 26714
+    },
+    "VERIFICATION.json": {
+      "sha256": "478fff83b3e7aad1cfacc4b309133eac5d8ac18b3e43a9d73df9def4c11541bd",
+      "bytes": 5583
+    },
+    "barpro-driver.config.signed": {
+      "sha256": "7d75b6378273431c832af1826567d0f1fe8ef25592ca5c3c909111bc7fad62b5",
+      "bytes": 659
+    },
+    "barpro-driver.update.signed": {
+      "sha256": "e14be17c5382c961f543f1595f9068285dd886b9b32e6a0d9c310b3836bce75f",
+      "bytes": 1069
+    },
+    "barpro-hub.config.signed": {
+      "sha256": "8c06e21adb9346ba0167d137ebed97dc1fc3404f53d2b07c757d7ef9faaf0a66",
+      "bytes": 652
+    },
+    "barpro-hub.update.signed": {
+      "sha256": "45408e3d2cfb4bd9bc065707853f60646d1338a79168735c8b77f60a8e310244",
+      "bytes": 1055
+    }
+  },
+  "public_get_receipts": [
+    {
+      "channel": "tag",
+      "name": "Forward-BarPro-Driver-2.1.9.apk",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/Forward-BarPro-Driver-2.1.9.apk",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 4404176,
+          "sha256": "84de7e5c84bbfa4e58366a48693ce8c594d8808da5cc1ac3d176a3ef9869f24e",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-Forward-BarPro-Driver-2.1.9.apk",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "Forward-BarPro-Hub-2.1.9.apk",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/Forward-BarPro-Hub-2.1.9.apk",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 4436944,
+          "sha256": "22e84153a0cd49f04add75dff1e48654d6be980e5fdfeb478f9bf455867b9cb6",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-Forward-BarPro-Hub-2.1.9.apk",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "INSTALL.fa.md",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/INSTALL.fa.md",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1720,
+          "sha256": "d9ad049e5c8e65386b8bf67d4631e01844bb049edb66b10018c1ff63a9275f49",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-INSTALL.fa.md",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "SHA256SUMS",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/SHA256SUMS",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 812,
+          "sha256": "360668b6337122774cd3f0c752b4e4145bf8525575569456d520306409260e77",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-SHA256SUMS",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "SOURCE_INPUTS.json",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/SOURCE_INPUTS.json",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 26714,
+          "sha256": "6b88ddb47c0430109c41c21f6ce17d185ca22f3b769874326f00c2d2c8aeeefe",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-SOURCE_INPUTS.json",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "VERIFICATION.json",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/VERIFICATION.json",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 5583,
+          "sha256": "478fff83b3e7aad1cfacc4b309133eac5d8ac18b3e43a9d73df9def4c11541bd",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-VERIFICATION.json",
+      "signature_verified": false
+    },
+    {
+      "channel": "tag",
+      "name": "barpro-driver.config.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/barpro-driver.config.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 659,
+          "sha256": "7d75b6378273431c832af1826567d0f1fe8ef25592ca5c3c909111bc7fad62b5",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-barpro-driver.config.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "tag",
+      "name": "barpro-driver.update.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/barpro-driver.update.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1069,
+          "sha256": "e14be17c5382c961f543f1595f9068285dd886b9b32e6a0d9c310b3836bce75f",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-barpro-driver.update.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "tag",
+      "name": "barpro-hub.config.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/barpro-hub.config.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 652,
+          "sha256": "8c06e21adb9346ba0167d137ebed97dc1fc3404f53d2b07c757d7ef9faaf0a66",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-barpro-hub.config.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "tag",
+      "name": "barpro-hub.update.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/download/v2.1.9/barpro-hub.update.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1055,
+          "sha256": "45408e3d2cfb4bd9bc065707853f60646d1338a79168735c8b77f60a8e310244",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/tag-1-barpro-hub.update.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "latest",
+      "name": "Forward-BarPro-Driver-2.1.9.apk",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/Forward-BarPro-Driver-2.1.9.apk",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 4404176,
+          "sha256": "84de7e5c84bbfa4e58366a48693ce8c594d8808da5cc1ac3d176a3ef9869f24e",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-Forward-BarPro-Driver-2.1.9.apk",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "Forward-BarPro-Hub-2.1.9.apk",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/Forward-BarPro-Hub-2.1.9.apk",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 4436944,
+          "sha256": "22e84153a0cd49f04add75dff1e48654d6be980e5fdfeb478f9bf455867b9cb6",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-Forward-BarPro-Hub-2.1.9.apk",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "INSTALL.fa.md",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/INSTALL.fa.md",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1720,
+          "sha256": "d9ad049e5c8e65386b8bf67d4631e01844bb049edb66b10018c1ff63a9275f49",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-INSTALL.fa.md",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "SHA256SUMS",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/SHA256SUMS",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 812,
+          "sha256": "360668b6337122774cd3f0c752b4e4145bf8525575569456d520306409260e77",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-SHA256SUMS",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "SOURCE_INPUTS.json",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/SOURCE_INPUTS.json",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 26714,
+          "sha256": "6b88ddb47c0430109c41c21f6ce17d185ca22f3b769874326f00c2d2c8aeeefe",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-SOURCE_INPUTS.json",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "VERIFICATION.json",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/VERIFICATION.json",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 5583,
+          "sha256": "478fff83b3e7aad1cfacc4b309133eac5d8ac18b3e43a9d73df9def4c11541bd",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-VERIFICATION.json",
+      "signature_verified": false
+    },
+    {
+      "channel": "latest",
+      "name": "barpro-driver.config.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/barpro-driver.config.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 659,
+          "sha256": "7d75b6378273431c832af1826567d0f1fe8ef25592ca5c3c909111bc7fad62b5",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-barpro-driver.config.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "latest",
+      "name": "barpro-driver.update.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/barpro-driver.update.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1069,
+          "sha256": "e14be17c5382c961f543f1595f9068285dd886b9b32e6a0d9c310b3836bce75f",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-barpro-driver.update.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "latest",
+      "name": "barpro-hub.config.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/barpro-hub.config.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 652,
+          "sha256": "8c06e21adb9346ba0167d137ebed97dc1fc3404f53d2b07c757d7ef9faaf0a66",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-barpro-hub.config.signed",
+      "signature_verified": true
+    },
+    {
+      "channel": "latest",
+      "name": "barpro-hub.update.signed",
+      "url": "https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/latest/download/barpro-hub.update.signed",
+      "attempts": [
+        {
+          "attempt": 1,
+          "curl_exit_code": 0,
+          "http_status": "200",
+          "bytes": 1055,
+          "sha256": "45408e3d2cfb4bd9bc065707853f60646d1338a79168735c8b77f60a8e310244",
+          "matches_expected": true
+        }
+      ],
+      "matching_file": "/private/var/folders/n2/myr1c0t510975pqx2dq9yr2r0000gn/T/codex-security-artifacts-93d3b4f61551e5c604cd56282cd0b93b5e66f6bff71fb7882e2d9e98445b935e/artifacts/2026-11-21-publication/public-readback/latest-1-barpro-hub.update.signed",
+      "signature_verified": true
+    }
+  ]
+}
