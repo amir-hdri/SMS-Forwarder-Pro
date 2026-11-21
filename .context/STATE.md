@@ -1,5 +1,29 @@
 <!--schema:2.0.0-->
 <!--agent:codex-robot-forwarder-stability-20261120-->
+<!--timestamp:2026-11-21T02:21:14.593055+00:00-->
+
+# هدف جاری
+تحویل نرم‌افزار، انتشار main و رسیدهای مستقل تکمیل شده‌اند؛ همگام‌سازی مستندات نهایی و بستن worktreeها در رسید پایانی همین نشست ثبت می‌شود.
+
+## کارهای انجام‌شده
+مستندات اصلی هر دو مخزن با source ثابت و staging/تغییرات دیگر محفوظ، روی main گیت‌هاب ثبت و بازخوانی شدند. نخستین checkpoint مستندات BarPro:e4111e0b47db26e6fc9c3ed602cc041839fc401e وSMS:9123903aa263c91bb3346dc2df700da12e152276. تگ عمومیv2.1.9 درگیت‌هاب به26e0800d متصل است؛ نبود آن درnamespace تگ محلی، خطای APK نیست. runtimecb92c171 رویهشتنقش/چهارسرور،backup/migration،root401/TLS،egress/consumers/Beat وکانال عمومی با رسیدهای تاریخ‌دار مستقل تأییدند. Hubخصوصی ساخته ولی redeem/نصب نشده است.
+
+## فایل‌های تغییریافته
+فقط checkpoint مستندات/STATE به‌روز شد. ورودی‌های آزمودهٔ731BarPro و203Android به‌علاوهٔR8،runtime،APK/tag،signer/RSA/profile و تنظیمات خصوصی ثابت‌اند. SESSION_LOG،Sentry/Grafana وIDE/cache/GradleJVM نامرتبط وstaging محفوظ‌اند.
+
+## تسک دقیق بعدی
+پس ازتحویل،نصب درجاHubخصوصی،مجوز/رضایت/اینترنت وhealth امضاشدهٔهمان دستگاه؛سپسDriver وproof شمارهٔثبت‌شده،SMS/receipt/binding واقعی. صدور تازه فقط ازمسیرnative مجاز باtracking/confirmed وSTART/END همان سند ارزیابی می‌شود. آمار باeligible/sent/robot-issued/external/ambiguous جدا اندازه‌گیری شود.
+
+## تصمیمات فنی و چرایی
+commit مستندات ورودی اجرایی را تغییر نمی‌دهد؛runtimecb92 وtag26e به سورس ثابت متصل می‌مانند. checkout نهایی سرورها باfetch+ff-only وjournal تازه،بدونrecreate سرویس و با حفظenv/TLS/infra/staging منتقل می‌شود. نتیجهٔعملیاتی اینfollow-through درFINAL_DELIVERY_READBACK.json بیرونGit مرجع است؛هیچAPPLY/mint/sync قدیمی replay نمی‌شود.
+
+## نکات حساس و موانع
+انسان هنوز نسخهٔجدید نصب نکرده وSMS دریافت/وارد نشده است. آخرینsnapshot01:19UTC:29راننده/صفرactive،Hubقطع و135visibleowned روز۲۰نوامبر؛پنجissued همگیexternal/صفرrobot. سهpendingOTP بدونclaim/ACK/delete/replay محفوظ‌اند. eligible/نرخبیشینه/clearance دولتی نامعلوم‌اند. اسناد مبهم/نرم‌حذف،clock/day/quota/attempt/slot/fence وSTOP/consent/RSA محفوظ‌اند. هیچمجوزInsert برایخواندن آمار صادرنشد.
+
+<!-- Earlier dated checkpoints preserved below. -->
+
+<!--schema:2.0.0-->
+<!--agent:codex-robot-forwarder-stability-20261120-->
 <!--timestamp:2026-11-21T02:06:07.177230+00:00-->
 
 # هدف جاری
