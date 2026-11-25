@@ -1,0 +1,90 @@
+{
+  "schema": "forward-barpro/release-verification/v2",
+  "verified_at_utc": "2026-11-25T22:36:16Z",
+  "artifact_status": "verified_exact_public_apks",
+  "release_tag": "v2.1.11",
+  "source_commit": "19fcd347d0d3e2f33c4a38f850fc4ed8c3b55efd",
+  "version_code": 14,
+  "version_name": "2.1.11",
+  "apks": [
+    {
+      "role": "driver",
+      "file_name": "Forward-BarPro-Driver-2.1.11.apk",
+      "sha256": "b56d3502cba29922126977d00ded7a4486633312259e0be46a9878489197a9ef",
+      "bytes": 4404176,
+      "application_id": "ir.barpro.fleet.smsforwarder.driver",
+      "version_code": 14,
+      "version_name": "2.1.11-driver",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    },
+    {
+      "role": "hub",
+      "file_name": "Forward-BarPro-Hub-2.1.11.apk",
+      "sha256": "f9f89a0e58a236e8661224994e9d2bd3a7c27d3ca83b8cc85ab4fbd79470f107",
+      "bytes": 4436940,
+      "application_id": "ir.barpro.fleet.smsforwarder.hub",
+      "version_code": 14,
+      "version_name": "2.1.11-hub",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    }
+  ],
+  "source_inputs": {
+    "count": 200,
+    "matching_commit_input_count": 200,
+    "source_inputs_asset": "SOURCE_INPUTS.json",
+    "unchanged_after_build": true
+  },
+  "retained_channel_anchor": {
+    "public_der_sha256": "c753f1e8e22f82baf34089d409c871682ac87053178a5ef709e57c5036db5555",
+    "private_key_matches_retained_backup": true,
+    "private_key_material_published": false
+  },
+  "jvm_tests": {
+    "cases": 673,
+    "passed": 670,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 3,
+    "driver": {
+      "tests": 366,
+      "passed": 364,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 2
+    },
+    "hub": {
+      "tests": 307,
+      "passed": 306,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    }
+  },
+  "lint": {
+    "driverDebug": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "hubDebug": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "driverRelease": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "hubRelease": {
+      "errors": 0,
+      "warnings": 103
+    }
+  },
+  "emulator_verification": {
+    "device": "emulator-5556 (codex_sms_stability_20261116_01, Android 16)",
+    "upgrade_in_place": true,
+    "ui_rendered_rtl": true,
+    "synthetic_sms_captured_and_stop_respected": true,
+    "http_central_endpoint_reached": "http://87.107.160.251/api/v1/otp/sms-forwarder (HTTP 401 on synthetic profile, 0 crashes)"
+  }
+}

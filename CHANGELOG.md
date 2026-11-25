@@ -1,6 +1,14 @@
 # Changelog
 
-## 2.1.10 — 2026-11-25
+## 2.1.11 — 2026-11-26
+
+- Add monotonic `ServerClock` HTTP `Date` synchronization and automatic monotonic retry on clock-skew `410`/`422` rejections without relaxing backend `otp_delivery.py` bounds.
+- Persist signed `RemoteConfig` JSON in `UpdateStore` across app/repository restarts and wire `remoteKeywords` directly into `SmsParser.extractOtp`.
+- Preserve `SENT_VIA_SMS_PENDING_SYNC` outbox state on Driver fast GSM fallback failures, bound fast cellular acquisition/timeout, and cache PBKDF2-derived `AesEncryptionUtils` keys.
+- Allow single-SIM Hub enrollment (`HubInstallContract`), clean default endpoint strings across `ServerConfigScreen`/`SmsForwarderClient`/`MainActivity`, check notification permission, notify missing `canInstallPackages` permission in `AppUpdateManager`/`UpdateNotifier`, and prompt optional `READ_PHONE_STATE` when `needsSmsSelection` triggers (`versionCode=14`, 670/673 JVM passes + 3 optional loopback skips, 4 lint variants with 0 errors, live Android 16 `emulator-5556` in-place upgrade & SMS capture verified).
+- Remove superseded `v2.1.10` release files (`releases/v2.1.10/`, `RELEASE_2_1_10.fa.md`, `INSTALL_2_1_10.fa.md`) so only `v2.1.11` remains.
+
+## 2.1.10 — 2026-11-25 (superseded / deleted)
 
 - Switch Driver, Hub, and release update/config channels to central HTTP (`http://87.107.160.251`) and align `SmsReceiver` delivery feedback so non-2xx relay failures are not falsely reported as delivered.
 - Enforce atomic `STOP`, consent, credential, and mandatory-update guards across Worker, Manager, and Runtime bootstrap paths (`versionCode=13`, 663 JVM passes: Driver 361/361 + Hub 302/302, 4 lint variants with 0 errors).
