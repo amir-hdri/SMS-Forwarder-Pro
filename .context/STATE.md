@@ -1,3 +1,9 @@
+# Antigravity 4230d53f communication correction & v2.1.10 release — 2026-11-25
+
+Current release `v2.1.10` (`versionCode=13`, source commit `1eebae1215b2e6a7edd993793549a0a81a7ef5c8`, tag `v2.1.10`) supports selected Central HTTP80 (`http://87.107.160.251`) across enrollment, private Hub grants, saved profiles, RSA signing and delivery; other cleartext origins remain closed. Shared-root authority stays retired. STOP/consent/credential/original-clock/mandatory-update checks survive SQL waits and each HTTP retry. Inquiry preserves the original SMS clock and fails closed when VPN cellular acquisition fails. Routine Hub heartbeat uses the owning repository once; notifications distinguish carrier delivery (`SmsReceiver` HTTP 2xx) from non-2xx failure.
+
+Verified Driver/Hub JVM gate (`android-final-native-v3`): 663 passed (Driver 361/361 + Hub 302/302, 0 failures, 0 skipped), 4 lint variants with 0 errors, `aapt2 dump badging` & `apksigner verify` confirmed (`Forward-BarPro-Driver-2.1.10.apk` sha256 `4f63d8b085bdb87180ccfd79d79b4ba810530c9cf9dde625e8b45bebfa4d7993`, `Forward-BarPro-Hub-2.1.10.apk` sha256 `8c9f74d394dcb94dfae916d71bec35e35fbd77daa007d6f2188516b43e8a3e03`, signer sha256 `e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`, 198 Android inputs unchanged). Signed channel manifests (`barpro-driver.{config,update}.signed`, `barpro-hub.{config,update}.signed`) verified OK. Superseded `releases/v2.1.8` and `releases/v2.1.9` removed per owner instruction so only `v2.1.10` remains. Handset install, live carrier SMS delivery, and government issuance remain outside software verification.
+
 <!--schema:2.0.0-->
 <!--agent:codex-robot-forwarder-stability-20261120-->
 <!--timestamp:2026-11-21T02:21:14.593055+00:00-->

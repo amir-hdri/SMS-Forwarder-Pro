@@ -1,0 +1,77 @@
+{
+  "schema": "forward-barpro/release-verification/v2",
+  "verified_at_utc": "2026-11-25T20:00:08Z",
+  "artifact_status": "verified_exact_public_apks",
+  "release_tag": "v2.1.10",
+  "source_commit": "1eebae1215b2e6a7edd993793549a0a81a7ef5c8",
+  "version_code": 13,
+  "version_name": "2.1.10",
+  "apks": [
+    {
+      "role": "driver",
+      "file_name": "Forward-BarPro-Driver-2.1.10.apk",
+      "sha256": "4f63d8b085bdb87180ccfd79d79b4ba810530c9cf9dde625e8b45bebfa4d7993",
+      "bytes": 4404176,
+      "application_id": "ir.barpro.fleet.smsforwarder.driver",
+      "version_code": 13,
+      "version_name": "2.1.10-driver",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    },
+    {
+      "role": "hub",
+      "file_name": "Forward-BarPro-Hub-2.1.10.apk",
+      "sha256": "8c9f74d394dcb94dfae916d71bec35e35fbd77daa007d6f2188516b43e8a3e03",
+      "bytes": 4436940,
+      "application_id": "ir.barpro.fleet.smsforwarder.hub",
+      "version_code": 13,
+      "version_name": "2.1.10-hub",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false
+    }
+  ],
+  "source_inputs": {
+    "count": 198,
+    "matching_commit_input_count": 198,
+    "source_inputs_asset": "SOURCE_INPUTS.json",
+    "unchanged_after_build": true
+  },
+  "retained_channel_anchor": {
+    "public_der_sha256": "c753f1e8e22f82baf34089d409c871682ac87053178a5ef709e57c5036db5555",
+    "private_key_matches_retained_backup": true,
+    "private_key_material_published": false
+  },
+  "jvm_tests": {
+    "cases": 663,
+    "passed": 663,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "driver": {
+      "tests": 361,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "hub": {
+      "tests": 302,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "lint": {
+    "driverDebug": {
+      "errors": 0
+    },
+    "hubDebug": {
+      "errors": 0
+    },
+    "driverRelease": {
+      "errors": 0
+    },
+    "hubRelease": {
+      "errors": 0
+    }
+  }
+}

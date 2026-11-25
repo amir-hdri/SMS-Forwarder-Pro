@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.10 — 2026-11-25
+
+- Switch Driver, Hub, and release update/config channels to central HTTP (`http://87.107.160.251`) and align `SmsReceiver` delivery feedback so non-2xx relay failures are not falsely reported as delivered.
+- Enforce atomic `STOP`, consent, credential, and mandatory-update guards across Worker, Manager, and Runtime bootstrap paths (`versionCode=13`, 663 JVM passes: Driver 361/361 + Hub 302/302, 4 lint variants with 0 errors).
+- Retain only `v2.1.10` (`RELEASE_2_1_10.fa.md`, `INSTALL_2_1_10.fa.md`, `releases/v2.1.10/`) and remove superseded `releases/v2.1.8` and `releases/v2.1.9`.
+
 ## 2.1.9 — 2026-11-21
 
 - Authenticate cached registered profiles/grants with their own scoped credential. Preserve request generation, STOP, consent, RSA and the proved profile after awaits. Accepted duplicate links resume the selected phone without redeeming a consumed ticket.
