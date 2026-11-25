@@ -143,6 +143,27 @@ object RemoteConfig {
         )
     }
 
+    /** Re-verifies and re-applies the last persisted signed config overlay on process restart. */
+    fun restoreSavedOverlay(
+        context: android.content.Context,
+        publicKeyBase64: String = com.example.BuildConfig.CONFIG_PUBLIC_KEY
+    ): Boolean {
+        if (publicKeyBase64.isBlank()) return false
+        val savedDoc = UpdateStore.getInstance(context).lastGoodConfigDocument ?: return false
+        if (savedDoc.isBlank()) return false
+        val result = RemoteConfigClient(publicKeyBase64).verify(
+            document = savedDoc,
+            audience = context.packageName,
+            knownVersion = 0L
+        )
+        return if (result is ConfigFetch.Applied) {
+            applyMatchingOverlay(result.snapshot)
+            true
+        } else {
+            false
+        }
+    }
+
     private fun optionalEndpoint(
         payload: JSONObject,
         key: String,

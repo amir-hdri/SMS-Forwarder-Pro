@@ -132,9 +132,8 @@ fun ServerConfigScreen(
     var allowCleartextTransport by remember(config) { mutableStateOf(config.allowCleartextTransport) }
     var showAdvancedSettings by remember {
         mutableStateOf(
-            !config.endpointUrl.trim().startsWith("https://", ignoreCase = true) ||
             config.allowCleartextTransport ||
-            config.endpointUrl != "https://api.barpro.ir/api/v1/otp/sms-forwarder"
+            !com.example.network.BarProContract.configurationError(config, requireRecipient = false).isNullOrEmpty()
         )
     }
 
@@ -815,7 +814,7 @@ fun ServerConfigScreen(
                                 onSaveConfig(config.copy(endpointUrl = it))
                             },
                             label = { Text("آدرس وب‌هوک بارپرو (Endpoint URL)") },
-                            placeholder = { Text("https://api.barpro.ir/api/v1/otp/sms-forwarder") },
+                            placeholder = { Text(com.example.BuildConfig.DEFAULT_ENDPOINT_URL) },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = BarProCyan,
@@ -839,7 +838,7 @@ fun ServerConfigScreen(
                         ) {
                             TextButton(
                                 onClick = {
-                                    val defaultUrl = "https://api.barpro.ir/api/v1/otp/sms-forwarder"
+                                    val defaultUrl = com.example.BuildConfig.DEFAULT_ENDPOINT_URL
                                     endpointUrl = defaultUrl
                                     onSaveConfig(config.copy(endpointUrl = defaultUrl))
                                 }

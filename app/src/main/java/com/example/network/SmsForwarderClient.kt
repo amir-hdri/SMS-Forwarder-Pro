@@ -37,7 +37,8 @@ data class TransmissionResult(
     val trackingCode: String? = null,
     val otpCode: String? = null,
     val signature: String? = null,
-    val isRetryable: Boolean = false
+    val isRetryable: Boolean = false,
+    val serverDateMs: Long? = null
 )
 
 data class ServerCommand(
@@ -61,7 +62,8 @@ internal class ForwardingAuthorityRevokedException(cancelled: CancellationExcept
     IOException("Forwarding authority was revoked", cancelled)
 
 class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
-    private val hubKey: com.example.enrollment.DeviceBootstrapKey = com.example.enrollment.DeviceBootstrapKey()) {
+    private val hubKey: com.example.enrollment.DeviceBootstrapKey = com.example.enrollment.DeviceBootstrapKey(),
+    private val appContext: android.content.Context? = null) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private fun failure(message: String) = TransmissionResult(false, null, null, message, "", false, 0)
@@ -77,7 +79,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         clientOverride: OkHttpClient? = null
     ): TransmissionResult = withContext(Dispatchers.IO) {
         BarProContract.configurationError(config)?.let { return@withContext failure(it) }
-        if (!BarProContract.isTimestampAcceptable(timestamp))
+        if (!BarProContract.isTimestampAcceptable(timestamp, ServerClock.calibratedNow(appContext)))
             return@withContext failure("کد منقضی است یا ساعت دستگاه درست نیست.")
         val otp = SmsParser.extractOtp(messageBody, sender)
             ?: return@withContext failure("پیامک شامل کد OTP معتبر نیست.")
@@ -164,7 +166,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
 
     fun resolveGatewayUrl(endpointUrl: String): String {
         val trimmed = endpointUrl.trim().trimEnd('/')
-        if (trimmed.isBlank()) return "https://api.barpro.ir" + BarProContract.GATEWAY_PATH
+        if (trimmed.isBlank()) return resolveGatewayUrl(com.example.BuildConfig.DEFAULT_ENDPOINT_URL)
         val base = if (trimmed.substringAfterLast('/').matches(Regex("09[0-9]{9}"))) {
             trimmed.substringBeforeLast('/')
         } else {
@@ -276,6 +278,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         repeat(attempts) { attempt ->
             try {
                 client.newCall(request).awaitConsumedResponse().let { response ->
+                    ServerClock.observeHttpDate(appContext, response.serverDateMs, request.url.host)
                     val responseText = response.bodyText
                     val json = try { JSONObject(responseText) } catch (_: Exception) { null }
                     val accepted = response.isSuccessful && json != null &&
@@ -304,7 +307,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
                         payloadSent = LogSanitizer.sanitize(payload.toString()),
                         isEncrypted = false,
                         durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
-                        isRetryable = !accepted && BarProContract.retryable(response.code)
+                        isRetryable = !accepted && BarProContract.retryable(response.code),
+                        serverDateMs = response.serverDateMs
                     )
                 }
             } catch (cancelled: CancellationException) {
@@ -322,7 +326,12 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         return result
     }
 
-    private data class ConsumedResponse(val code: Int, val isSuccessful: Boolean, val bodyText: String)
+    private data class ConsumedResponse(
+        val code: Int,
+        val isSuccessful: Boolean,
+        val bodyText: String,
+        val serverDateMs: Long?
+    )
 
     /** Keep cancellation attached until the bounded body is read and the live response is closed. */
     private suspend fun Call.awaitConsumedResponse(): ConsumedResponse = suspendCancellableCoroutine { continuation ->
@@ -335,7 +344,12 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
                 try {
                     val consumed = response.use {
                         if (continuation.isCancelled) return
-                        ConsumedResponse(it.code, it.isSuccessful, it.peekBody(16_384).string())
+                        ConsumedResponse(
+                            it.code,
+                            it.isSuccessful,
+                            it.peekBody(16_384).string(),
+                            it.headers.getDate("Date")?.time
+                        )
                     }
                     continuation.resume(consumed)
                 } catch (error: Exception) {

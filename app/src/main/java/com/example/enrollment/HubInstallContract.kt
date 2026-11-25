@@ -17,7 +17,8 @@ class HubInstallCredentials(val deviceId: String, val endpoint: String, val toke
         val authorizedBefore = config.setupCompleted || BarProContract.token(config).isNotBlank()
         return config.copy(endpointUrl = endpoint, authType = AuthType.CUSTOM_HEADER,
             authHeaderKey = BarProContract.TOKEN_HEADER, authHeaderValue = token, forwarderSecret = token,
-            deviceIdentifier = deviceId, fallbackServerPhoneNumber = hubMci, hubIrancellPhoneNumber = hubIrancell,
+            deviceIdentifier = deviceId, driverPhone = "", driverId = "",
+            fallbackServerPhoneNumber = hubMci, hubIrancellPhoneNumber = hubIrancell,
             isEncryptionEnabled = false, allowCleartextTransport = false, setupCompleted = true,
             isMasterEnabled = if (authorizedBefore) config.isMasterEnabled else true,
             userConsentGiven = if (authorizedBefore) config.userConsentGiven else true)
@@ -68,11 +69,16 @@ object HubInstallContract {
         require(ManagedTransport.permitsForwarderTransport(endpoint) && sameOrigin(endpoint, ManagedTransport.canonical(server)) && endpoint.username.isEmpty() && endpoint.password.isEmpty() &&
             endpoint.query == null && endpoint.fragment == null && endpoint.encodedPath == BarProContract.PATH)
         fun phone(name: String): String {
-            val phone = SmsParser.normalizePhoneNumber(json.getString(name))
-            require(phone.matches(Regex("09[0-9]{9}")))
-            return phone
+            val raw = json.optString(name, "")
+            if (raw.isBlank()) return ""
+            val normalized = SmsParser.normalizePhoneNumber(raw)
+            require(normalized.matches(Regex("09[0-9]{9}")))
+            return normalized
         }
-        return HubInstallCredentials(deviceId, endpoint.toString(), token, phone("hub_phone_mci"), phone("hub_phone_irancell"))
+        val mci = phone("hub_phone_mci")
+        val irancell = phone("hub_phone_irancell")
+        require(mci.isNotEmpty() || irancell.isNotEmpty())
+        return HubInstallCredentials(deviceId, endpoint.toString(), token, mci, irancell)
     }
 
     fun isEnrolled(config: ForwardConfig, deviceId: String): Boolean = config.setupCompleted &&

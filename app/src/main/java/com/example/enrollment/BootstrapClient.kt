@@ -46,7 +46,9 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient(),
         val builder = Request.Builder().url(base.newBuilder().encodedPath("$prefix/$path").build())
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
         if (token.isNotEmpty()) builder.header("X-OTP-Webhook-Token", token)
-        com.example.network.HubRequestAuth.client(http, token, base, hubKey).newCall(builder.build()).execute().use { response ->
+        val builtRequest = builder.build()
+        com.example.network.HubRequestAuth.client(http, token, base, hubKey).newCall(builtRequest).execute().use { response ->
+            com.example.network.ServerClock.observeHttpDate(null, response.headers.getDate("Date")?.time, builtRequest.url.host)
             if (response.code != 200) throw BootstrapHttpException(response.code)
             val body = requireNotNull(response.body)
             require(body.contentLength() <= 16_384)

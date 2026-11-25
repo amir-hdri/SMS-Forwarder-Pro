@@ -23,6 +23,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
         val request = Request.Builder().url(com.example.network.ManagedTransport.canonical(link.server).newBuilder().encodedPath("/api/v1/otp/enroll").build())
             .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
         http.newCall(request).execute().use { response ->
+            com.example.network.ServerClock.observeHttpDate(null, response.headers.getDate("Date")?.time, request.url.host)
             check(response.code == 200) { "Activation rejected; obtain a new link from BarPro" }
             val body = requireNotNull(response.body)
             require(body.contentLength() <= 16_384)
@@ -91,6 +92,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             .build()
 
         fun execute(request: Request): Pair<Int, String?> = http.newCall(request).execute().use { response ->
+            com.example.network.ServerClock.observeHttpDate(null, response.headers.getDate("Date")?.time, request.url.host)
             if (response.code == 401 || response.code == 403) throw ActivationRequiredException()
             if (response.code != 200) return@use response.code to null
             val body = requireNotNull(response.body)

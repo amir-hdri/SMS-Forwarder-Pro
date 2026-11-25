@@ -699,7 +699,7 @@ fun LogDetailDialog(
 
                 if (log.driverId.isNotBlank()) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = "شناسه راننده: ${log.driverId} • سیم‌کارت: ${log.simSlot + 1} • دفعات تلاش: ${log.retryCount}", fontSize = 11.sp, color = PalettePale.copy(alpha = 0.8f))
+                    Text(text = "شناسه راننده: ${log.driverId} • سیم‌کارت: ${log.simSlot} • دفعات تلاش: ${log.retryCount}", fontSize = 11.sp, color = PalettePale.copy(alpha = 0.8f))
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))

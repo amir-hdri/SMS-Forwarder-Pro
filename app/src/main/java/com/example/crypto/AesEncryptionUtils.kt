@@ -4,6 +4,7 @@ import android.util.Base64
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.SecretKeyFactory
@@ -51,6 +52,8 @@ object AesEncryptionUtils {
     @Volatile
     var saltProvider: (() -> ByteArray)? = null
 
+    private val derivedKeyCache = ConcurrentHashMap<String, SecretKeySpec>()
+
     /**
      * Retrieves the effective cryptographic salt for PBKDF2 key derivation.
      */
@@ -62,18 +65,26 @@ object AesEncryptionUtils {
     /**
      * Derives a compliant 256-bit (32-byte) AES SecretKeySpec from any passphrase or secret key
      * using the cryptographically hardened PBKDF2WithHmacSHA256 algorithm with 100,000 iterations.
-     *
-     * @param passphrase The user or system secret string.
-     * @param salt Optional custom salt; defaults to the securely stored or app salt.
-     * @return 256-bit SecretKeySpec suitable for AES cipher operations.
+     * Results are cached by cryptographic digest of (passphrase, salt) to prevent repeated 100k-round
+     * latency on cold SMS broadcast processing.
      */
     fun deriveKey(passphrase: String, salt: ByteArray? = null): SecretKeySpec {
         require(passphrase.isNotBlank()) { "Secret passphrase cannot be empty" }
         val effectiveSalt = getEffectiveSalt(salt)
+        val digest = MessageDigest.getInstance("SHA-256").apply {
+            update(passphrase.toByteArray(StandardCharsets.UTF_8))
+            update(0)
+            update(effectiveSalt)
+        }.digest().joinToString("") { "%02x".format(it) }
+        derivedKeyCache[digest]?.let { return it }
+
         val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
         val spec = PBEKeySpec(passphrase.toCharArray(), effectiveSalt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS)
         val keyBytes = factory.generateSecret(spec).encoded
-        return SecretKeySpec(keyBytes, AES)
+        val keySpec = SecretKeySpec(keyBytes, AES)
+        if (derivedKeyCache.size >= 16) derivedKeyCache.clear()
+        derivedKeyCache[digest] = keySpec
+        return keySpec
     }
 
     /**

@@ -50,8 +50,10 @@ class SmsReceiver : BroadcastReceiver() {
         // Group messages by sender in case multiple chunks arrived
         val sender = messages[0].originatingAddress ?: "Unknown"
         val fullMessageBody = StringBuilder()
-        var timestamp = messages[0].timestampMillis
-        if (timestamp <= 0) timestamp = System.currentTimeMillis()
+        val timestamp = com.example.network.ServerClock.resolveSmsArrivalTimestamp(
+            context.applicationContext,
+            messages[0].timestampMillis
+        )
 
         for (msg in messages) {
             msg.displayMessageBody?.let { fullMessageBody.append(it) }
@@ -184,6 +186,12 @@ class SmsReceiver : BroadcastReceiver() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        val compatManager = androidx.core.app.NotificationManagerCompat.from(context)
+        if (!compatManager.areNotificationsEnabled()) return
+        try {
+            compatManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
+        } catch (_: SecurityException) {
+            // Permission revoked between the check and notify call.
+        }
     }
 }

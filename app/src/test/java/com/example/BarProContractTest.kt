@@ -201,7 +201,7 @@ class BarProContractTest {
         assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test"))
         assertEquals("https://barpro.test/api/v1/otp/sms-gateway", c.resolveGatewayUrl("https://barpro.test/"))
         assertEquals("http://192.168.1.100:8000/api/v1/otp/sms-gateway", c.resolveGatewayUrl("http://192.168.1.100:8000"))
-        assertEquals("https://api.barpro.ir/api/v1/otp/sms-gateway", c.resolveGatewayUrl(""))
+        assertEquals("http://87.107.160.251/api/v1/otp/sms-gateway", c.resolveGatewayUrl(""))
     }
 
     @Test fun testRelayGatewaySmsNormalizesInternationalSenderNumber() = runBlocking {

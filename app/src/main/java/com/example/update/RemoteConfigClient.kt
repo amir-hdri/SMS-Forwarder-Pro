@@ -8,7 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 
 sealed interface ConfigFetch {
-    data class Applied(val snapshot: RemoteConfigSnapshot) : ConfigFetch
+    data class Applied(val snapshot: RemoteConfigSnapshot, val rawDocument: String = "") : ConfigFetch
     /** The document verified but is not newer than what we already run — the steady state. */
     object NoChange : ConfigFetch
     data class Failed(val reasonFa: String, val isSecurityRejection: Boolean = false) : ConfigFetch
@@ -71,7 +71,7 @@ class RemoteConfigClient(
                 nowSeconds = System.currentTimeMillis() / 1000L
             )
             if (snapshot.version >= knownVersion) onVerified(snapshot)
-            if (snapshot.version <= knownVersion) ConfigFetch.NoChange else ConfigFetch.Applied(snapshot)
+            if (snapshot.version <= knownVersion) ConfigFetch.NoChange else ConfigFetch.Applied(snapshot, document)
         } catch (_: RemoteConfig.StaleException) {
             ConfigFetch.NoChange
         } catch (_: RemoteConfig.RejectedException) {

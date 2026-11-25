@@ -157,6 +157,11 @@ class AppUpdateManager(
      */
     fun install(apk: File, versionCode: Int, versionName: String?): Boolean {
         if (!apk.isFile || apk.length() <= 0L) return false
+        if (!canInstallPackages()) {
+            store.lastStatusFa = "اجازه نصب برنامه از منابع ناشناس برای بارپرو فعال نیست."
+            UpdateNotifier.showPermissionNeeded(context, unknownSourcesSettingsIntent(), versionName)
+            return false
+        }
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)

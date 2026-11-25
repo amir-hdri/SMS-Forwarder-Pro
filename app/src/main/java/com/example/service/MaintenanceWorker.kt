@@ -47,7 +47,11 @@ class MaintenanceWorker(context: Context, params: WorkerParameters) : CoroutineW
                 if (fetchResult is com.example.update.ConfigFetch.Applied) {
                     repository.updateConfig { latest -> fetchResult.snapshot.applyTo(latest) }
                     com.example.update.RemoteConfig.applyMatchingOverlay(fetchResult.snapshot)
-                    store.recordConfig(fetchResult.snapshot.version)
+                    if (fetchResult.rawDocument.isNotBlank()) {
+                        store.recordConfig(fetchResult.rawDocument, fetchResult.snapshot.version)
+                    } else {
+                        store.recordConfig(fetchResult.snapshot.version)
+                    }
 
                     // Gate against outdated versions:
                     store.recordConfigRequirement(

@@ -193,10 +193,16 @@ fun ManagedDriverScreen(
     val isNameValid = driverFullNameInput.trim().length >= 3
 
     var openedSmsSelection by remember { mutableStateOf(false) }
+    var requestedDualSimPerm by remember { mutableStateOf(false) }
     LaunchedEffect(effectiveActivationState.needsSmsSelection) {
-        if (effectiveActivationState.needsSmsSelection && !openedSmsSelection) {
-            openedSmsSelection = true
-            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) }
+        if (effectiveActivationState.needsSmsSelection) {
+            if (!PermissionHelper.isReadPhoneStateGranted(context) && !requestedDualSimPerm) {
+                requestedDualSimPerm = true
+                permissionsLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
+            } else if (!openedSmsSelection) {
+                openedSmsSelection = true
+                runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) }
+            }
         }
     }
 
@@ -584,6 +590,22 @@ fun ManagedDriverScreen(
                                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text("تلاش مجدد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                                if (effectiveActivationState.needsSmsSelection &&
+                                                    !PermissionHelper.isReadPhoneStateGranted(context)) {
+                                                    OutlinedButton(
+                                                        onClick = {
+                                                            permissionsLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
+                                                        },
+                                                        modifier = Modifier.weight(1f).height(36.dp),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProAmber),
+                                                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                                            brush = androidx.compose.ui.graphics.SolidColor(BarProAmber.copy(alpha = 0.6f))
+                                                        )
+                                                    ) {
+                                                        Text("مجوز سیم‌کارت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                                 OutlinedButton(
                                                     onClick = effectiveOnReset,

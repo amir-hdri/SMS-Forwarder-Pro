@@ -35,6 +35,7 @@ class SmsForwarderApp : Application(), Configuration.Provider {
         } catch (error: Exception) {
             Log.w("SmsForwarderApp", "Update policy recovery deferred: ${error.javaClass.simpleName}")
         }
+        runCatching { com.example.update.RemoteConfig.restoreSavedOverlay(this) }
 
         // Offload database warm-up, crypto salt generation, and worker scheduling
         // to Dispatchers.IO to prevent Main Thread blocking and eliminate cold-start ANR.

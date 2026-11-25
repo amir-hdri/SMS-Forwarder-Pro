@@ -23,6 +23,7 @@ object UpdateNotifier {
     const val CHANNEL_ID = "barpro_app_update"
     private const val ID_CONFIRM_NEEDED = 9301
     private const val ID_MANDATORY = 9302
+    private const val ID_PERMISSION_NEEDED = 9303
 
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -92,6 +93,30 @@ object UpdateNotifier {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(detail))
                 .setContentIntent(pending)
                 .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .build()
+        )
+    }
+
+    /** Surfaces unknown-apps permission prompt when background self-update cannot commit directly. */
+    fun showPermissionNeeded(context: Context, settingsIntent: Intent, versionName: String?) {
+        ensureChannel(context)
+        settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags = flags or PendingIntent.FLAG_IMMUTABLE
+        val pending = PendingIntent.getActivity(context, ID_PERMISSION_NEEDED, settingsIntent, flags)
+        val subtitle = versionName?.let { "برای نصب نسخه $it اجازه نصب برنامه را فعال کنید." }
+            ?: "برای نصب خودکار نسخه جدید، اجازه نصب از منابع ناشناس را فعال کنید."
+        notify(
+            context,
+            ID_PERMISSION_NEEDED,
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_barpro_logo)
+                .setContentTitle("نیاز به مجوز نصب به‌روزرسانی")
+                .setContentText(subtitle)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(subtitle))
+                .setContentIntent(pending)
+                .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
         )

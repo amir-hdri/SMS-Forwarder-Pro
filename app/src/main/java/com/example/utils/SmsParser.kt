@@ -331,7 +331,8 @@ object SmsParser {
                 normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده") ||
                 normMsg.contains("سوخت") || normMsg.contains("سهمیه") || normMsg.contains("پیمایش") ||
                 normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل") ||
-                normMsg.contains("ircars", ignoreCase = true)
+                normMsg.contains("ircars", ignoreCase = true) ||
+                remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
 
         val hasStrongOtpKeyword = normMsg.contains("کد تایید بارنامه") ||
                 normMsg.contains("کد تأیید بارنامه") ||
