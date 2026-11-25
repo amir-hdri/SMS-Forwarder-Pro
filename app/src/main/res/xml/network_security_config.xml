@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Production uses the verified Central IP over HTTPS with an app-scoped CA. Only the public CA is shipped. -->
+<!-- Central HTTP is selected explicitly; other hosts retain their HTTPS-only policy. -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    <domain-config cleartextTrafficPermitted="false">
+    <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">87.107.160.251</domain>
         <trust-anchors>
             <certificates src="@raw/barpro_server_ca" />

@@ -3,6 +3,7 @@ package com.example.enrollment
 import com.example.data.model.AuthType
 import com.example.data.model.ForwardConfig
 import com.example.network.BarProContract
+import com.example.network.ManagedTransport
 import com.example.utils.SmsParser
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -36,8 +37,8 @@ object HubInstallContract {
         left.scheme == right.scheme && left.host == right.host && left.port == right.port
 
     private fun secureRoot(value: String): HttpUrl {
-        val url = requireNotNull(value.toHttpUrlOrNull())
-        require(url.isHttps && url.username.isEmpty() && url.password.isEmpty() &&
+        val url = ManagedTransport.canonical(requireNotNull(value.toHttpUrlOrNull()))
+        require(ManagedTransport.permitsForwarderTransport(url) && url.username.isEmpty() && url.password.isEmpty() &&
             url.query == null && url.fragment == null && url.encodedPath == "/")
         return url
     }
@@ -48,7 +49,8 @@ object HubInstallContract {
         require(json.keys().asSequence().toSet() == setOf("protocol", "server", "capability", "expires_at"))
         require(json.getString("protocol") == "barpro-hub-install-v1")
         val server = secureRoot(json.getString("server"))
-        require(trustedServer.isHttps && sameOrigin(server, trustedServer))
+        val trusted = ManagedTransport.canonical(trustedServer)
+        require(ManagedTransport.permitsForwarderTransport(trusted) && sameOrigin(server, trusted))
         val capability = json.getString("capability")
         require(CAPABILITY.matches(capability))
         val expires = json.getLong("expires_at")
@@ -62,8 +64,8 @@ object HubInstallContract {
         require(json.getString("protocol") == "barpro-hub-v1" && json.getString("device_id") == deviceId)
         val token = json.getString("webhook_token")
         require(TOKEN.matches(token))
-        val endpoint = requireNotNull(json.getString("endpoint_url").toHttpUrlOrNull())
-        require(endpoint.isHttps && sameOrigin(endpoint, server) && endpoint.username.isEmpty() && endpoint.password.isEmpty() &&
+        val endpoint = ManagedTransport.canonical(requireNotNull(json.getString("endpoint_url").toHttpUrlOrNull()))
+        require(ManagedTransport.permitsForwarderTransport(endpoint) && sameOrigin(endpoint, ManagedTransport.canonical(server)) && endpoint.username.isEmpty() && endpoint.password.isEmpty() &&
             endpoint.query == null && endpoint.fragment == null && endpoint.encodedPath == BarProContract.PATH)
         fun phone(name: String): String {
             val phone = SmsParser.normalizePhoneNumber(json.getString(name))

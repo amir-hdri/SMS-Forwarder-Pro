@@ -72,10 +72,10 @@ object BarProContract {
     fun configurationError(config: ForwardConfig, requireRecipient: Boolean = true): String? {
         val url = config.endpointUrl.trim().toHttpUrlOrNull()?.let { ManagedTransport.canonical(it) }
             ?: return "آدرس کامل وب‌هوک بارپرو را وارد کنید."
-        // BarPro serves plain HTTP today, so cleartext is reachable — but only after the operator
-        // has explicitly accepted it. Defaulting to "off" keeps an http:// endpoint from ever being
-        // used by a typo, and keeps the warning in front of whoever configured it.
-        if (!url.isHttps && !config.allowCleartextTransport)
+        // The owner selected Central HTTP; other cleartext endpoints retain their explicit opt-in.
+        if (!url.isHttps && url.host == ManagedTransport.CENTRAL_HOST && !ManagedTransport.isSelectedHttp(url))
+            return "اتصال HTTP بارپرو باید از پورت پیش‌فرض سرور استفاده کند."
+        if (!url.isHttps && !ManagedTransport.isSelectedHttp(url) && !config.allowCleartextTransport)
             return "آدرس وارد‌شده HTTP است؛ ابتدا در تنظیمات گزینه «تأیید اتصال ناامن HTTP» را فعال کنید."
         if (url.username.isNotEmpty() || url.password.isNotEmpty() || url.fragment != null)
             return "آدرس وب‌هوک نباید شامل نام کاربری، رمز یا فرگمنت باشد."

@@ -106,7 +106,7 @@ class SmsReceiver : BroadcastReceiver() {
                 // Show notification if message was forwarded or failed and notifications are enabled
                 val config = repository.getConfig()
                 if (config.showForegroundNotification && (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.FAILED)) {
-                    showForwardNotification(context, sender, log.status)
+                    showForwardNotification(context, sender, log)
                 }
                 }
             } catch (cancelled: CancellationException) {
@@ -139,7 +139,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun showForwardNotification(context: Context, sender: String, status: ForwardStatus) {
+    private fun showForwardNotification(context: Context, sender: String, log: com.example.data.model.ForwardLog) {
         val channelId = "sms_forward_events"
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -164,9 +164,13 @@ class SmsReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val status = log.status
+        val serverConfirmed = status == ForwardStatus.SUCCESS && (log.httpStatusCode ?: 0) in 200..299
         val title = if (status == ForwardStatus.SUCCESS) "پیامک با موفقیت ارسال شد" else "خطا در انتقال پیامک"
-        val content = if (status == ForwardStatus.SUCCESS) {
+        val content = if (serverConfirmed) {
             "ثبت پیامک در سرور تأیید شد."
+        } else if (status == ForwardStatus.SUCCESS && log.httpStatusCode == null) {
+            "تحویل پیامک به اپراتور تأیید شد؛ دریافت سرور تأیید نشده است."
         } else {
             "انتقال پیامک انجام نشد؛ وضعیت صف و شبکه را بررسی کنید."
         }

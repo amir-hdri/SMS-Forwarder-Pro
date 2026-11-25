@@ -31,13 +31,17 @@ abstract class HubProvisioningAssets : DefaultTask() {
     require(fields.keys == setOf("protocol", "server", "capability", "expires_at"))
     require(fields["protocol"] == "barpro-hub-install-v1")
     require((fields["capability"] as? String)?.matches(Regex("[A-Za-z0-9_-]{43}")) == true)
-    val server = URI(fields["server"] as String)
-    val trusted = URI(trustedEndpoint.get())
-    require(server.scheme == "https" && server.host != null && server.userInfo == null &&
+    fun selectedOrigin(value: URI): URI =
+      if (value.host == "87.107.160.251" && value.scheme == "https" && value.port in listOf(-1, 443))
+        URI("http", value.userInfo, value.host, 80, value.path, value.rawQuery, value.fragment)
+      else value
+    val server = selectedOrigin(URI(fields["server"] as String))
+    val trusted = selectedOrigin(URI(trustedEndpoint.get()))
+    require((server.scheme == "https" || (server.scheme == "http" && server.host == "87.107.160.251" && server.port in listOf(-1, 80))) && server.host != null && server.userInfo == null &&
       server.rawQuery == null && server.fragment == null && server.path in listOf("", "/"))
-    val serverPort = if (server.port == -1) 443 else server.port
-    val trustedPort = if (trusted.port == -1) 443 else trusted.port
-    require(server.host == trusted.host && serverPort == trustedPort)
+    val serverPort = if (server.port == -1) (if (server.scheme == "https") 443 else 80) else server.port
+    val trustedPort = if (trusted.port == -1) (if (trusted.scheme == "https") 443 else 80) else trusted.port
+    require(server.scheme == trusted.scheme && server.host == trusted.host && serverPort == trustedPort)
     val expires = (fields["expires_at"] as? Number)?.toLong() ?: error("Missing Hub expiry")
     val now = System.currentTimeMillis() / 1000L
     require(expires > now && expires - now <= 86400L) { "Private Hub capability expired or exceeds 24 hours" }

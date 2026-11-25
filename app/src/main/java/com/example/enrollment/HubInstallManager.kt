@@ -49,8 +49,8 @@ class HubInstallManager(private val role: String, private val key: DeviceBootstr
                     .put("grant", grant).also { saveStage(it.toString()) }
             }
             mutableStatus.value = EnrollmentStatus.ACTIVATING
-            val server = stage.getString("server").toHttpUrl()
-            require(server.isHttps && server.encodedPath == "/" && server.query == null && server.fragment == null)
+            val server = com.example.network.ManagedTransport.canonical(stage.getString("server").toHttpUrl())
+            require(com.example.network.ManagedTransport.permitsForwarderTransport(server) && server.encodedPath == "/" && server.query == null && server.fragment == null)
             val grant = stage.getJSONObject("grant")
             require(grant.getString("protocol") == DeviceBootstrapKey.AUTOMATIC_PROTOCOL)
             val credentials = HubInstallContract.parseCredentials(key.decrypt(grant, stage.getString("nonce"), id), server, id)

@@ -14,13 +14,14 @@ import java.security.SecureRandom
 object HubRequestAuth {
     fun client(base: OkHttpClient, token: String, server: HttpUrl, key: DeviceBootstrapKey): OkHttpClient {
         if (!token.startsWith("HUB1_")) return base
+        val origin = ManagedTransport.canonical(server)
         return base.newBuilder().followRedirects(false).followSslRedirects(false).addNetworkInterceptor { chain ->
             val request = chain.request()
             val path = request.url.encodedPath
             val allowed = path == "/api/v1/otp/bootstrap/prove" ||
                 Regex("/api/v1/otp/(sms-forwarder|sms-gateway)(/09[0-9]{9})?").matches(path)
-            if (!HubInstallContract.TOKEN.matches(token) || !request.url.isHttps ||
-                !HubInstallContract.sameOrigin(request.url, server) || request.url.query != null ||
+            if (!HubInstallContract.TOKEN.matches(token) || !ManagedTransport.permitsForwarderTransport(request.url) ||
+                !HubInstallContract.sameOrigin(request.url, origin) || request.url.query != null ||
                 request.method != "POST" || !allowed) throw IOException("Scoped Hub request destination rejected")
             val body = Buffer().apply { request.body?.writeTo(this) }.readByteArray()
             val device = key.hubDeviceId()

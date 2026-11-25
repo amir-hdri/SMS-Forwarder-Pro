@@ -102,9 +102,11 @@ object ServerHealthMonitor {
     suspend fun performHealthPing(
         context: Context,
         config: ForwardConfig,
-        client: SmsForwarderClient
+        client: SmsForwarderClient,
+        clientOverride: okhttp3.OkHttpClient? = null
     ): ServerHealthState = withContext(Dispatchers.IO) {
-        if (!config.isMasterEnabled || config.endpointUrl.isBlank()) {
+        if (!config.isMasterEnabled || !config.userConsentGiven || config.endpointUrl.isBlank() ||
+            com.example.update.UpdateStore.getInstance(context).blockedByMandatoryUpdate) {
             return@withContext _healthState.value
         }
 
@@ -113,7 +115,7 @@ object ServerHealthMonitor {
             "send_sms" to com.example.utils.PermissionHelper.isSendSmsGranted(context),
             "battery_optimization_ignored" to com.example.utils.PermissionHelper.isBatteryOptimizationIgnored(context)
         )
-        val result = client.checkHealth(config, permissions)
+        val result = client.checkHealth(config, permissions, clientOverride)
 
         if (result.isSuccess) {
             recordSuccess(context, config.endpointUrl, result.durationMs)
@@ -134,12 +136,14 @@ object ServerHealthMonitor {
         periodicJob = scope.launch {
             while (isActive) {
                 val config = configProvider()
-                if (config.isMasterEnabled) {
-                    if (com.example.BuildConfig.APP_ROLE != "DRIVER") {
-                        performHealthPing(context, config, client)
-                    }
+                if (config.isMasterEnabled && config.userConsentGiven &&
+                    !com.example.update.UpdateStore.getInstance(context).blockedByMandatoryUpdate) {
                     try {
-                        onPeriodicTick?.invoke()
+                        // The repository callback owns current-profile checks and the single heartbeat.
+                        if (onPeriodicTick != null) onPeriodicTick.invoke()
+                        else if (com.example.BuildConfig.APP_ROLE != "DRIVER") performHealthPing(context, config, client)
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }

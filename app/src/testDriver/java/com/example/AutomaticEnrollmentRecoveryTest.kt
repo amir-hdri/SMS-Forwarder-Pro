@@ -36,7 +36,7 @@ class AutomaticEnrollmentRecoveryTest {
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
         val repository = SmsForwardRepository(db, appContext = context)
         val disabled = ForwardConfig(driverPhone = "09120000001", setupCompleted = true,
-            endpointUrl = "https://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
+            endpointUrl = "http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
             authHeaderValue = "a".repeat(64), forwarderSecret = "a".repeat(64),
             isMasterEnabled = false, userConsentGiven = false)
         val modem = context.getSystemService(SmsManager::class.java).createForSubscriptionId(17)

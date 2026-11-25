@@ -56,6 +56,10 @@ data class HeartbeatResult(
     val errorMessage: String?
 )
 
+/** OkHttp preserves an IOException through onFailure; cancellation resumes only on the coroutine side. */
+internal class ForwardingAuthorityRevokedException(cancelled: CancellationException) :
+    IOException("Forwarding authority was revoked", cancelled)
+
 class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
     private val hubKey: com.example.enrollment.DeviceBootstrapKey = com.example.enrollment.DeviceBootstrapKey()) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -305,7 +309,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: IOException) {
+            } catch (error: IOException) {
+                if (error is ForwardingAuthorityRevokedException) throw requireNotNull(error.cause as? CancellationException)
                 result = failure("ارتباط با سرور قطع شد یا مهلت آن تمام شد.").copy(
                     isRetryable = true,
                     durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
@@ -340,8 +345,9 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         })
     }
 
-    suspend fun sendHeartbeat(config: ForwardConfig, deviceStatus: DeviceStatus, pendingFailedCount: Int): HeartbeatResult {
-        val result = checkHealth(config, permissions = deviceStatus.permissions)
+    suspend fun sendHeartbeat(config: ForwardConfig, deviceStatus: DeviceStatus, pendingFailedCount: Int,
+        clientOverride: OkHttpClient? = null): HeartbeatResult {
+        val result = checkHealth(config, permissions = deviceStatus.permissions, clientOverride = clientOverride)
         return HeartbeatResult(result.isSuccess, result.httpStatusCode, null, result.durationMs, result.errorMessage)
     }
 

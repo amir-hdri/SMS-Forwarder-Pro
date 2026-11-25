@@ -3,7 +3,7 @@
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors><certificates src="system" /></trust-anchors>
     </base-config>
-    <domain-config cleartextTrafficPermitted="false">
+    <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">87.107.160.251</domain>
         <trust-anchors><certificates src="@raw/barpro_server_ca" /><certificates src="system" /></trust-anchors>
     </domain-config>

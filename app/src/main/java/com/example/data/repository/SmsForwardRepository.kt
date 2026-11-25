@@ -23,6 +23,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.example.network.BarProContract
@@ -240,7 +244,10 @@ class SmsForwardRepository(
                 lastErrorMessage = "تأیید دریافت پیامک سلامت را در پنل بارپرو بررسی کنید."
             )
         }
-        return ServerHealthMonitor.performHealthPing(context, config, client)
+        if (!routineTrafficAllowed(context, config)) return serverHealthState.value
+        val timestamp = System.currentTimeMillis()
+        requireTransmissionAuthority(config, timestamp)
+        return ServerHealthMonitor.performHealthPing(context, config, client, guardedHttpClient(config, timestamp))
     }
 
     suspend fun triggerTestDisconnectAlert(context: Context) = withContext(Dispatchers.IO) {
@@ -338,6 +345,8 @@ class SmsForwardRepository(
         var handedToModem = false
         repeat(minOf(destinations.size, com.example.utils.SmsDispatch.MAX_ATTEMPTS - log.retryCount)) {
             if (!handedToModem) {
+                requireTransmissionAuthority(config, log.receivedTimestamp)
+                val previousAttempt = attemptLog
                 val attemptAt = maxOf(System.currentTimeMillis(), (attemptLog.lastRetryTimestamp ?: 0) + 1)
                 val destination = destinations[attemptLog.retryCount % destinations.size]
                 val summaryText = if (isFallback) "ارسال وب‌هوک ناموفق بود؛ در انتظار نتیجه ارسال پیامک اضطراری به هاب"
@@ -346,6 +355,13 @@ class SmsForwardRepository(
                     retryCount = attemptLog.retryCount + 1, lastRetryTimestamp = attemptAt,
                     responseSummary = summaryText, errorMessage = null)
                 database.forwardLogDao().updateLog(attemptLog)
+                try {
+                    requireTransmissionAuthority(config, log.receivedTimestamp)
+                } catch (cancelled: CancellationException) {
+                    // This checkpoint has not entered the modem; preserve its original owned queue record.
+                    withContext(NonCancellable) { database.forwardLogDao().updateLog(previousAttempt) }
+                    throw cancelled
+                }
                 handedToModem = com.example.utils.SmsRelayHelper.sendFallbackSms(
                     context = context, destinationPhone = destination, driverId = config.driverId,
                     driverPhone = log.recipientPhone, code = code, receivedTimestamp = log.receivedTimestamp,
@@ -368,6 +384,43 @@ class SmsForwardRepository(
             if (handedToModem) null else "ارسال GSM انجام نشد", "", false, 0,
             isRetryable = attemptLog.retryCount < com.example.utils.SmsDispatch.MAX_ATTEMPTS)
     }
+
+    /** Suspension never lends a stopped or replaced private profile to an old transport attempt. */
+    private suspend fun requireTransmissionAuthority(expected: ForwardConfig, timestamp: Long) {
+        currentCoroutineContext().ensureActive()
+        withCurrentConfig { current ->
+            val unchanged = current.isMasterEnabled && current.userConsentGiven &&
+                current.deviceIdentifier == expected.deviceIdentifier && current.driverId == expected.driverId &&
+                current.driverPhone == expected.driverPhone && BarProContract.token(current) == BarProContract.token(expected) &&
+                com.example.network.ManagedTransport.endpoint(current.endpointUrl) ==
+                    com.example.network.ManagedTransport.endpoint(expected.endpointUrl) &&
+                current.fallbackServerPhoneNumber == expected.fallbackServerPhoneNumber &&
+                current.hubIrancellPhoneNumber == expected.hubIrancellPhoneNumber &&
+                current.primarySmsRelayEnabled == expected.primarySmsRelayEnabled &&
+                current.enableSmsFallback == expected.enableSmsFallback &&
+                BarProContract.isTimestampAcceptable(timestamp) &&
+                (appContext == null || (com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext) &&
+                    !com.example.update.UpdateStore.getInstance(appContext).blockedByMandatoryUpdate))
+            if (!unchanged) throw CancellationException("Forwarding authority changed before transport handoff")
+        }
+    }
+
+    private fun guardedHttpClient(config: ForwardConfig, timestamp: Long): okhttp3.OkHttpClient =
+        client.httpClient.newBuilder().apply {
+            interceptors().add(0, okhttp3.Interceptor { chain ->
+                try {
+                    runBlocking { requireTransmissionAuthority(config, timestamp) }
+                } catch (cancelled: CancellationException) {
+                    throw com.example.network.ForwardingAuthorityRevokedException(cancelled)
+                }
+                chain.proceed(chain.request())
+            })
+        }.build()
+
+    private fun routineTrafficAllowed(context: Context, config: ForwardConfig): Boolean =
+        config.isMasterEnabled && config.userConsentGiven &&
+            !com.example.update.UpdateStore.getInstance(context).blockedByMandatoryUpdate &&
+            com.example.utils.PermissionHelper.areForwardingPermissionsGranted(context)
 
     private suspend fun transmitClaimedLog(logId: Long, fastTimeoutMs: Long?): TransmissionResult {
         return withContext(Dispatchers.IO) {
@@ -424,6 +477,7 @@ class SmsForwardRepository(
 
         val activeRules = database.filterRuleDao().getActiveRules()
         val matchedRule = activeRules.firstOrNull { it.label == log.matchedRuleLabel || it.matches(log.sender, rawMessage) }
+        requireTransmissionAuthority(config, log.receivedTimestamp)
 
         // 1. Cellular Health Check or In-Flight/Sent GSM packets: Handled by GSM relay
         val isGsmPacket = com.example.BuildConfig.APP_ROLE == "DRIVER" &&
@@ -441,6 +495,12 @@ class SmsForwardRepository(
         val token = BarProContract.token(config)
         val driverHttpClient = client.httpClient.newBuilder().apply {
             interceptors().add(0, okhttp3.Interceptor { chain ->
+                // Every HTTP retry passes this boundary, including one after backoff or network acquisition.
+                try {
+                    runBlocking { requireTransmissionAuthority(config, log.receivedTimestamp) }
+                } catch (cancelled: CancellationException) {
+                    throw com.example.network.ForwardingAuthorityRevokedException(cancelled)
+                }
                 val orig = chain.request()
                 val req = orig.newBuilder().header("X-Webhook-Token", token).build()
                 chain.proceed(req)
@@ -511,6 +571,8 @@ class SmsForwardRepository(
                     )
                 }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (t: Throwable) {
             TransmissionResult(
                 isSuccess = false,
@@ -909,6 +971,7 @@ class SmsForwardRepository(
             System.currentTimeMillis() - candidateLog.receivedTimestamp >= BarProContract.OTP_TTL_MS) {
             return@withContext OtpInquiryExecutionResult(false, null, candidateLog, null, "پیامک مجاز و تازه برای این گیرنده یافت نشد.")
         }
+        requireTransmissionAuthority(config, candidateLog.receivedTimestamp)
         val rawMessage = try {
             decryptOutbox(candidateLog, config)
         } catch (_: Exception) {
@@ -932,43 +995,31 @@ class SmsForwardRepository(
             )
         }
 
+        requireTransmissionAuthority(config, candidateLog.receivedTimestamp)
+        val guardedClient = guardedHttpClient(config, candidateLog.receivedTimestamp)
+        suspend fun sendInquiry(transport: okhttp3.OkHttpClient) = client.sendOtpInquiryResponse(
+            sender = candidateLog.sender, otpCode = otpCode,
+            requestedTimestamp = requestedTimestamp, smsTimestamp = candidateLog.receivedTimestamp,
+            rawMessage = rawMessage,
+            matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
+            config = config, clientOverride = transport
+        )
         val vpnActive = appContext != null && com.example.network.CellularEgress.isVpnActive(appContext)
         val transmission = if (vpnActive) {
             val egressSession = com.example.network.CellularEgress.acquire(appContext!!, timeoutMs = 4000L)
             if (egressSession != null) {
                 egressSession.use { session ->
-                    client.sendOtpInquiryResponse(
-                        sender = candidateLog.sender,
-                        otpCode = otpCode,
-                        requestedTimestamp = requestedTimestamp,
-                        smsTimestamp = candidateLog.receivedTimestamp,
-                        rawMessage = rawMessage,
-                        matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
-                        config = config,
-                        clientOverride = session.bind(client.httpClient)
-                    )
+                    requireTransmissionAuthority(config, candidateLog.receivedTimestamp)
+                    sendInquiry(session.bind(guardedClient))
                 }
             } else {
-                client.sendOtpInquiryResponse(
-                    sender = candidateLog.sender,
-                    otpCode = otpCode,
-                    requestedTimestamp = requestedTimestamp,
-                    smsTimestamp = candidateLog.receivedTimestamp,
-                    rawMessage = rawMessage,
-                    matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
-                    config = config
-                )
+                requireTransmissionAuthority(config, candidateLog.receivedTimestamp)
+                TransmissionResult(false, null, null,
+                    "فیلترشکن فعال است و اتصال مستقیم به شبکه سلولار ایران میسر نشد.", "", false, 0,
+                    isRetryable = true)
             }
         } else {
-            client.sendOtpInquiryResponse(
-                sender = candidateLog.sender,
-                otpCode = otpCode,
-                requestedTimestamp = requestedTimestamp,
-                smsTimestamp = candidateLog.receivedTimestamp,
-                rawMessage = rawMessage,
-                matchedRuleLabel = candidateLog.matchedRuleLabel ?: "استعلام سرور (On-Demand)",
-                config = config
-            )
+            sendInquiry(guardedClient)
         }
 
         if (transmission.isSuccess) {
@@ -1034,6 +1085,9 @@ class SmsForwardRepository(
             errorMessage = "Context not available"
         )
 
+        if (!routineTrafficAllowed(context, config)) return@withContext com.example.network.HeartbeatResult(
+            false, null, null, 0L, "ارسال پیامک غیرفعال است یا مجوزهای لازم داده نشده است."
+        )
         if (com.example.BuildConfig.APP_ROLE == "DRIVER") {
             val handedToModem = sendDriverLiveness(context, config)
             return@withContext com.example.network.HeartbeatResult(
@@ -1042,10 +1096,13 @@ class SmsForwardRepository(
                     else "پیامک سلامت ارسال نشد؛ مجوزها و تنظیمات هاب را بررسی کنید."
             )
         }
+        val timestamp = System.currentTimeMillis()
         val deviceStatus = com.example.network.DeviceStatusHelper.getDeviceStatus(context)
         val pendingFailedCount = database.forwardLogDao().getFailedLogsCountDirect()
 
-        val result = client.sendHeartbeat(config, deviceStatus, pendingFailedCount)
+        requireTransmissionAuthority(config, timestamp)
+        val result = client.sendHeartbeat(config, deviceStatus, pendingFailedCount,
+            clientOverride = guardedHttpClient(config, timestamp))
         if (result.isSuccess) {
             ServerHealthMonitor.recordSuccess(context, config.endpointUrl, result.durationMs)
 

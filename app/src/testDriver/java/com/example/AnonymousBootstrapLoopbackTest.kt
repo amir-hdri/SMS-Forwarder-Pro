@@ -9,6 +9,8 @@ import com.example.data.repository.SmsForwardRepository
 import com.example.enrollment.*
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import java.net.Proxy
+import java.net.InetSocketAddress
 import okhttp3.OkHttpClient
 import okio.Buffer
 import org.json.JSONObject
@@ -37,28 +39,41 @@ class AnonymousBootstrapLoopbackTest {
         val repository = SmsForwardRepository(db, appContext = context)
         val storage = SecureStorageManager.getInstance(context)
         var anonymousRequests = 0
-        val transport = OkHttpClient.Builder().addInterceptor { chain ->
+        val owned = url.toHttpUrl()
+        val selected = "http://87.107.160.251/".toHttpUrl()
+        val transport = OkHttpClient.Builder().proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", owned.port))).addInterceptor { chain ->
             if (chain.request().url.encodedPath.endsWith("challenge")) {
                 val buffer = Buffer(); chain.request().body!!.writeTo(buffer)
                 assertFalse(JSONObject(buffer.readUtf8()).has("driver_phone")); anonymousRequests++
             }
             chain.proceed(chain.request())
         }.build()
-        val client = BootstrapClient(url.toHttpUrl(), transport)
+        val hubPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+        val hubKey = DeviceBootstrapKey { hubPair }
+        val client = BootstrapClient(selected, transport, hubKey)
+        val capability = JSONObject(requireNotNull(System.getenv("BARPRO_BOOTSTRAP_TEST_PROFILES")))
+            .getJSONObject("ANONYMOUS").getString("capability")
+        val hubGrant = client.enrollHub(capability, hubKey.hubDeviceId(), hubKey)
+        val hubToken = JSONObject(hubKey.decrypt(hubGrant, capability, hubKey.hubDeviceId())).getString("webhook_token")
+        assertTrue(hubToken.startsWith("HUB1_"))
         val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
         var sends = 0
-        val coordinator = BootstrapCoordinator("https://fleet.example.test/".toHttpUrl(), DeviceBootstrapKey { pair },
+        val coordinator = BootstrapCoordinator(selected, DeviceBootstrapKey { pair },
             challenge = client::challenge, poll = client::poll,
             stage = storage::savePendingBootstrap, loadStage = storage::getPendingBootstrap,
             permissionsGranted = { true }, sendSms = { _, nonce ->
                 sends++
                 // This adapter models carrier-origin intake in the owned fixture, not a physical SMS.
                 val proof = BootstrapSms.parse("+989120000001", BootstrapSms.message(nonce))!!
-                runBlocking { client.prove(proof.first, proof.second, "synthetic-hub-secret-at-least-32-bytes") }
+                runBlocking {
+                    val rejected = runCatching { client.prove(proof.first, proof.second, "synthetic-hub-secret-at-least-32-bytes") }.exceptionOrNull()
+                    assertTrue("Shared root cannot authenticate native carrier proof", rejected is BootstrapHttpException && rejected.code == 401)
+                    client.prove(proof.first, proof.second, hubToken)
+                }
                 true
             })
         val device = UUID.randomUUID().toString()
-        val manager = EnrollmentManager("https://fleet.example.test/api/v1/otp/sms-forwarder", "DRIVER", { device },
+        val manager = EnrollmentManager("http://87.107.160.251/api/v1/otp/sms-forwarder", "DRIVER", { device },
             redeem = { _, _ -> error("No links") }, getConfig = repository::getConfig, saveConfig = repository::saveConfig,
             stage = storage::savePendingEnrollment, loadStage = storage::getPendingEnrollment,
             permissionsGranted = { true }, onActivated = {}, bootstrap = coordinator::start)
@@ -68,7 +83,7 @@ class AnonymousBootstrapLoopbackTest {
             val installed = repository.getConfig()
             assertEquals("09120000001", installed.driverPhone)
             assertEquals(device, installed.deviceIdentifier)
-            assertEquals("https://fleet.example.test/api/v1/otp/sms-forwarder/09120000001", installed.endpointUrl)
+            assertEquals("http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001", installed.endpointUrl)
             assertTrue(installed.forwarderSecret.matches(Regex("[0-9a-f]{64}")))
             assertNotEquals("synthetic-hub-secret-at-least-32-bytes", installed.forwarderSecret)
             assertEquals("", db.forwardConfigDao().getConfig()!!.authHeaderValue)

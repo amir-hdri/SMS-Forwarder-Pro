@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [34])
 class EnrollmentOwnershipTest {
     private val phone = "09120000001"
-    private val endpoint = "https://87.107.160.251/api/v1/otp/sms-forwarder/$phone"
+    private val endpoint = "http://87.107.160.251/api/v1/otp/sms-forwarder/$phone"
     private fun credentials() = EnrollmentCredentials(phone, endpoint, "a".repeat(64), "09120000002", "09350000003")
 
     @Test fun cancellingARequestRejectsItsNonCooperativeLateCredential() = runBlocking {
@@ -92,7 +92,7 @@ class EnrollmentOwnershipTest {
 
     @Test fun anotherPhonesStoredCredentialCannotInterceptManualCarrierActivation() = runBlocking {
         val requestedPhone = "09350000004"
-        val requestedEndpoint = "https://87.107.160.251/api/v1/otp/sms-forwarder/$requestedPhone"
+        val requestedEndpoint = "http://87.107.160.251/api/v1/otp/sms-forwarder/$requestedPhone"
         var config = credentials().applyTo(ForwardConfig(), "synthetic-device")
         var pending: String? = null
         val manager = EnrollmentManager(endpoint, "DRIVER", { "synthetic-device" },

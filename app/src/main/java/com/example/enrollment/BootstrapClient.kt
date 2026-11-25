@@ -19,7 +19,7 @@ class BootstrapClient(server: HttpUrl, client: OkHttpClient = OkHttpClient(),
     init {
         require(base.username.isEmpty() && base.password.isEmpty() && base.query == null && base.fragment == null)
         // Localhost is reserved for owned protocol tests, never a deployment origin.
-        require(base.isHttps || base.host in setOf("127.0.0.1", "::1", "localhost")) { "فعال‌سازی به اتصال امن نیاز دارد." }
+        require(com.example.network.ManagedTransport.permitsForwarderTransport(base) || base.host in setOf("127.0.0.1", "::1", "localhost")) { "فعال‌سازی به اتصال مجاز نیاز دارد." }
     }
 
     suspend fun enrollHub(capability: String, deviceId: String, key: DeviceBootstrapKey): JSONObject =

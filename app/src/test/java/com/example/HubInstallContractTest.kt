@@ -40,7 +40,8 @@ class HubInstallContractTest {
     @Test fun privateProfileCannotCrossRoleOriginOrExpiryBoundaries() {
         for ((doc, role) in listOf(profile() to "DRIVER", profile().put("expires_at", 1000) to "HUB",
             profile().put("server", "https://other.example.test/") to "HUB",
-            profile().put("server", "http://87.107.160.251/") to "HUB",
+            profile().put("server", "http://other.example.test/") to "HUB",
+            profile().put("server", "http://87.107.160.251:81/") to "HUB",
             profile().put("capability", "x".repeat(42)) to "HUB")) {
             assertThrows(IllegalArgumentException::class.java) {
                 HubInstallContract.parseProfile(doc.toString(), role, server, 1000)
