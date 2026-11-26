@@ -1,9 +1,9 @@
 # Forward BarPro
 # سامانه هوشمند فورواردر پیامک بارپرو (Forward BarPro)
 
-## انتشار 2.1.11، کد 14 — 2026-11-26
+## انتشار 2.1.12، کد 15 — 2026-11-26
 
-نسخه های رسمی Driver و Hub با ورودی های ساخت تاییدشده (`versionCode=14`)، امضای قبلی (`e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`) و ارتباط مستقیم HTTP مرکزی (`http://87.107.160.251`) در [انتشار v2.1.11](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.11) منتشر شده اند. در این نسخه خطای تغییر ساعت و اختلاف ساعت گوشی (DST / `410`/`422`) با همگام سازی `ServerClock`، ماندگاری تنظیمات ریموت و کلمات کلیدی، حفظ صف ارسال در رله سریع پیامک، بهینه سازی کش PBKDF2، نصب تک سیم کارته هاب و اعلان مجوز آپدیت برطرف شده اند. 673 آزمون JVM (670 پاس، 0 خطا، 3 skip اختیاری loopback: Driver 364 pass / 2 optional skip از 366؛ Hub 306 pass / 1 optional skip از 307)، 4 واریانت Lint با 0 خطا، و ارتقای درجا روی Android 16 شبیه ساز زنده تایید شده اند. [راهنمای نصب 2.1.11](INSTALL_2_1_11.fa.md)، [گزارش انتشار 2.1.11](RELEASE_2_1_11.fa.md) و [پوشه انتشار v2.1.11](releases/v2.1.11/) مرجع فعلی هستند؛ تمامی نسخه های قبلی پاکسازی شده اند.
+نسخه های رسمی Driver و Hub با اصلاح قانون R8 (`OverwritingInputMerger.<init>`)، همگام سازی `ServerClock`، ماندگاری `RemoteConfig` و ارتباط مستقیم HTTP مرکزی (`http://87.107.160.251`) در [انتشار v2.1.12](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.12) منتشر شده اند (`versionCode=15`، امضای قبلی `e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`). در این نسخه مشکل اجرا نشدن ورکرهای `WorkManager` (`HubInstallWorker`، `DriverBootstrapWorker`، `HubBootstrapWorker`، `SmsSyncWorker`) در بیلد Release برطرف و روی شبیه ساز Android 16 تایید شد؛ 673 آزمون JVM (670 پاس، 0 خطا، 3 skip اختیاری loopback) و 4 واریانت Lint با 0 خطا پاس شده اند. [راهنمای نصب 2.1.12](INSTALL_2_1_12.fa.md)، [گزارش انتشار 2.1.12](RELEASE_2_1_12.fa.md) و [پوشه انتشار v2.1.12](releases/v2.1.12/) مرجع فعلی هستند؛ تمامی نسخه های قبلی پاکسازی شده اند.
 
 ## انتشار 2.1.10، کد 13 — 2026-11-25 (تاریخی / حذف شده)
 

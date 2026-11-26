@@ -1,0 +1,73 @@
+{
+  "schema": "forward-barpro/release-verification/v2",
+  "verified_at_utc": "2026-11-26T10:42:11Z",
+  "artifact_status": "verified_exact_public_apks",
+  "release_tag": "v2.1.12",
+  "source_commit": "4159e27323e06bbc168a6e37befb7188a6b18318",
+  "version_code": 15,
+  "version_name": "2.1.12",
+  "apks": [
+    {
+      "role": "driver",
+      "file_name": "Forward-BarPro-Driver-2.1.12.apk",
+      "sha256": "a6c0615a5cd73b06459783fc097d1ce885847851d8a2ab2ba382c3669120ee7c",
+      "bytes": 4404180,
+      "application_id": "ir.barpro.fleet.smsforwarder.driver",
+      "version_code": 15,
+      "version_name": "2.1.12-driver",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false,
+      "overwriting_input_merger_init": true,
+      "has_private_hub_asset": false
+    },
+    {
+      "role": "hub",
+      "file_name": "Forward-BarPro-Hub-2.1.12.apk",
+      "sha256": "c5fd596205c2080604fb7ba2f119c5700d61940d14d8c7ca9051ed1471379b61",
+      "bytes": 4436944,
+      "application_id": "ir.barpro.fleet.smsforwarder.hub",
+      "version_code": 15,
+      "version_name": "2.1.12-hub",
+      "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
+      "debuggable": false,
+      "overwriting_input_merger_init": true,
+      "has_private_hub_asset": false
+    }
+  ],
+  "source_inputs": {
+    "count": 204,
+    "matching_commit_input_count": 204,
+    "source_inputs_asset": "SOURCE_INPUTS.json",
+    "unchanged_after_build": true
+  },
+  "jvm_tests": {
+    "cases": 673,
+    "passed": 670,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 3
+  },
+  "lint": {
+    "driverDebug": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "hubDebug": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "driverRelease": {
+      "errors": 0,
+      "warnings": 103
+    },
+    "hubRelease": {
+      "errors": 0,
+      "warnings": 103
+    }
+  },
+  "r8_emulator_probe": {
+    "overwriting_input_merger_init": true,
+    "sms_sync_worker": "SUCCESS",
+    "hub_install_worker_executed": true
+  }
+}

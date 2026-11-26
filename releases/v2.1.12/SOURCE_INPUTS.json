@@ -1,9 +1,10 @@
 {
-  "version_name": "2.1.11",
-  "version_code": 14,
-  "count": 200,
+  "schema": "forward-barpro/source-inputs/v1",
+  "source_commit": "4159e27323e06bbc168a6e37befb7188a6b18318",
+  "count": 204,
   "files": {
     "app/build.gradle.kts": "41decc0c943484b095dc872faed627213cc58887dc7a6acf349379734baf0829",
+    "app/proguard-rules.pro": "d825269baf377bd219b487d186f218eb658321993f50dcc49264385f722c06bd",
     "app/src/androidTest/java/com/example/DeployedForwarderE2ETest.kt": "66bb0c7b64342ee3569731cad8144b9dc0c53a48334ae6e35313f38d95100410",
     "app/src/androidTest/java/com/example/EnrollmentIntentE2ETest.kt": "5da9e7f4ee341769c9ca86ff52c30f38b921d55d55e33938ae97ad9a2ee7fba1",
     "app/src/androidTest/java/com/example/ExampleInstrumentedTest.kt": "c6ef958cafb00dbec798a71f5be604e9cf56189676312bea40f63dd07ca0d674",
@@ -202,6 +203,9 @@
     "app/src/testHub/java/com/example/HubCredentialConfigurationTest.kt": "2b2079d88d5ed907952969aa9f07778ce12c3589d80c40de6db85ef38d4bf907",
     "app/src/testHub/java/com/example/HubPriorityRelayTest.kt": "0ec2ddc4c439e207f836ab4fd9ccc0e198b89f1f03f13b845b12e1a2c45783c0",
     "app/src/testHub/java/com/example/PrivateHubRelayTest.kt": "7af72f1c4ae3a2b489e3492439b9994014b7b6c9a065f15dd9e19c245fb49e43",
-    "gradle.properties": "d59ee51f86bf4f742dbf20dfd4a19aaf28c02f9efe095b126e0c12bd6a5a3dcd"
+    "build.gradle.kts": "71a325324526b83f32b37433f07fc5777b745eaf8a79b116fb50ecb309675038",
+    "gradle.properties": "3189196e2ba2548bd0a66b71e455d40b84b8203271ae15b0acbb8c0305ceca76",
+    "gradle/libs.versions.toml": "ba5333496326f4779caa3600bacd1e19d17d9f21763c1b447e66722ec9b744ad",
+    "settings.gradle.kts": "d106143dd8c2735710afb896abc8f015d98a720a864eb38f64854bb85a8a0136"
   }
 }

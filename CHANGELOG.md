@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.12 — 2026-11-26
+
+- Keep `androidx.work.InputMerger` (`OverwritingInputMerger.<init>()`) constructors in `app/proguard-rules.pro` so `HubInstallWorker`, `DriverBootstrapWorker`, `HubBootstrapWorker`, and `SmsSyncWorker` execute properly in R8 Release builds (`versionCode=15`, 670/673 JVM passes + 3 optional loopback skips, 4 lint variants with 0 errors, R8 Android 16 WorkManager probe verified).
+- Remove superseded `v2.1.11` release files (`releases/v2.1.11/`, `RELEASE_2_1_11.fa.md`, `INSTALL_2_1_11.fa.md`) so only `v2.1.12` remains.
+
 ## 2.1.11 — 2026-11-26
 
 - Add monotonic `ServerClock` HTTP `Date` synchronization and automatic monotonic retry on clock-skew `410`/`422` rejections without relaxing backend `otp_delivery.py` bounds.
