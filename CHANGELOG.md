@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.13 — 2026-11-27
+
+- Fix Hub direct OTP forwarding (`SmsForwarderClient.forwardMessage` with `requireRecipient = !isHubRole` and `hub_numbers` metadata, plus `SmsForwardRepository.transmitClaimedLog` allowing blank `recipientPhone` on `HUB`) so direct OTPs received on the Hub reach `/api/v1/otp/sms-forwarder`.
+- Fix `SmsParser.isUtcmsSms` and `OtpExtractor` to recognize `"کد تایید"` / `"کد تأیید"` / `"رمز یکبار مصرف"` / `"کد فعالسازی"` while preserving rejection of non-transit consumer apps, and allow unlisted `5000`/`9000` trunks when explicit transit keywords are present.
+- Record visible `ForwardStatus.SKIPPED` log and notification on `Keystore` / `SecureStorageManager` failure in `captureIncomingSms`/`SmsReceiver`, distinguish missing SMS permissions from disabled toggle, and use `ServerClock.calibratedNow` consistently (`versionCode=16`, 675/678 JVM passes + 3 optional loopback skips, 4 lint variants with 0 errors).
+- Remove superseded `v2.1.12` release files (`releases/v2.1.12/`, `RELEASE_2_1_12.fa.md`, `INSTALL_2_1_12.fa.md`) so only `v2.1.13` remains.
+
 ## 2.1.12 — 2026-11-26
 
 - Keep `androidx.work.InputMerger` (`OverwritingInputMerger.<init>()`) constructors in `app/proguard-rules.pro` so `HubInstallWorker`, `DriverBootstrapWorker`, `HubBootstrapWorker`, and `SmsSyncWorker` execute properly in R8 Release builds (`versionCode=15`, 670/673 JVM passes + 3 optional loopback skips, 4 lint variants with 0 errors, R8 Android 16 WorkManager probe verified).

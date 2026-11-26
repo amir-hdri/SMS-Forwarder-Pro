@@ -1,7 +1,11 @@
 # Forward BarPro
 # سامانه هوشمند فورواردر پیامک بارپرو (Forward BarPro)
 
-## انتشار 2.1.12، کد 15 — 2026-11-26
+## انتشار 2.1.13، کد 16 — 2026-11-27
+
+نسخه های رسمی Driver و Hub با رفع باگ ارسال مستقیم OTP از اپ `Hub` (`forwardMessage` با `requireRecipient = false` و ارسال `hub_numbers`)، پشتیبانی از «کد تایید» و سرشماره های `5000`/`9000` دارای کلیدواژه باربری در `SmsParser`، و ثبت لاگ `SKIPPED` هنگام خطای `Keystore` در [انتشار v2.1.13](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.13) منتشر شده اند (`versionCode=16`، امضای قبلی `e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`). 678 آزمون JVM (675 پاس، 0 خطا، 3 skip اختیاری loopback) و 4 واریانت Lint با 0 خطا پاس شده اند. [راهنمای نصب 2.1.13](INSTALL_2_1_13.fa.md)، [گزارش انتشار 2.1.13](RELEASE_2_1_13.fa.md) و [پوشه انتشار v2.1.13](releases/v2.1.13/) مرجع فعلی هستند؛ نسخه قبلی پاکسازی شده است.
+
+## انتشار 2.1.12، کد 15 — 2026-11-26 (تاریخی / حذف شده)
 
 نسخه های رسمی Driver و Hub با اصلاح قانون R8 (`OverwritingInputMerger.<init>`)، همگام سازی `ServerClock`، ماندگاری `RemoteConfig` و ارتباط مستقیم HTTP مرکزی (`http://87.107.160.251`) در [انتشار v2.1.12](https://github.com/amir-hdri/SMS-Forwarder-Pro/releases/tag/v2.1.12) منتشر شده اند (`versionCode=15`، امضای قبلی `e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`). در این نسخه مشکل اجرا نشدن ورکرهای `WorkManager` (`HubInstallWorker`، `DriverBootstrapWorker`، `HubBootstrapWorker`، `SmsSyncWorker`) در بیلد Release برطرف و روی شبیه ساز Android 16 تایید شد؛ 673 آزمون JVM (670 پاس، 0 خطا، 3 skip اختیاری loopback) و 4 واریانت Lint با 0 خطا پاس شده اند. [راهنمای نصب 2.1.12](INSTALL_2_1_12.fa.md)، [گزارش انتشار 2.1.12](RELEASE_2_1_12.fa.md) و [پوشه انتشار v2.1.12](releases/v2.1.12/) مرجع فعلی هستند؛ تمامی نسخه های قبلی پاکسازی شده اند.
 
