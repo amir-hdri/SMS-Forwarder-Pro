@@ -105,9 +105,13 @@ class SmsReceiver : BroadcastReceiver() {
                 )
                 Log.i(TAG, LogSanitizer.sanitize("SMS processed successfully | LogID: ${log.id} | Status: ${log.status} | HTTP: ${log.httpStatusCode} | Extracted OTP: ${log.otpCode ?: "None"}"))
 
-                // Show notification if message was forwarded or failed and notifications are enabled
-                val config = repository.getConfig()
-                if (config.showForegroundNotification && (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.FAILED)) {
+                // Show notification if message was forwarded, failed, or dropped due to secure storage failure
+                val config = runCatching { repository.getConfig() }.getOrNull()
+                val storageFailure = log.status == ForwardStatus.SKIPPED &&
+                    log.errorMessage?.contains("ذخیره‌سازی امن") == true
+                if ((config?.showForegroundNotification == true &&
+                        (log.status == ForwardStatus.SUCCESS || log.status == ForwardStatus.FAILED)) ||
+                    storageFailure) {
                     showForwardNotification(context, sender, log)
                 }
                 }
@@ -167,14 +171,20 @@ class SmsReceiver : BroadcastReceiver() {
         )
 
         val status = log.status
+        val storageFailure = status == ForwardStatus.SKIPPED &&
+            log.errorMessage?.contains("ذخیره‌سازی امن") == true
         val serverConfirmed = status == ForwardStatus.SUCCESS && (log.httpStatusCode ?: 0) in 200..299
-        val title = if (status == ForwardStatus.SUCCESS) "پیامک با موفقیت ارسال شد" else "خطا در انتقال پیامک"
-        val content = if (serverConfirmed) {
-            "ثبت پیامک در سرور تأیید شد."
-        } else if (status == ForwardStatus.SUCCESS && log.httpStatusCode == null) {
-            "تحویل پیامک به اپراتور تأیید شد؛ دریافت سرور تأیید نشده است."
-        } else {
-            "انتقال پیامک انجام نشد؛ وضعیت صف و شبکه را بررسی کنید."
+        val title = when {
+            status == ForwardStatus.SUCCESS -> "پیامک با موفقیت ارسال شد"
+            storageFailure -> "توقف امنیتی فورواردر بارپرو"
+            else -> "خطا در انتقال پیامک"
+        }
+        val content = when {
+            serverConfirmed -> "ثبت پیامک در سرور تأیید شد."
+            status == ForwardStatus.SUCCESS && log.httpStatusCode == null ->
+                "تحویل پیامک به اپراتور تأیید شد؛ دریافت سرور تأیید نشده است."
+            storageFailure -> log.errorMessage ?: "ذخیره‌سازی امن از کار افتاد؛ برنامه را باز کنید."
+            else -> "انتقال پیامک انجام نشد؛ وضعیت صف و شبکه را بررسی کنید."
         }
 
         val notification = NotificationCompat.Builder(context, channelId)

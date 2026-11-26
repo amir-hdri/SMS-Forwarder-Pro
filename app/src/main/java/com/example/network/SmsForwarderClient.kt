@@ -68,6 +68,24 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
 
     private fun failure(message: String) = TransmissionResult(false, null, null, message, "", false, 0)
 
+    private fun attachHubMetadata(
+        payload: JSONObject,
+        extraHeaders: MutableMap<String, String>,
+        config: ForwardConfig
+    ) {
+        if (com.example.BuildConfig.APP_ROLE != "HUB") return
+        extraHeaders["X-App-Role"] = "HUB"
+        payload.put("app_role", "HUB")
+        val hubNums = org.json.JSONArray()
+        val mci = SmsParser.normalizePhoneNumber(config.fallbackServerPhoneNumber)
+        val irancell = SmsParser.normalizePhoneNumber(config.hubIrancellPhoneNumber)
+        if (mci.isNotBlank()) hubNums.put(mci)
+        if (irancell.isNotBlank() && irancell != mci) hubNums.put(irancell)
+        if (hubNums.length() > 0) {
+            payload.put("hub_numbers", hubNums)
+        }
+    }
+
     suspend fun forwardMessage(
         sender: String,
         messageBody: String,
@@ -78,7 +96,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         fastTimeoutMs: Long? = null,
         clientOverride: OkHttpClient? = null
     ): TransmissionResult = withContext(Dispatchers.IO) {
-        BarProContract.configurationError(config)?.let { return@withContext failure(it) }
+        val isHubRole = com.example.BuildConfig.APP_ROLE == "HUB"
+        BarProContract.configurationError(config, requireRecipient = !isHubRole)?.let { return@withContext failure(it) }
         if (!BarProContract.isTimestampAcceptable(timestamp, ServerClock.calibratedNow(appContext)))
             return@withContext failure("کد منقضی است یا ساعت دستگاه درست نیست.")
         val otp = SmsParser.extractOtp(messageBody, sender)
@@ -96,12 +115,7 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         val extraHeaders = mutableMapOf<String, String>()
         if (phone.isNotBlank()) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
-
-        val isHubRole = com.example.BuildConfig.APP_ROLE == "HUB"
-        if (isHubRole) {
-            extraHeaders["X-App-Role"] = "HUB"
-            payload.put("app_role", "HUB")
-        }
+        attachHubMetadata(payload, extraHeaders, config)
 
         post(
             payload, config, expectedStatus = "success",
@@ -122,21 +136,9 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
         if (phone.matches(Regex("09[0-9]{9}"))) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
-        
-        val isHubRole = com.example.BuildConfig.APP_ROLE == "HUB"
+
         val payload = JSONObject().put("event", "HEALTH_CHECK")
-        if (isHubRole) {
-            extraHeaders["X-App-Role"] = "HUB"
-            payload.put("app_role", "HUB")
-            val hubNums = org.json.JSONArray()
-            val mci = SmsParser.normalizePhoneNumber(config.fallbackServerPhoneNumber)
-            val irancell = SmsParser.normalizePhoneNumber(config.hubIrancellPhoneNumber)
-            if (mci.isNotBlank()) hubNums.put(mci)
-            if (irancell.isNotBlank()) hubNums.put(irancell)
-            if (hubNums.length() > 0) {
-                payload.put("hub_numbers", hubNums)
-            }
-        }
+        attachHubMetadata(payload, extraHeaders, config)
         if (!permissions.isNullOrEmpty()) {
             val permJson = JSONObject()
             permissions.forEach { (k, v) -> permJson.put(k, v) }

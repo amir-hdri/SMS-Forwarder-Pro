@@ -399,7 +399,7 @@ class SmsForwardRepository(
                 current.hubIrancellPhoneNumber == expected.hubIrancellPhoneNumber &&
                 current.primarySmsRelayEnabled == expected.primarySmsRelayEnabled &&
                 current.enableSmsFallback == expected.enableSmsFallback &&
-                BarProContract.isTimestampAcceptable(timestamp) &&
+                BarProContract.isTimestampAcceptable(timestamp, com.example.network.ServerClock.calibratedNow(appContext)) &&
                 (appContext == null || (com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext) &&
                     !com.example.update.UpdateStore.getInstance(appContext).blockedByMandatoryUpdate))
             if (!unchanged) throw CancellationException("Forwarding authority changed before transport handoff")
@@ -441,6 +441,7 @@ class SmsForwardRepository(
         if (activeLog.status == ForwardStatus.SUCCESS) {
             return@withContext TransmissionResult(true, activeLog.httpStatusCode, null, null, "", false, 0)
         }
+        val isHubApp = com.example.BuildConfig.APP_ROLE == "HUB"
         val calibratedNow = com.example.network.ServerClock.calibratedNow(appContext)
         val updateStore = appContext?.let { com.example.update.UpdateStore.getInstance(it) }
         val earlyStopReason = when {
@@ -449,7 +450,7 @@ class SmsForwardRepository(
             appContext != null && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext) -> "مجوزهای لازم پیامک داده نشده است."
             activeLog.status == ForwardStatus.SKIPPED -> "این پیامک برای ارسال مجاز نیست."
             !BarProContract.isTimestampAcceptable(activeLog.receivedTimestamp, calibratedNow) -> "اعتبار OTP به پایان رسیده یا ساعت دستگاه نادرست است."
-            activeLog.recipientPhone.isBlank() -> "گیرنده این پیامک قدیمی ثبت نشده؛ ارسال امن ممکن نیست."
+            !isHubApp && activeLog.recipientPhone.isBlank() -> "گیرنده این پیامک قدیمی ثبت نشده؛ ارسال امن ممکن نیست."
             else -> null
         }
         if (earlyStopReason != null) {
@@ -466,7 +467,6 @@ class SmsForwardRepository(
 
         val relayEnvelope = com.example.utils.SmsFallbackEnvelope.parse(rawMessage)
         val isRelay = relayEnvelope != null
-        val isHubApp = com.example.BuildConfig.APP_ROLE == "HUB"
 
         val recipientStopReason = when {
             !isRelay && !isHubApp && log.recipientPhone != com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone) -> "شماره راننده از زمان دریافت پیامک تغییر کرده است."
@@ -666,7 +666,9 @@ class SmsForwardRepository(
                 if (log.lastRetryTimestamp != attemptAt ||
                     log.status !in setOf(ForwardStatus.SMS_DISPATCHED, ForwardStatus.SMS_SENT) ||
                     (!delivered && log.status == ForwardStatus.SMS_SENT)) return@withContext false
-                val expired = !BarProContract.isTimestampAcceptable(log.receivedTimestamp)
+                val expired = !BarProContract.isTimestampAcceptable(
+                    log.receivedTimestamp, com.example.network.ServerClock.calibratedNow(appContext)
+                )
                 val failed = if (delivered) deliveryReport == SmsDispatch.DeliveryReport.FAILED
                     else resultCode != android.app.Activity.RESULT_OK
                 val status = when {
@@ -812,7 +814,28 @@ class SmsForwardRepository(
             recentSmsTimestamps[fingerprint] = now
         }
 
-        val config = getConfig()
+        val config = try {
+            getConfig()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.e(TAG, "Secure storage unavailable while capturing SMS: ${error.javaClass.simpleName}")
+            val log = ForwardLog(
+                sender = sender,
+                messageBody = LogSanitizer.sanitize(messageBody),
+                receivedTimestamp = receivedTimestamp,
+                status = ForwardStatus.SKIPPED,
+                errorMessage = "ذخیره‌سازی امن از کار افتاد؛ برنامه را باز کرده و اتصال امن را دوباره فعال کنید.",
+                smsType = com.example.utils.SmsParser.detectSmsType(messageBody, sender),
+                simSlot = simSlot,
+                otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody, sender)),
+                messageFingerprint = fingerprint
+            )
+            val id = database.forwardLogDao().insertLog(log)
+            val resultLog = log.copy(id = id)
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+            return@withContext CapturedSms(resultLog, false)
+        }
         val relayEnvelope = com.example.utils.SmsFallbackEnvelope.parse(messageBody)
         val isRelay = relayEnvelope != null
 
@@ -873,15 +896,20 @@ class SmsForwardRepository(
             return@withContext CapturedSms(resultLog, false)
         }
 
-        // 1. Check if master toggle is enabled
-        if (!config.isMasterEnabled || !config.userConsentGiven ||
-            (appContext != null && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext))) {
+        // 1. Check if master toggle is enabled and required SMS permissions are granted
+        val permissionsMissing = appContext != null && !com.example.utils.PermissionHelper.areForwardingPermissionsGranted(appContext)
+        if (!config.isMasterEnabled || !config.userConsentGiven || permissionsMissing) {
+            val stopReason = if (!config.isMasterEnabled || !config.userConsentGiven) {
+                "سرویس فوروارد در تنظیمات غیرفعال است"
+            } else {
+                "مجوزهای لازم پیامک داده نشده است"
+            }
             val log = ForwardLog(
                 sender = sender,
                 messageBody = LogSanitizer.sanitize(messageBody),
                 receivedTimestamp = receivedTimestamp,
                 status = ForwardStatus.SKIPPED,
-                errorMessage = "سرویس فوروارد در تنظیمات غیرفعال است",
+                errorMessage = stopReason,
                 endpointUrl = config.endpointUrl,
                 driverId = config.driverId,
                 smsType = com.example.utils.SmsParser.detectSmsType(messageBody),
@@ -930,7 +958,30 @@ class SmsForwardRepository(
                 errorMessage = "این پیامک کد OTP معتبر برای بارپرو ندارد.", smsType = smsType)
             return@withContext CapturedSms(skipped.copy(id = database.forwardLogDao().insertLog(skipped)), false)
         }
-        val outboxKey = requireNotNull(secureStorage) { "Secure storage unavailable" }.getOrCreateOutboxKey()
+        val outboxKey = try {
+            requireNotNull(secureStorage) { "Secure storage unavailable" }.getOrCreateOutboxKey()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            stopForStorageFailure()
+            val skipped = ForwardLog(
+                sender = sender,
+                messageBody = LogSanitizer.sanitize(messageBody),
+                receivedTimestamp = receivedTimestamp,
+                status = ForwardStatus.SKIPPED,
+                errorMessage = "ذخیره‌سازی امن از کار افتاد؛ برنامه را باز کرده و اتصال امن را دوباره فعال کنید.",
+                endpointUrl = config.endpointUrl,
+                driverId = config.driverId,
+                smsType = smsType,
+                simSlot = simSlot,
+                otpCode = LogSanitizer.maskOtp(extractedOtp),
+                messageFingerprint = fingerprint
+            )
+            val id = database.forwardLogDao().insertLog(skipped)
+            val resultLog = skipped.copy(id = id)
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+            return@withContext CapturedSms(resultLog, false)
+        }
         val enc = AesEncryptionUtils.encrypt(messageBody, outboxKey)
         val encryptedPayload = "v2:" + enc.iv + ":" + enc.ciphertext
 
@@ -992,7 +1043,9 @@ class SmsForwardRepository(
 
         if (!config.isMasterEnabled || !config.userConsentGiven || candidateLog.status == ForwardStatus.SKIPPED ||
             candidateLog.recipientPhone != com.example.utils.SmsParser.normalizePhoneNumber(config.driverPhone) ||
-            System.currentTimeMillis() - candidateLog.receivedTimestamp >= BarProContract.OTP_TTL_MS) {
+            !BarProContract.isTimestampAcceptable(
+                candidateLog.receivedTimestamp, com.example.network.ServerClock.calibratedNow(appContext)
+            )) {
             return@withContext OtpInquiryExecutionResult(false, null, candidateLog, null, "پیامک مجاز و تازه برای این گیرنده یافت نشد.")
         }
         requireTransmissionAuthority(config, candidateLog.receivedTimestamp)

@@ -240,5 +240,22 @@ class SmsParserTest {
         assertEquals("463295", SmsParser.extractOtp("کد ورود: 463295", sender = "7777000982"))
         assertEquals(com.example.data.model.SmsType.UTCMS_OTP, SmsParser.detectSmsType(msgReal, sender = "7777000982"))
     }
+
+    @Test
+    fun testUnlistedMobileOrTrunkWithOtpOrTransitKeywords() {
+        // Direct OTP SMS with "کد تایید" from an ordinary mobile or unlisted shortcode
+        assertTrue(SmsParser.isUtcmsSms("09184110414", "کد تایید: 525456"))
+        assertEquals("525456", SmsParser.extractOtp("کد تایید: 525456", sender = "09184110414"))
+
+        // Unlisted 5000/9000 shortcode carrying explicit transit keywords must not be dropped as ad
+        assertTrue(SmsParser.isUtcmsSms("5000999888", "کد تایید بارنامه UTCMS: 54321"))
+        assertEquals("54321", SmsParser.extractOtp("کد تایید بارنامه UTCMS: 54321", sender = "5000999888"))
+        assertTrue(SmsParser.isUtcmsSms("90001234", "سامانه بارپرو - کد ورود: 67890"))
+        assertEquals("67890", SmsParser.extractOtp("سامانه بارپرو - کد ورود: 67890", sender = "90001234"))
+
+        // Promotional 5000/9000 SMS without transit context remains blocked
+        assertFalse(SmsParser.isUtcmsSms("50001234", "کد تخفیف ویژه خرید اول: 98765"))
+        assertNull(SmsParser.extractOtp("کد تخفیف ویژه خرید اول: 98765", sender = "50001234"))
+    }
 }
 

@@ -20,9 +20,9 @@ object OtpExtractor {
     private val reverse = Regex("""(?<![0-9])([0-9]{4,8})(?![0-9])[^0-9]{0,25}(?:""" + keyword + ")", RegexOption.IGNORE_CASE)
 
     fun extractUtcMsOtp(text: String, sender: String = ""): String? {
-        if (SmsParser.isBankOrAdSender(sender)) return null
         val clean = normalizeDigits(text).replace("\u200f", "")
         if (SmsParser.isBankOrAdContent(clean) || clean.contains("رمز دوم")) return null
+        if (sender.isNotBlank() && !SmsParser.isAllowedSenderForContent(sender, clean)) return null
         forward.find(clean)?.let { return it.groupValues[1] }
         reverse.find(clean)?.let { return it.groupValues[1] }
         if (listOf("رهگیری", "ردیابی", "شماره بارنامه", "ثبت شد", "صادر شد", "ثبت گردید").any { clean.contains(it) })

@@ -97,9 +97,10 @@ object SmsParser {
     }
 
     /**
-     * Checks if a sender is a known bank shortcode/name or a generic promotional advertising sender.
+     * Checks if a sender is a known bank shortcode/name or a promotional textual sender
+     * (excluding bare 5000/9000 numeric trunks, which are handled contextually).
      */
-    fun isBankOrAdSender(sender: String): Boolean {
+    private fun isHardBankOrAdSender(sender: String): Boolean {
         if (sender.isBlank()) return false
         val cleanSender = normalizeDigits(sender).trim().lowercase()
         val digitsOnly = cleanSender.replace(Regex("""\D"""), "")
@@ -120,18 +121,32 @@ object SmsParser {
         if (KNOWN_BANK_NUMBERS.contains(digitsOnly)) return true
         if (KNOWN_BANK_PERSIAN_KEYWORDS.any { cleanSender.contains(it) }) return true
 
-        // 2. Advertising numbers (Iran standard bulk SMS trunks 5000..., 9000...)
-        if (digitsOnly.startsWith("5000") || digitsOnly.startsWith("9000")) return true
-
-        // 3. Ad / Promotional textual senders
+        // 2. Ad / Promotional textual senders
         val adKeywords = listOf("تبلیغ", "tabligh", "adv", "off", "تخفیف", "discount", "فروشگاه", "shop", "prize", "قرعه")
         if (adKeywords.any { cleanSender.contains(it) }) return true
 
         return false
     }
 
+    private fun isBulkSmsTrunkPrefix(sender: String): Boolean {
+        if (sender.isBlank()) return false
+        val cleanSender = normalizeDigits(sender).trim().lowercase()
+        if (isWhitelistedSender(sender) || cleanSender.contains("barpro") || cleanSender.contains("utcms") || cleanSender.contains("rmto") || cleanSender.contains("ircars")) {
+            return false
+        }
+        val digitsOnly = cleanSender.replace(Regex("""\D"""), "")
+        return digitsOnly.startsWith("5000") || digitsOnly.startsWith("9000")
+    }
+
     /**
-     * Detects bank transactional messages or commercial advertising content.
+     * Checks if a sender is a known bank shortcode/name or a generic promotional advertising sender.
+     */
+    fun isBankOrAdSender(sender: String): Boolean {
+        return isHardBankOrAdSender(sender) || isBulkSmsTrunkPrefix(sender)
+    }
+
+    /**
+     * Detects bank transactional messages, commercial advertising, or non-transit consumer app content.
      */
     fun isBankOrAdContent(normalizedText: String): Boolean {
         val bankPhrases = listOf(
@@ -142,12 +157,35 @@ object SmsParser {
         if (bankPhrases.any { normalizedText.contains(it) }) return true
 
         val adPhrases = listOf(
-            "کد تخفیف", "تخفیف ویژه", "فروش ویژه", "قرعه کشی", "جایزه نقدی"
+            "کد تخفیف", "تخفیف ویژه", "فروش ویژه", "قرعه کشی", "جایزه نقدی",
+            "اپلیکیشن خرید", "خرید آنلاین", "فروشگاه اینترنتی", "سبد خرید"
         )
         if (adPhrases.any { normalizedText.contains(it) }) return true
 
         return false
     }
+
+    private fun hasExplicitTransitKeywords(normMsg: String): Boolean =
+        normMsg.contains("UTCMS", ignoreCase = true) ||
+            normMsg.contains("بارنامه") ||
+            normMsg.contains("باربرگ") ||
+            normMsg.contains("راهداری") ||
+            normMsg.contains("شهرداری") ||
+            normMsg.contains("سهمیه سوخت") ||
+            normMsg.contains("بارپرو") ||
+            normMsg.contains("BarPro", ignoreCase = true) ||
+            normMsg.contains("ircars", ignoreCase = true) ||
+            remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
+
+    private fun isBlockedSenderForMessage(sender: String, normMsg: String): Boolean {
+        if (isHardBankOrAdSender(sender)) return true
+        // Unlisted 5000/9000 trunks are allowed only when the SMS carries explicit transit/BarPro keywords.
+        if (isBulkSmsTrunkPrefix(sender) && !hasExplicitTransitKeywords(normMsg)) return true
+        return false
+    }
+
+    fun isAllowedSenderForContent(sender: String, normalizedMessage: String): Boolean =
+        !isBlockedSenderForMessage(sender, normalizedMessage)
 
     /**
      * Converts Persian (۰-۹) and Arabic (٠-٩) numerals to ASCII digits (0-9)
@@ -183,26 +221,39 @@ object SmsParser {
      * Rejects bank shortcodes and bulk promotional advertising messages.
      */
     fun isUtcmsSms(phoneNumber: String, messageBody: String): Boolean {
-        if (isBankOrAdSender(phoneNumber)) {
-            return false
-        }
         val normMsg = normalizeDigits(messageBody)
         if (isBankOrAdContent(normMsg)) {
             return false
         }
+        if (isBlockedSenderForMessage(phoneNumber, normMsg)) {
+            return false
+        }
 
         val isSenderMatch = isWhitelistedSender(phoneNumber)
-        val isBodyMatch = normMsg.contains("UTCMS", ignoreCase = true) ||
-                normMsg.contains("بارنامه") ||
-                normMsg.contains("باربرگ") ||
-                normMsg.contains("راهداری") ||
-                normMsg.contains("شهرداری") ||
-                normMsg.contains("سهمیه سوخت") ||
-                normMsg.contains("بارپرو") ||
-                normMsg.contains("BarPro", ignoreCase = true) ||
-                normMsg.contains("ircars", ignoreCase = true) ||
+        // UTCMS shortcodes rotate and arrive as OTP-only texts from senders absent from the
+        // built-in list. A strong OTP request is already transport-related evidence, so the
+        // smart filter must not drop it before the repository can forward it.
+        val isBodyMatch = hasExplicitTransitKeywords(normMsg) ||
                 normMsg.contains("کد ورود") ||
-                remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
+                normMsg.contains("کد تایید") ||
+                normMsg.contains("کد تأیید") ||
+                normMsg.contains("کد تائید") ||
+                normMsg.contains("رمز یکبار مصرف") ||
+                normMsg.contains("رمز یکبارمصرف") ||
+                normMsg.contains("رمز یک‌بار مصرف") ||
+                normMsg.contains("کد یکبار مصرف") ||
+                normMsg.contains("کد یکبارمصرف") ||
+                normMsg.contains("کد فعالسازی") ||
+                normMsg.contains("کد فعال‌سازی") ||
+                normMsg.contains("کد امنیتی") ||
+                normMsg.contains("کد مجوز") ||
+                normMsg.contains("کد صدور") ||
+                normMsg.contains("کد ثبت") ||
+                normMsg.contains("رمز ورود") ||
+                normMsg.contains("رمز تایید") ||
+                normMsg.contains("رمز تأیید") ||
+                normMsg.contains("احراز هویت") ||
+                normMsg.contains("اعتبارسنجی")
 
         return isSenderMatch || isBodyMatch
     }
@@ -211,12 +262,11 @@ object SmsParser {
      * Categorizes an SMS into a specific SmsType.
      */
     fun detectSmsType(messageBody: String, sender: String = ""): SmsType {
-        if (isBankOrAdSender(sender)) {
-            return SmsType.OTHER
-        }
-
         val normMsg = normalizeDigits(messageBody)
         if (isBankOrAdContent(normMsg)) {
+            return SmsType.OTHER
+        }
+        if (isBlockedSenderForMessage(sender, normMsg)) {
             return SmsType.OTHER
         }
 
@@ -316,23 +366,19 @@ object SmsParser {
      * rather than generic isolated words like "کد" or "رمز".
      */
     fun extractOtp(messageBody: String, sender: String = ""): String? {
-        if (sender.isNotBlank() && isBankOrAdSender(sender)) {
-            return null
-        }
         val normMsg = normalizeDigits(messageBody)
         if (isBankOrAdContent(normMsg)) {
             return null
         }
+        if (sender.isNotBlank() && isBlockedSenderForMessage(sender, normMsg)) {
+            return null
+        }
 
         // Strong contextual validation (Waybill, Transport, Municipal UTCMS, and Fuel quota / Fuel card systems)
-        val hasTransitContext = isWhitelistedSender(sender) ||
-                normMsg.contains("بارنامه") || normMsg.contains("بارپرو") ||
-                normMsg.contains("UTCMS", ignoreCase = true) || normMsg.contains("راهداری") ||
-                normMsg.contains("شهرداری") || normMsg.contains("باربرگ") || normMsg.contains("راننده") ||
+        val hasTransitContext = isWhitelistedSender(sender) || hasExplicitTransitKeywords(normMsg) ||
+                normMsg.contains("راننده") ||
                 normMsg.contains("سوخت") || normMsg.contains("سهمیه") || normMsg.contains("پیمایش") ||
-                normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل") ||
-                normMsg.contains("ircars", ignoreCase = true) ||
-                remoteKeywords.any { normMsg.contains(it, ignoreCase = true) }
+                normMsg.contains("کارت سوخت") || normMsg.contains("نفت گاز") || normMsg.contains("گازوئیل")
 
         val hasStrongOtpKeyword = normMsg.contains("کد تایید بارنامه") ||
                 normMsg.contains("کد تأیید بارنامه") ||
