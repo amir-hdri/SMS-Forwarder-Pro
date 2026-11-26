@@ -87,3 +87,12 @@
 # ------------------------------------------------------------------------------
 -keep class com.example.update.** { *; }
 -keepclassmembers class com.example.update.** { *; }
+
+# ------------------------------------------------------------------------------
+# 8. WorkManager InputMerger reflection constructors (R8 full mode fix)
+# ------------------------------------------------------------------------------
+# androidx.work:work-runtime 2.9.1 consumer rules keep InputMerger subclasses
+# without keeping <init>(), causing NoSuchMethodException on release APKs.
+-keep class * extends androidx.work.InputMerger {
+    public <init>(...);
+}
