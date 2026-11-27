@@ -1,6 +1,11 @@
 # Changelog
 
-## 2.1.13 — 2026-11-27
+## 2.1.14 — 2026-11-27
+
+- Fix Hub direct-SMS SIM attribution when `subId` contains digit `2` (`SIM 1 (Sub #2)`, `SIM 1 (Sub #12)`, `Sub #2`): extract real SIM slot index & carrier/number via `SubscriptionManager` / `TelephonyManager.createForSubscriptionId` in `DriverSmsSubscription.kt` and `SmsReceiver.kt`, and emit structured `sim_index` and `hub_target_phone` in `SmsForwarderClient.kt` (paired with `BarPro-main` strict prefix / target-phone routing) (`versionCode=17`, 676/679 JVM passes + 3 optional loopback skips, 4 lint variants with 0 errors).
+- Remove superseded `v2.1.13` release files (`releases/v2.1.13/`, `RELEASE_2_1_13.fa.md`, `INSTALL_2_1_13.fa.md`) so only `v2.1.14` remains.
+
+## 2.1.13 — 2026-11-27 (superseded)
 
 - Fix Hub direct OTP forwarding (`SmsForwarderClient.forwardMessage` with `requireRecipient = !isHubRole` and `hub_numbers` metadata, plus `SmsForwardRepository.transmitClaimedLog` allowing blank `recipientPhone` on `HUB`) so direct OTPs received on the Hub reach `/api/v1/otp/sms-forwarder`.
 - Fix `SmsParser.isUtcmsSms` and `OtpExtractor` to recognize `"کد تایید"` / `"کد تأیید"` / `"رمز یکبار مصرف"` / `"کد فعالسازی"` while preserving rejection of non-transit consumer apps, and allow unlisted `5000`/`9000` trunks when explicit transit keywords are present.

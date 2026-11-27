@@ -1,6 +1,6 @@
 {
   "schema": "forward-barpro/source-inputs/v1",
-  "source_commit": "e53aaceefe19c729f79c2ce81e22847777d92933",
+  "source_commit": "70125d203b4b3265b3223f0b6812e7cc0c7e6545",
   "count": 206,
   "files": {
     "app/build.gradle.kts": "41decc0c943484b095dc872faed627213cc58887dc7a6acf349379734baf0829",
@@ -50,10 +50,10 @@
     "app/src/main/java/com/example/network/ManagedTransport.kt": "77f9ad6f86adff500ba61536d8308e34bbe1b072b9c55d7c1e976ae184d31126",
     "app/src/main/java/com/example/network/ServerClock.kt": "5e72f0ac827bd8d38605ee88e0e3045c5dacfe0304d9a541ce4c3f75a3e0cb2c",
     "app/src/main/java/com/example/network/ServerHealthMonitor.kt": "f34c49573f4f7b74d95d2e5b8c4635cb4ffb52541004c7b0eba24397fc52480a",
-    "app/src/main/java/com/example/network/SmsForwarderClient.kt": "0494f5afcac29cbb19c19184e243727dbbf2e190bd5ede4b437c567b14f501f8",
+    "app/src/main/java/com/example/network/SmsForwarderClient.kt": "08782c833cec1f72311bd2b4db7b05fe22128427d6420fa77643f78177d09a28",
     "app/src/main/java/com/example/otp/OtpExtractor.kt": "33ca579f389d4fc0aba0a740241c7655a860a56db10dbff0c489cced08e4f9b7",
     "app/src/main/java/com/example/receiver/BootReceiver.kt": "5e0fa8563a70643e073979756c4542934b1cee15e19d1f3a650cb29b659099af",
-    "app/src/main/java/com/example/receiver/SmsReceiver.kt": "8712ec48cf73ee9cb2bf67fb93aa4b6fb833666db696cea3ba40358ba79dcbe1",
+    "app/src/main/java/com/example/receiver/SmsReceiver.kt": "67f743bbfdbe3de570799020ec7dc674109d16c7053e89be43649c74710ce04a",
     "app/src/main/java/com/example/service/CleanupWorker.kt": "adfc7d5fcbbdeee67538036a74649c79866d77ce54268b59ac751a35e3306c7a",
     "app/src/main/java/com/example/service/HeartbeatAlarmManager.kt": "397e395c237d7094092cb1bfd8be32eed784629307a0108a5d3ef53efe735b47",
     "app/src/main/java/com/example/service/HeartbeatAlarmReceiver.kt": "8bca9e96411ba0064381ef0f55c81321aec4fa89922ad8aa89e1e429073e4a24",
@@ -90,7 +90,7 @@
     "app/src/main/java/com/example/update/UpdateStore.kt": "caa8488ee8e828791468e1bd0c8481a6ef9a6fa14aa2b4f5423090b140511c28",
     "app/src/main/java/com/example/utils/CarrierDetector.kt": "25ec756cf2876393a879cf425e25807a134815a45ee48e417373a52c092c83a0",
     "app/src/main/java/com/example/utils/CarrierRoutingTable.kt": "ede5c655eeb6c0a104af91245f5c505291bbe99e52470f6419ed2e0f248ec941",
-    "app/src/main/java/com/example/utils/DriverSmsSubscription.kt": "568783773dd1bb48d6d355bc58c7a118f9ec7197f8453d13b8dc06d5454c6c14",
+    "app/src/main/java/com/example/utils/DriverSmsSubscription.kt": "99780973463170259fd91abc6be9308e892737dde11639ebdffd7bbccc388b2f",
     "app/src/main/java/com/example/utils/KeyedMutex.kt": "04d27a4f1f69118fed8fce48b217f6d867b2bff007b882173e94c846322742c5",
     "app/src/main/java/com/example/utils/LogSanitizer.kt": "cf0508d0a9189e181449dc7236563f2633d99bf333a2e537516add78e0dced0c",
     "app/src/main/java/com/example/utils/PermissionHelper.kt": "4a5d2b6e5f4c9847e614399ca4d4a700051afd5af31453c46f08c3f03edd6124",
@@ -202,11 +202,11 @@
     "app/src/testDriver/java/com/example/SmsDispatchReliabilityTest.kt": "2188afc643fb854d5a475d91fb312f2f96b00613171cedfaf0eb4513349f0ca6",
     "app/src/testHub/java/com/example/HubBootstrapConsentRaceTest.kt": "28fae259dfc4c060171c55d8981d3ecb961b0c0c9bcefa54b082f3c0883fbc26",
     "app/src/testHub/java/com/example/HubCredentialConfigurationTest.kt": "2b2079d88d5ed907952969aa9f07778ce12c3589d80c40de6db85ef38d4bf907",
-    "app/src/testHub/java/com/example/HubDirectForwardTest.kt": "c5b4f4a2a138692a5321a57c13f91188dc316f194532e7e27e13d706bc15ea14",
+    "app/src/testHub/java/com/example/HubDirectForwardTest.kt": "bb0c51b175fc8cda9b32cddd1a5b06dc89204a30a970c4b8db6b42949e2e6fba",
     "app/src/testHub/java/com/example/HubPriorityRelayTest.kt": "0ec2ddc4c439e207f836ab4fd9ccc0e198b89f1f03f13b845b12e1a2c45783c0",
     "app/src/testHub/java/com/example/PrivateHubRelayTest.kt": "7af72f1c4ae3a2b489e3492439b9994014b7b6c9a065f15dd9e19c245fb49e43",
     "build.gradle.kts": "71a325324526b83f32b37433f07fc5777b745eaf8a79b116fb50ecb309675038",
-    "gradle.properties": "755410e5c33b3e4332becbbf735632899529d457191f76f369b7503313798c8e",
+    "gradle.properties": "419ce790c1d5a925b861a3784d143947a382b8f3ee90e81875a15031df50748f",
     "gradle/libs.versions.toml": "ba5333496326f4779caa3600bacd1e19d17d9f21763c1b447e66722ec9b744ad",
     "settings.gradle.kts": "d106143dd8c2735710afb896abc8f015d98a720a864eb38f64854bb85a8a0136"
   }

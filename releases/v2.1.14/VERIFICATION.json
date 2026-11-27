@@ -1,20 +1,20 @@
 {
   "schema": "forward-barpro/release-verification/v2",
-  "verified_at_utc": "2026-11-26T21:58:48Z",
+  "verified_at_utc": "2026-11-27T08:40:15Z",
   "artifact_status": "verified_exact_public_apks",
-  "release_tag": "v2.1.13",
-  "source_commit": "e53aaceefe19c729f79c2ce81e22847777d92933",
-  "version_code": 16,
-  "version_name": "2.1.13",
+  "release_tag": "v2.1.14",
+  "source_commit": "70125d203b4b3265b3223f0b6812e7cc0c7e6545",
+  "version_code": 17,
+  "version_name": "2.1.14",
   "apks": [
     {
       "role": "driver",
-      "file_name": "Forward-BarPro-Driver-2.1.13.apk",
-      "sha256": "02bb63b657e03bba01b53092135a884db7c4308a83666d264189c3fa10f0047c",
-      "bytes": 4404176,
+      "file_name": "Forward-BarPro-Driver-2.1.14.apk",
+      "sha256": "db9f36309929827468d5ec4fb7b2d99e963a5f1d14ef32c761bdf6bbe2f56ef7",
+      "bytes": 4404180,
       "application_id": "ir.barpro.fleet.smsforwarder.driver",
-      "version_code": 16,
-      "version_name": "2.1.13-driver",
+      "version_code": 17,
+      "version_name": "2.1.14-driver",
       "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
       "debuggable": false,
       "overwriting_input_merger_init": true,
@@ -22,12 +22,12 @@
     },
     {
       "role": "hub",
-      "file_name": "Forward-BarPro-Hub-2.1.13.apk",
-      "sha256": "b16fe30d88bc08be9fe15317a14061ef67e2eb37d17ca6ec3843f1172335c80f",
+      "file_name": "Forward-BarPro-Hub-2.1.14.apk",
+      "sha256": "405844e85f81a7121a689954e07d43f3051be03e3a5c4a8ece0a455eaba15a6f",
       "bytes": 4436940,
       "application_id": "ir.barpro.fleet.smsforwarder.hub",
-      "version_code": 16,
-      "version_name": "2.1.13-hub",
+      "version_code": 17,
+      "version_name": "2.1.14-hub",
       "signer_sha256": "e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5",
       "debuggable": false,
       "overwriting_input_merger_init": true,
@@ -41,8 +41,8 @@
     "unchanged_after_build": true
   },
   "jvm_tests": {
-    "cases": 678,
-    "passed": 675,
+    "cases": 679,
+    "passed": 676,
     "failed": 0,
     "errors": 0,
     "skipped": 3
@@ -50,19 +50,19 @@
   "lint": {
     "driverDebug": {
       "errors": 0,
-      "warnings": 103
+      "warnings": 104
     },
     "hubDebug": {
       "errors": 0,
-      "warnings": 103
+      "warnings": 104
     },
     "driverRelease": {
       "errors": 0,
-      "warnings": 103
+      "warnings": 104
     },
     "hubRelease": {
       "errors": 0,
-      "warnings": 103
+      "warnings": 104
     }
   }
 }
