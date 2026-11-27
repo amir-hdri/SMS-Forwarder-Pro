@@ -60,9 +60,12 @@ class SmsReceiver : BroadcastReceiver() {
                 ?: msg.messageBody?.let { fullMessageBody.append(it) }
         }
 
-        val slotIndex = intent.getIntExtra("slot", intent.getIntExtra("phone", intent.getIntExtra("simId", -1)))
+        var slotIndex = intent.getIntExtra("slot", intent.getIntExtra("phone", intent.getIntExtra("simId", -1)))
         val subId = intent.getIntExtra(android.telephony.SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
             intent.getIntExtra("subscription", intent.getIntExtra("sub_id", -1)))
+        if (slotIndex < 0 && subId >= 0) {
+            slotIndex = com.example.utils.DriverSmsSubscription.detectSlotIndex(context.applicationContext, subId)
+        }
         val simSlot = com.example.utils.DriverSmsSubscription.label(slotIndex, subId)
 
         val messageText = fullMessageBody.toString().trim()

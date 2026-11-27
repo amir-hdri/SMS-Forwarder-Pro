@@ -15,6 +15,7 @@ import com.example.data.repository.SmsForwardRepository
 import com.example.enrollment.DeviceBootstrapKey
 import com.example.network.BarProContract
 import com.example.network.SmsForwarderClient
+import com.example.utils.DriverSmsSubscription
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.After
@@ -128,6 +129,99 @@ class HubDirectForwardTest {
             } finally {
                 db.close()
             }
+        }
+    }
+
+    @Test fun structuredSimIndexIgnoresSubIdDigitsAndExtractsExplicitSlot() = runBlocking {
+        assertEquals(1, DriverSmsSubscription.slotNumber("SIM 1 (Sub #2)"))
+        assertEquals(1, DriverSmsSubscription.slotNumber("SIM 1 (Sub #12)"))
+        assertEquals(2, DriverSmsSubscription.slotNumber("SIM 2 (Sub #1)"))
+        assertEquals(2, DriverSmsSubscription.slotNumber("SIM 2 (Sub #22)"))
+        assertNull(DriverSmsSubscription.slotNumber("Sub #2"))
+        assertNull(DriverSmsSubscription.slotNumber("Sub #4"))
+        assertNull(DriverSmsSubscription.slotNumber("Unknown SIM"))
+
+        OwnedHubTlsServer().use { owned ->
+            val bodies = mutableListOf<JSONObject>()
+            val scopedToken = "HUB1_" + "a".repeat(16) + "_" + "b".repeat(64)
+            val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+            val deviceId = "hub_" + MessageDigest.getInstance("SHA-256").digest(pair.public.encoded)
+                .joinToString("") { "%02x".format(it) }.take(32)
+
+            owned.server.createContext("/api/v1/otp/sms-forwarder") { exchange ->
+                val rawBody = exchange.requestBody.readBytes()
+                bodies.add(JSONObject(rawBody.toString(Charsets.UTF_8)))
+                val body = """{"success":true,"status":"success","otp_detected":true}"""
+                exchange.sendResponseHeaders(200, body.length.toLong())
+                exchange.responseBody.use { it.write(body.toByteArray()) }
+            }
+
+            val client = SmsForwarderClient(owned.client, DeviceBootstrapKey { pair }, context)
+            val hubConfig = ForwardConfig(
+                endpointUrl = owned.root + "/api/v1/otp/sms-forwarder",
+                authType = AuthType.CUSTOM_HEADER,
+                authHeaderKey = BarProContract.TOKEN_HEADER,
+                authHeaderValue = scopedToken,
+                forwarderSecret = scopedToken,
+                deviceIdentifier = deviceId,
+                driverPhone = "",
+                fallbackServerPhoneNumber = "09966567754",
+                hubIrancellPhoneNumber = "09047119812",
+                isMasterEnabled = true,
+                userConsentGiven = true,
+                setupCompleted = true,
+                maxRetries = 0
+            )
+
+            // Case 1: SIM 1 (Sub #12) sends sim_index=1 (must NOT treat "12" as slot 2!)
+            val res1 = client.forwardMessage(
+                sender = "09184110414",
+                messageBody = "کد تایید: 112233",
+                timestamp = System.currentTimeMillis(),
+                config = hubConfig,
+                simSlot = "SIM 1 (Sub #12)"
+            )
+            assertTrue("SIM 1 (Sub #12) should succeed: ${res1.errorMessage}", res1.isSuccess)
+            assertEquals("SIM 1 (Sub #12)", bodies.last().optString("sim_slot"))
+            assertEquals(1, bodies.last().optInt("sim_index", -1))
+
+            // Case 2: Sub #2 without slot extra must omit sim_index rather than guessing 2
+            val res2 = client.forwardMessage(
+                sender = "09184110414",
+                messageBody = "کد تایید: 445566",
+                timestamp = System.currentTimeMillis(),
+                config = hubConfig,
+                simSlot = "Sub #2"
+            )
+            assertTrue("Sub #2 should succeed: ${res2.errorMessage}", res2.isSuccess)
+            assertEquals("Sub #2", bodies.last().optString("sim_slot"))
+            assertFalse("Sub #2 without slot prefix must not emit sim_index", bodies.last().has("sim_index"))
+
+            // Case 3: Irancell SIM resolved via SubscriptionManager emits hub_target_phone even for Sub #4 (no slot extra)
+            shadowOf(context).grantPermissions(Manifest.permission.READ_PHONE_STATE)
+            val tm = context.getSystemService(android.content.Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+            shadowOf(tm).setSimOperator("43235")
+            shadowOf(tm).setSimOperatorName("MTN Irancell")
+            val subMgr = context.getSystemService(android.content.Context.TELEPHONY_SUBSCRIPTION_SERVICE) as android.telephony.SubscriptionManager
+            val subInfo = org.robolectric.shadows.ShadowSubscriptionManager.SubscriptionInfoBuilder.newBuilder()
+                .setId(4)
+                .setSimSlotIndex(1)
+                .setCarrierName("Irancell")
+                .setMcc("432")
+                .setMnc("35")
+                .buildSubscriptionInfo()
+            shadowOf(subMgr).setActiveSubscriptionInfos(subInfo)
+
+            val res3 = client.forwardMessage(
+                sender = "09184110414",
+                messageBody = "کد تایید: 778899",
+                timestamp = System.currentTimeMillis(),
+                config = hubConfig,
+                simSlot = "Sub #4"
+            )
+            assertTrue("Sub #4 with SubscriptionManager info should succeed: ${res3.errorMessage}", res3.isSuccess)
+            assertEquals(2, bodies.last().optInt("sim_index", -1))
+            assertEquals("09047119812", bodies.last().optString("hub_target_phone"))
         }
     }
 }

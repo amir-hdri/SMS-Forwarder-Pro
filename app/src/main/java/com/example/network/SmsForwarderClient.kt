@@ -71,7 +71,8 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
     private fun attachHubMetadata(
         payload: JSONObject,
         extraHeaders: MutableMap<String, String>,
-        config: ForwardConfig
+        config: ForwardConfig,
+        simSlot: String? = null
     ) {
         if (com.example.BuildConfig.APP_ROLE != "HUB") return
         extraHeaders["X-App-Role"] = "HUB"
@@ -83,6 +84,13 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         if (irancell.isNotBlank() && irancell != mci) hubNums.put(irancell)
         if (hubNums.length() > 0) {
             payload.put("hub_numbers", hubNums)
+        }
+        if (!simSlot.isNullOrBlank()) {
+            appContext?.let { ctx ->
+                com.example.utils.DriverSmsSubscription.resolveHubTargetPhone(ctx, simSlot, config)?.let { target ->
+                    payload.put("hub_target_phone", target)
+                }
+            }
         }
     }
 
@@ -103,6 +111,11 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         val otp = SmsParser.extractOtp(messageBody, sender)
             ?: return@withContext failure("پیامک شامل کد OTP معتبر نیست.")
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
+        val resolvedSimIndex = com.example.utils.DriverSmsSubscription.slotNumber(simSlot)
+            ?: appContext?.let { ctx ->
+                val subId = com.example.utils.DriverSmsSubscription.id(simSlot)
+                com.example.utils.DriverSmsSubscription.detectSlotIndex(ctx, subId).takeIf { it >= 0 }?.plus(1)
+            }
         val payload = JSONObject().apply {
             put("event", "SMS_RECEIVED")
             put("driver_phone", phone)
@@ -111,11 +124,14 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
             put("timestamp", timestamp)
             put("device_id", config.deviceIdentifier)
             put("sim_slot", simSlot)
+            if (resolvedSimIndex != null) {
+                put("sim_index", resolvedSimIndex)
+            }
         }
         val extraHeaders = mutableMapOf<String, String>()
         if (phone.isNotBlank()) extraHeaders[BarProContract.DRIVER_PHONE_HEADER] = phone
         if (config.deviceIdentifier.isNotBlank()) extraHeaders[BarProContract.DEVICE_ID_HEADER] = config.deviceIdentifier
-        attachHubMetadata(payload, extraHeaders, config)
+        attachHubMetadata(payload, extraHeaders, config, simSlot)
 
         post(
             payload, config, expectedStatus = "success",
