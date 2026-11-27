@@ -1,3 +1,17 @@
+# Antigravity v2.1.13 Hub direct-SMS, SmsParser & Keystore visibility release — 2026-11-27
+
+Current release `v2.1.13` (`versionCode=16`, source commit `e53aaceefe19c729f79c2ce81e22847777d92933`, tag `v2.1.13`, docs/release commit `500ffd8`) preserves all `2.1.11`/`2.1.12` hardening (`OverwritingInputMerger` R8 keep, `ServerClock` sync, `RemoteConfig` persistence, STOP/consent/RSA/Central HTTP80 boundaries) and fixes:
+- **Hub direct SMS (`SmsForwarderClient.kt`, `SmsForwardRepository.kt`)**:
+  - Exempts `isHubApp` from the `recipientPhone.isBlank()` pre-check in `SmsForwardRepository.transmitClaimedLog` (`!isHubApp && activeLog.recipientPhone.isBlank()`) and passes `requireRecipient = !isHubRole` in `SmsForwarderClient.forwardMessage`.
+  - Attaches `hub_numbers` (`fallbackServerPhoneNumber`, `hubIrancellPhoneNumber`) in direct Hub `forwardMessage` payloads so paired `BarPro-main` `48411db4` attributes authenticated Hub direct SMS to verified `HUB_NUMBERS` after single-flight resolution.
+- **`SmsParser.kt` & `OtpExtractor.kt`**:
+  - Adds strong Persian OTP triggers (`کد تایید`, `کد تأیید`, `کد تائید`, `رمز یکبار مصرف`, `کد فعالسازی`, `کد امنیتی`, etc.) to `isUtcmsSms` while rejecting non-transit app content (`اپلیکیشن خرید`, etc.) in `isBankOrAdContent`.
+  - Allows `5000`/`9000` trunk prefixes when `hasExplicitTransitKeywords` is true and not blocked content (preserving `isBankOrAdSender("5000123456") == true`).
+- **Keystore failure visibility & accurate permission/clock checks (`SmsForwardRepository.kt`, `SmsReceiver.kt`)**:
+  - Catches `getConfig()` / `getOrCreateOutboxKey()` failures in `captureIncomingSms`, records a `ForwardStatus.SKIPPED` `ForwardLog` with explicit Keystore failure reason, and surfaces a warning notification instead of dropping silently.
+  - Splits disabled vs missing SMS permission `SKIPPED` messages and aligns timestamp checks with `ServerClock.calibratedNow(appContext)`.
+- Verified: `testDriverDebugUnitTest` (`368` total, `366` passed, `0` failed, `2` optional skips), `testHubDebugUnitTest` (`310` total, `309` passed, `0` failed, `1` optional skip), 4 Lint variants (`0` errors, `103` warnings each), public release APKs & `20/20` HTTP 200 tag/latest downloads + 8 signed payloads verified (`Forward-BarPro-Driver-2.1.13.apk` sha256 `02bb63b657e03bba01b53092135a884db7c4308a83666d264189c3fa10f0047c`, `Forward-BarPro-Hub-2.1.13.apk` sha256 `b16fe30d88bc08be9fe15317a14061ef67e2eb37d17ca6ec3843f1172335c80f`, signer `e8a9dec1977df7b260a99979d3c58867d01a00f5dfc587034e33513d868549f5`). Private Hub `2.1.13` APK built outside Git/public (`sha256` `8a297b0c5569ca33a318ba63eb0427c27ecfd78531d8a892d7978a22f6912d4e`, clean public Hub rebuild confirmed without `assets/barpro_hub_install.json`).
+
 # Antigravity v2.1.11 production fixes, live verification & release — 2026-11-26
 
 Current release `v2.1.11` (`versionCode=14`, source commit `19fcd347d0d3e2f33c4a38f850fc4ed8c3b55efd`, tag `v2.1.11`) fixes all production issues found during runtime/code audit across both Driver and Hub roles while preserving STOP, consent, private keys/profiles, and Central HTTP80 (`http://87.107.160.251`) security boundaries:
