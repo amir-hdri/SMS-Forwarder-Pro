@@ -108,8 +108,10 @@ class SmsForwarderClient(val httpClient: OkHttpClient = OkHttpClient(),
         BarProContract.configurationError(config, requireRecipient = !isHubRole)?.let { return@withContext failure(it) }
         if (!BarProContract.isTimestampAcceptable(timestamp, ServerClock.calibratedNow(appContext)))
             return@withContext failure("کد منقضی است یا ساعت دستگاه درست نیست.")
+        // Raw carrier messages use the same coordinated-sender policy for both roles.
+        // Signed driver relays and activation proofs use their own authenticated routes.
         val otp = SmsParser.extractOtp(messageBody, sender)
-            ?: return@withContext failure("پیامک شامل کد OTP معتبر نیست.")
+            ?: return@withContext failure("پیامک شامل کد OTP معتبر از فرستنده هماهنگ‌شده نیست.")
         val phone = SmsParser.normalizePhoneNumber(config.driverPhone)
         val resolvedSimIndex = com.example.utils.DriverSmsSubscription.slotNumber(simSlot)
             ?: appContext?.let { ctx ->

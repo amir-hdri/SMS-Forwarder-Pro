@@ -81,7 +81,7 @@ class BarProContractTest {
     @Test fun ambiguousOtpErrorMessage() = runBlocking {
         val ambiguousResponse = """{"detail":"AMBIGUOUS_OTP: Multiple pending waybills awaiting OTP; driver_phone is required to disambiguate"}"""
         val result = client(ambiguousResponse, code = 422)
-            .forwardMessage("20007777", "کد تایید: 12345", System.currentTimeMillis(), config)
+            .forwardMessage("20007777", "کد تایید: 123456", System.currentTimeMillis(), config)
         assertFalse(result.isSuccess)
         assertEquals(422, result.httpStatusCode)
         assertTrue(result.errorMessage?.contains("چندین بارنامه همزمان منتظر OTP هستند") == true)
@@ -89,7 +89,7 @@ class BarProContractTest {
 
     @Test fun http200AloneIsNotAnOtpReceipt() = runBlocking {
         for (body in listOf("<html>login</html>", "{}", """{"status":"ignored"}""", """{"success":false}""")) {
-            assertFalse(client(body).forwardMessage("UTCMS", "کد تایید: 12345", System.currentTimeMillis(), config).isSuccess)
+            assertFalse(client(body).forwardMessage("UTCMS", "کد تایید: 123456", System.currentTimeMillis(), config).isSuccess)
         }
     }
 
@@ -110,7 +110,7 @@ class BarProContractTest {
 
     @Test fun staleSmsNeverReachesNetwork() = runBlocking {
         val requests = mutableListOf<Request>()
-        val result = client("{}", requests = requests).forwardMessage("UTCMS", "کد تایید: 12345",
+        val result = client("{}", requests = requests).forwardMessage("UTCMS", "کد تایید: 123456",
             System.currentTimeMillis() - 300_001, config)
         assertFalse(result.isSuccess)
         assertTrue(requests.isEmpty())
@@ -132,19 +132,21 @@ class BarProContractTest {
     }
 
     @Test fun parsingDoesNotTruncatePhonesOrPreferTrackingNumbers() {
-        for (text in listOf("کد تایید: 123456789", "کد ورود: 09123456789", "کد رهگیری بارنامه: 12345"))
-            assertNull(text, SmsParser.extractOtp(text))
-        assertEquals("876543", SmsParser.extractOtp("کد رهگیری 12345 و کد تایید بارنامه: 876543"))
-        assertFalse(SmsParser.isUtcmsSms("300012345", "کد تایید اپلیکیشن خرید: 12345"))
+        for (text in listOf("کد تایید: 123456789", "کد ورود: 09123456789", "کد رهگیری بارنامه: 123456", "کد تایید: 12345"))
+            assertNull(text, SmsParser.extractOtp(text, sender = "7777000982"))
+        assertEquals("876543", SmsParser.extractOtp("کد رهگیری 123456 و کد تایید بارنامه: 876543", sender = "7777000982"))
+        assertFalse(SmsParser.isUtcmsSms("300012345", "کد تایید اپلیکیشن خرید: 123456"))
     }
 
     @Test fun expandedOtpKeywordsMatchingBarProBackend() {
-        assertEquals("84920", SmsParser.extractOtp("کد امنیتی: 84920"))
-        assertEquals("53124", SmsParser.extractOtp("کد صدور بارنامه 53124"))
-        assertEquals("92831", SmsParser.extractOtp("رمز یکبارمصرف: 92831"))
-        assertEquals("61524", SmsParser.extractOtp("کد مجوز ورود به بارپرو 61524"))
-        assertEquals("73921", SmsParser.extractOtp("UTCMS auth code: 73921"))
-        assertEquals("42109", SmsParser.extractOtp("کد ثبت سامانه بارنامه: 42109"))
+        assertEquals("849201", SmsParser.extractOtp("کد امنیتی: 849201", sender = "7777000982"))
+        assertEquals("531246", SmsParser.extractOtp("کد صدور بارنامه 531246", sender = "20007777"))
+        assertEquals("928310", SmsParser.extractOtp("رمز یکبارمصرف: 928310", sender = "30001923"))
+        assertEquals("615249", SmsParser.extractOtp("کد مجوز ورود به بارپرو 615249", sender = "BARPRO"))
+        assertEquals("739218", SmsParser.extractOtp("UTCMS auth code: 739218", sender = "UTCMS"))
+        assertEquals("421093", SmsParser.extractOtp("کد ثبت سامانه بارنامه: 421093", sender = "10008545"))
+        // Bare 6-digit numeric code inside coordinated message without keyword
+        assertEquals("833282", SmsParser.extractOtp("پیام سامانه بارنامه 833282", sender = "7777000982"))
     }
     @Test fun probeReceiptRequiresExactPhoneTimestampAndPositiveReceiptTime() = runBlocking {
         val timestamp = System.currentTimeMillis()

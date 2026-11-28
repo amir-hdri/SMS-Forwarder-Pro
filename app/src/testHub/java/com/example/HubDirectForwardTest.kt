@@ -110,7 +110,7 @@ class HubDirectForwardTest {
                 repository.saveConfig(hubConfig)
 
                 val log = repository.processIncomingSms(
-                    sender = "09184110414",
+                    sender = "30001923",
                     messageBody = "کد تایید: 525456",
                     receivedTimestamp = System.currentTimeMillis(),
                     simSlot = "SIM 1"
@@ -173,9 +173,27 @@ class HubDirectForwardTest {
                 maxRetries = 0
             )
 
+            val unlisted = client.forwardMessage(
+                sender = "09120000002",
+                messageBody = "کد تایید: 112233",
+                timestamp = System.currentTimeMillis(),
+                config = hubConfig,
+                simSlot = "SIM 1"
+            )
+            assertFalse("A direct OTP requires a coordinated sender", unlisted.isSuccess)
+            val wrongLength = client.forwardMessage(
+                sender = "30001923",
+                messageBody = "کد تایید: 1122337",
+                timestamp = System.currentTimeMillis(),
+                config = hubConfig,
+                simSlot = "SIM 1"
+            )
+            assertFalse("A direct OTP requires six digits", wrongLength.isSuccess)
+            assertTrue("Rejected messages must never reach the server", bodies.isEmpty())
+
             // Case 1: SIM 1 (Sub #12) sends sim_index=1 (must NOT treat "12" as slot 2!)
             val res1 = client.forwardMessage(
-                sender = "09184110414",
+                sender = "30001923",
                 messageBody = "کد تایید: 112233",
                 timestamp = System.currentTimeMillis(),
                 config = hubConfig,
@@ -187,7 +205,7 @@ class HubDirectForwardTest {
 
             // Case 2: Sub #2 without slot extra must omit sim_index rather than guessing 2
             val res2 = client.forwardMessage(
-                sender = "09184110414",
+                sender = "30001923",
                 messageBody = "کد تایید: 445566",
                 timestamp = System.currentTimeMillis(),
                 config = hubConfig,
@@ -213,7 +231,7 @@ class HubDirectForwardTest {
             shadowOf(subMgr).setActiveSubscriptionInfos(subInfo)
 
             val res3 = client.forwardMessage(
-                sender = "09184110414",
+                sender = "30001923",
                 messageBody = "کد تایید: 778899",
                 timestamp = System.currentTimeMillis(),
                 config = hubConfig,

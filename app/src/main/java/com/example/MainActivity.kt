@@ -199,9 +199,10 @@ fun MainAppScreen(viewModel: MainViewModel) {
     }
 
     LaunchedEffect(Unit) {
-        if (!com.example.utils.PermissionHelper.areCriticalPermissionsGranted(context)) {
+        val missingDriverSimPerms = isDriver && !com.example.utils.PermissionHelper.areDriverSimPermissionsGranted(context)
+        if (!com.example.utils.PermissionHelper.areCriticalPermissionsGranted(context) || missingDriverSimPerms) {
             requestingPermissions = true
-            initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+            initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getDriverActivationRuntimePermissions())
         } else {
             requestBackgroundIfNeeded()
         }
@@ -214,7 +215,7 @@ fun MainAppScreen(viewModel: MainViewModel) {
     LaunchedEffect(enrollmentStatus) {
         if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.NEEDS_PERMISSIONS && !requestingPermissions) {
             requestingPermissions = true
-            initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getRequiredRuntimePermissions())
+            initialPermissionLauncher.launch(com.example.utils.PermissionHelper.getDriverActivationRuntimePermissions())
         }
         if (enrollmentStatus == com.example.enrollment.EnrollmentStatus.ACTIVE) {
             requestBackgroundIfNeeded()
@@ -668,7 +669,7 @@ fun LogDetailDialog(
                 }
 
                 // Extracted OTP Code
-                val otpToDisplay = log.otpCode ?: com.example.otp.OtpExtractor.extractOtp(log.messageBody)
+                val otpToDisplay = log.otpCode ?: com.example.otp.OtpExtractor.extractOtp(log.sender, log.messageBody).code
                 otpToDisplay?.let { otp ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(

@@ -24,7 +24,12 @@ class DriverBootstrapWorker(context: Context, parameters: WorkerParameters) : Co
             runtime.activateAutomatically()
             when (runtime.enrollment.status.value) {
                 EnrollmentStatus.ACTIVE, EnrollmentStatus.NEEDS_PERMISSIONS -> Result.success()
-                else -> if (runtime.enrollment.failureRetryable && runAttemptCount < 6) Result.retry() else Result.failure()
+                else -> if (runtime.enrollment.failureRetryable && runAttemptCount < 6) {
+                    Result.retry()
+                } else {
+                    if (!runtime.enrollment.failureRetryable) runtime.stopBackgroundRecovery()
+                    Result.failure()
+                }
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { if (runAttemptCount < 6) Result.retry() else Result.failure() }

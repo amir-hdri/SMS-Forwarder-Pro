@@ -167,9 +167,10 @@ class EnrollmentManager(
         } catch (error: Exception) {
             writeOwned(owner) {
                 mutableNeedsSmsSelection.value = error is BootstrapSmsNotSent && error.needsSmsSelection
-                failureRetryable = !mutableNeedsSmsSelection.value && error !is DriverNameMismatchException &&
+                failureRetryable = (error as? BootstrapSmsNotSent)?.retryable != false &&
+                    !mutableNeedsSmsSelection.value && error !is DriverNameMismatchException &&
                     !(error is BootstrapHttpException && error.code in setOf(400, 401, 403, 422))
-                mutableErrorMessage.value = error.message ?: "خطا در استعلام مشخصات راننده از سرور"
+                mutableErrorMessage.value = formatError(error)
                 mutableStatus.value = EnrollmentStatus.FAILED
             }
         }
@@ -239,7 +240,7 @@ class EnrollmentManager(
             }
         } catch (error: Exception) {
             writeOwned(owner) {
-                mutableErrorMessage.value = error.message
+                mutableErrorMessage.value = formatError(error)
                 mutableStatus.value = EnrollmentStatus.FAILED
                 failureRetryable = error !is DriverNameMismatchException
             }
@@ -309,6 +310,27 @@ class EnrollmentManager(
             throw cancelled
         } catch (_: Exception) {
             // Scheduled maintenance retries liveness; do not misreport preserved old configuration.
+        }
+    }
+
+    companion object {
+        /** Translate low-level OkHttp/socket failures into clear Persian driver guidance. */
+        internal fun formatError(
+            error: Exception,
+            fallback: String = "خطا در استعلام مشخصات راننده از سرور"
+        ): String = when (error) {
+            is java.io.EOFException ->
+                "خطا در دریافت پاسخ از سرور؛ در صورت روشن بودن VPN آن را خاموش کرده و دوباره تلاش کنید."
+            is java.net.SocketTimeoutException ->
+                "خطا در ارتباط با سرور (پایان مهلت پاسخ)؛ اتصال اینترنت را بررسی کرده و دوباره تلاش کنید."
+            is java.io.IOException -> {
+                if (error.message.orEmpty().contains("unexpected end of stream", ignoreCase = true)) {
+                    "خطا در دریافت پاسخ از سرور؛ در صورت روشن بودن VPN آن را خاموش کرده و دوباره تلاش کنید."
+                } else {
+                    "خطا در ارتباط شبکه با سرور؛ اتصال اینترنت (و خاموش بودن VPN) را بررسی کرده و دوباره تلاش کنید."
+                }
+            }
+            else -> error.message ?: fallback
         }
     }
 }

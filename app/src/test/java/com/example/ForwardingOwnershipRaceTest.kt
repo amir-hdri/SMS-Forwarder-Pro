@@ -87,7 +87,7 @@ class ForwardingOwnershipRaceTest {
     }
 
     private suspend fun insert(): Long {
-        val encrypted = AesEncryptionUtils.encrypt("کد تایید: 54321", SecureStorageManager.getInstance(context).getOrCreateOutboxKey())
+        val encrypted = AesEncryptionUtils.encrypt("کد تایید: 543210", SecureStorageManager.getInstance(context).getOrCreateOutboxKey())
         return db.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "کد تایید: ***",
             recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
             simSlot = "SIM 2 (Sub #17)", encryptedBody = "v2:${encrypted.iv}:${encrypted.ciphertext}"))

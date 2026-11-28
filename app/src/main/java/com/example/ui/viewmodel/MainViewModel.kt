@@ -103,7 +103,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         else -> {
                             _driverActivationState.value = DriverActivationUiState(
                                 isLoading = false,
-                                errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور"
+                                errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور",
+                                needsSmsSelection = enrollment.needsSmsSelection.value
                             )
                         }
                     }
@@ -112,7 +113,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (error: Exception) {
                     _driverActivationState.value = DriverActivationUiState(
                         isLoading = false,
-                        errorMessage = error.message ?: "خطا در فعال‌سازی خودکار سیم‌کارت"
+                        errorMessage = com.example.enrollment.EnrollmentManager.formatError(error, "خطا در فعال‌سازی خودکار سیم‌کارت")
                     )
                 }
             }
@@ -156,7 +157,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     else -> {
                         _driverActivationState.value = DriverActivationUiState(
                             isLoading = false,
-                            errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور"
+                            errorMessage = enrollment.errorMessage.value ?: "خطا در استعلام مشخصات راننده از سرور",
+                            needsSmsSelection = enrollment.needsSmsSelection.value
                         )
                     }
                 }
@@ -165,7 +167,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (error: Exception) {
                 _driverActivationState.value = DriverActivationUiState(
                     isLoading = false,
-                    errorMessage = error.message ?: "خطا در برقراری ارتباط با سرور بارپرو"
+                    errorMessage = com.example.enrollment.EnrollmentManager.formatError(error, "خطا در برقراری ارتباط با سرور بارپرو")
                 )
             }
         }

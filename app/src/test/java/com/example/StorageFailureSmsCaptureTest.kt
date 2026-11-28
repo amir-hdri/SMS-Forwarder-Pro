@@ -66,7 +66,7 @@ class StorageFailureSmsCaptureTest {
         val repo = SmsForwardRepository.getInstance(context)
         val log = repo.processIncomingSms(
             sender = "7777000982",
-            messageBody = "کد ورود: 12345",
+            messageBody = "کد ورود: 123456",
             receivedTimestamp = System.currentTimeMillis(),
             simSlot = "SIM 1"
         )

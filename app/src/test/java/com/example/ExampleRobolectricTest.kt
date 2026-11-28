@@ -29,20 +29,20 @@ class ExampleRobolectricTest {
 
     @Test
     fun `verify OTP extractor extracts Persian and English codes`() {
-        // Persian digits test
+        // Persian digits test (coordinated sender)
         val persianMsg = "کد ورود به سامانه بارپرو (BarPro): ۸۴۹۲۰۱ اعتبار ۲ دقیقه"
-        val otp1 = OtpExtractor.extractOtp(persianMsg)
+        val otp1 = OtpExtractor.extractOtp("7777000982", persianMsg).code
         assertEquals("849201", otp1)
 
-        // English digits test
+        // English digits test (coordinated sender)
         val englishMsg = "Your security OTP code is 738192. Do not share with anyone."
-        val otp2 = OtpExtractor.extractOtp(englishMsg)
+        val otp2 = OtpExtractor.extractOtp("UTCMS", englishMsg).code
         assertEquals("738192", otp2)
 
-        // Mixed test
-        val mixedMsg = "رمز یکبار مصرف شما: 58219"
-        val otp3 = OtpExtractor.extractOtp(mixedMsg)
-        assertEquals("58219", otp3)
+        // Standalone 6-digit code from coordinated sender
+        val mixedMsg = "رمز یکبار مصرف شما: 582194"
+        val otp3 = OtpExtractor.extractOtp("20007777", mixedMsg).code
+        assertEquals("582194", otp3)
     }
 
     @Test
@@ -138,12 +138,12 @@ class ExampleRobolectricTest {
     fun `verify UTCMS numbers and OTP detection in SmsParser`() {
         val sample1 = "سامانه مدیریت سوخت و ناوگان UTCMS: کد رهگیری 987654 و رمز اعتبار 432109 صادر شد."
         assertTrue("Message should be recognized as UTCMS", com.example.utils.SmsParser.isUtcmsSms("10001234", sample1))
-        assertEquals("432109", com.example.utils.SmsParser.extractOtp(sample1))
+        assertEquals("432109", com.example.utils.SmsParser.extractOtp(sample1, sender = "10001234"))
         assertEquals("987654", com.example.utils.SmsParser.extractTrackingCode(sample1))
 
         val sample2 = "بارپرو - حواله بارنامه ثبت گردید. کد تایید: 887231"
         assertTrue("Message should be recognized as UTCMS/BarPro", com.example.utils.SmsParser.isUtcmsSms("BARPRO", sample2))
-        assertEquals("887231", com.example.utils.SmsParser.extractOtp(sample2))
+        assertEquals("887231", com.example.utils.SmsParser.extractOtp(sample2, sender = "BARPRO"))
     }
 
     @Test

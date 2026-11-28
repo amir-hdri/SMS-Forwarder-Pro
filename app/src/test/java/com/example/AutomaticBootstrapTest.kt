@@ -97,7 +97,7 @@ class AutomaticBootstrapTest {
                 }.verify(Base64.decode(signed, Base64.NO_WRAP)))
                 grant(pair)
             }, stage = { pending = it }, loadStage = { pending }, permissionsGranted = { true },
-            sendSms = { _, n -> assertEquals(nonce, n); sends++; true })
+            sendSms = { _, n, _ -> assertEquals(nonce, n); sends++; true })
         val result = coordinator.start("", device)
         assertEquals("09120000001", result.driverPhone)
         assertEquals(1, sends)
@@ -114,7 +114,7 @@ class AutomaticBootstrapTest {
                 .put("nonce", nonce).put("expires_in", 900).put("hub_phone_mci", "09120000002") },
             poll = { _, _, _ -> throw java.io.IOException("owned network loss") },
             stage = { pending = it }, loadStage = { pending }, permissionsGranted = { true },
-            sendSms = { _, _ -> sends++; throw IllegalStateException("owned modem exception") })
+            sendSms = { _, _, _ -> sends++; throw IllegalStateException("owned modem exception") })
         repeat(2) { assertTrue(runCatching { coordinator().start("09120000001", device) }.isFailure) }
         assertEquals("The same nonce must remain retryable after synchronous dispatch failure", 2, sends)
         assertEquals(1, challenges)

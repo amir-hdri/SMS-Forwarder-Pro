@@ -11,24 +11,29 @@ data class OtpResult(
     val timestamp: Long
 )
 
-/** Bounded extraction matching BarPro's OTP parser; tracking numbers are not OTPs. */
+/** Bounded 6-digit OTP extraction strictly for coordinated BarPro/UTCMS senders. */
 object OtpExtractor {
     fun normalizeDigits(input: String): String = SmsParser.normalizeDigits(input)
 
-    private val keyword = """کد\s*(?:تایید|تأیید|ورود|فعالسازی|فعال\s*سازی|احراز|اعتبار|یک\s*بار\s*مصرف|یکبار\s*مصرف|امنیتی|مجوز|صدور|ثبت)|رمز\s*(?:یک\s*بار\s*مصرف|یکبار\s*مصرف|ورود|موقت|اعتبار|تایید|تأیید)|(?:verification|security|login|auth)\s*(?:otp\s*)?code|otp(?:\s*code)?"""
-    private val forward = Regex("(?:" + keyword + """)[^0-9]{0,60}(?<![0-9])([0-9]{4,8})(?![0-9])""", RegexOption.IGNORE_CASE)
-    private val reverse = Regex("""(?<![0-9])([0-9]{4,8})(?![0-9])[^0-9]{0,25}(?:""" + keyword + ")", RegexOption.IGNORE_CASE)
+    private val keyword = """کد\s*(?:تایید|تأیید|تائید|ورود|فعالسازی|فعال\s*سازی|احراز|اعتبار|یک\s*بار\s*مصرف|یکبار\s*مصرف|امنیتی|مجوز|صدور|ثبت)|رمز\s*(?:یک\s*بار\s*مصرف|یکبار\s*مصرف|ورود|موقت|اعتبار|تایید|تأیید|تائید)|(?:verification|security|login|auth)\s*(?:otp\s*)?code|otp(?:\s*code)?"""
+    private val forward = Regex("(?:" + keyword + """)[^0-9]{0,60}(?<![0-9])([0-9]{6})(?![0-9])""", RegexOption.IGNORE_CASE)
+    private val reverse = Regex("""(?<![0-9])([0-9]{6})(?![0-9])[^0-9]{0,25}(?:""" + keyword + ")", RegexOption.IGNORE_CASE)
+    private val shortTemplates = listOf(
+        Regex("""([0-9]{6})"""),
+        Regex("""(?:پیام\s+)?سامانه\s+بارنامه[\s:=]+([0-9]{6})"""),
+        Regex("""کد\s+شما[\s:=]+([0-9]{6})\s+است"""),
+    )
 
     fun extractUtcMsOtp(text: String, sender: String = ""): String? {
-        val clean = normalizeDigits(text).replace("\u200f", "")
-        if (SmsParser.isBankOrAdContent(clean) || clean.contains("رمز دوم")) return null
-        if (sender.isNotBlank() && !SmsParser.isAllowedSenderForContent(sender, clean)) return null
+        val clean = normalizeDigits(text).replace("\u200f", "").replace("\u200e", "")
+        if (clean.contains("رمز دوم")) return null
+        if (!SmsParser.isAllowedSenderForContent(sender, clean)) return null
         forward.find(clean)?.let { return it.groupValues[1] }
         reverse.find(clean)?.let { return it.groupValues[1] }
-        if (listOf("رهگیری", "ردیابی", "شماره بارنامه", "ثبت شد", "صادر شد", "ثبت گردید").any { clean.contains(it) })
+        if (listOf("رهگیری", "ردیابی", "شماره بارنامه", "بارنامه شماره", "ثبت شد", "صادر شد", "ثبت گردید", "صادر گردید").any { clean.contains(it) })
             return null
-        Regex("""کد\s*[:=]\s*([0-9]{4,8})(?![0-9])""").find(clean)?.let { return it.groupValues[1] }
-        return clean.trim().takeIf { it.matches(Regex("[0-9]{4,8}")) }
+        Regex("""کد\s*[:=]\s*([0-9]{6})(?![0-9])""").find(clean)?.let { return it.groupValues[1] }
+        return shortTemplates.firstNotNullOfOrNull { it.matchEntire(clean.trim())?.groupValues?.get(1) }
     }
 
     fun extractOtp(rawMessage: String): String? = extractUtcMsOtp(rawMessage)

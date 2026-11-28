@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,8 +11,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -144,6 +145,7 @@ fun ManagedDriverScreen(
     val isReceiveSmsGranted = remember(permissionRevision) { PermissionHelper.isReceiveSmsGranted(context) }
     val isSendSmsGranted = remember(permissionRevision) { PermissionHelper.isSendSmsGranted(context) }
     val isPostNotificationGranted = remember(permissionRevision) { PermissionHelper.isPostNotificationGranted(context) }
+    val isSimNumberPermissionGranted = remember(permissionRevision) { PermissionHelper.areDriverSimPermissionsGranted(context) }
 
     val areCriticalPermissionsGranted = isReceiveSmsGranted && isSendSmsGranted && isPostNotificationGranted
 
@@ -186,6 +188,14 @@ fun ManagedDriverScreen(
             com.example.utils.CarrierDetector.detectPhoneNumberFromDevice(context)
         })
     }
+    LaunchedEffect(isSimNumberPermissionGranted, isEnrolled) {
+        if (!isEnrolled && isSimNumberPermissionGranted && phoneInput.isBlank()) {
+            val detected = com.example.utils.CarrierDetector.detectPhoneNumberFromDevice(context)
+            if (detected.isNotBlank()) {
+                phoneInput = detected
+            }
+        }
+    }
     val cleanPhone = remember(phoneInput) {
         SmsParser.normalizePhoneNumber(phoneInput).filter { it.isDigit() }
     }
@@ -196,9 +206,9 @@ fun ManagedDriverScreen(
     var requestedDualSimPerm by remember { mutableStateOf(false) }
     LaunchedEffect(effectiveActivationState.needsSmsSelection) {
         if (effectiveActivationState.needsSmsSelection) {
-            if (!PermissionHelper.isReadPhoneStateGranted(context) && !requestedDualSimPerm) {
+            if (!PermissionHelper.areDriverSimPermissionsGranted(context) && !requestedDualSimPerm) {
                 requestedDualSimPerm = true
-                permissionsLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
+                permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
             } else if (!openedSmsSelection) {
                 openedSmsSelection = true
                 runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS)) }
@@ -291,16 +301,21 @@ fun ManagedDriverScreen(
                         // Permission Badges
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             PermissionStatusPill(
-                                label = "دریافت پیامک",
+                                label = "دریافت",
                                 isGranted = isReceiveSmsGranted,
                                 modifier = Modifier.weight(1f)
                             )
                             PermissionStatusPill(
-                                label = "ارسال پیامک",
+                                label = "ارسال",
                                 isGranted = isSendSmsGranted,
+                                modifier = Modifier.weight(1f)
+                            )
+                            PermissionStatusPill(
+                                label = "سیم‌کارت",
+                                isGranted = isSimNumberPermissionGranted,
                                 modifier = Modifier.weight(1f)
                             )
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -315,14 +330,7 @@ fun ManagedDriverScreen(
                         if (!areCriticalPermissionsGranted) {
                             Button(
                                 onClick = {
-                                    val list = mutableListOf(
-                                        Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.SEND_SMS
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        list.add(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    permissionsLauncher.launch(list.toTypedArray())
+                                    permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -340,6 +348,28 @@ fun ManagedDriverScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("تأیید و اعطای مجوزهای پیامک", fontWeight = FontWeight.Bold)
+                            }
+                        } else if (!isSimNumberPermissionGranted) {
+                            OutlinedButton(
+                                onClick = {
+                                    permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_request_sim_permissions"),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProAmber),
+                                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                    brush = androidx.compose.ui.graphics.SolidColor(BarProAmber.copy(alpha = 0.6f))
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("تأیید مجوز تشخیص شماره سیم‌کارت", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -580,7 +610,8 @@ fun ManagedDriverScreen(
                                                         if (isPhoneValid) effectiveOnActivate(cleanPhone, driverFullNameInput.trim())
                                                         else effectiveOnActivate("", driverFullNameInput.trim())
                                                     },
-                                                    modifier = Modifier.weight(1f).height(36.dp),
+                                                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 38.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                                     shape = RoundedCornerShape(8.dp),
                                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProRose),
                                                     border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
@@ -589,27 +620,12 @@ fun ManagedDriverScreen(
                                                 ) {
                                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("تلاش مجدد", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                }
-                                                if (effectiveActivationState.needsSmsSelection &&
-                                                    !PermissionHelper.isReadPhoneStateGranted(context)) {
-                                                    OutlinedButton(
-                                                        onClick = {
-                                                            permissionsLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
-                                                        },
-                                                        modifier = Modifier.weight(1f).height(36.dp),
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProAmber),
-                                                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
-                                                            brush = androidx.compose.ui.graphics.SolidColor(BarProAmber.copy(alpha = 0.6f))
-                                                        )
-                                                    ) {
-                                                        Text("مجوز سیم‌کارت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                                    }
+                                                    Text("تلاش مجدد", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                                 }
                                                 OutlinedButton(
                                                     onClick = effectiveOnReset,
-                                                    modifier = Modifier.weight(1f).height(36.dp),
+                                                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 38.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                                     shape = RoundedCornerShape(8.dp),
                                                     colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProTextSecondary),
                                                     border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
@@ -618,7 +634,29 @@ fun ManagedDriverScreen(
                                                 ) {
                                                     Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("بازنشانی", fontSize = 12.sp)
+                                                    Text("بازنشانی", fontSize = 11.sp, maxLines = 1, softWrap = false)
+                                                }
+                                            }
+                                            if (!isSimNumberPermissionGranted) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
+                                                    },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .defaultMinSize(minHeight = 38.dp)
+                                                        .testTag("btn_error_sim_permissions"),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProAmber),
+                                                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
+                                                        brush = androidx.compose.ui.graphics.SolidColor(BarProAmber.copy(alpha = 0.6f))
+                                                    )
+                                                ) {
+                                                    Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("تأیید مجوز سیم‌کارت", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                                 }
                                             }
                                         }
@@ -636,14 +674,7 @@ fun ManagedDriverScreen(
                             onClick = {
                                 focusManager.clearFocus()
                                 if (!areCriticalPermissionsGranted) {
-                                    val list = mutableListOf(
-                                        Manifest.permission.RECEIVE_SMS,
-                                        Manifest.permission.SEND_SMS
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        list.add(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                    permissionsLauncher.launch(list.toTypedArray())
+                                    permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
                                 } else if (effectiveActivationState.needsSmsSelection) {
                                     context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
                                 } else if (isPhoneValid) {
@@ -727,14 +758,7 @@ fun ManagedDriverScreen(
                                 onClick = {
                                     focusManager.clearFocus()
                                     if (!areCriticalPermissionsGranted) {
-                                        val list = mutableListOf(
-                                            Manifest.permission.RECEIVE_SMS,
-                                            Manifest.permission.SEND_SMS
-                                        )
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                            list.add(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                        permissionsLauncher.launch(list.toTypedArray())
+                                        permissionsLauncher.launch(PermissionHelper.getDriverActivationRuntimePermissions())
                                     } else if (effectiveActivationState.needsSmsSelection) {
                                         context.startActivity(android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS))
                                     } else {
@@ -743,8 +767,9 @@ fun ManagedDriverScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp)
+                                    .defaultMinSize(minHeight = 44.dp)
                                     .testTag("btn_fallback_auto_activate"),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = BarProTextSecondary),
                                 border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(

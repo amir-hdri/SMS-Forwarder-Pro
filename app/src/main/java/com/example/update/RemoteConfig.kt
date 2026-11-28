@@ -136,11 +136,25 @@ object RemoteConfig {
      * Separate from [parse] so validation stays pure and testable, and so a rejected document can
      * never partially mutate global matching state.
      */
+    @Volatile
+    private var overlayRestored = false
+
     fun applyMatchingOverlay(snapshot: RemoteConfigSnapshot) {
         SmsParser.setRemoteOverlay(
             extraSenders = snapshot.extraOtpSenders,
             extraKeywords = snapshot.extraUtcmsKeywords
         )
+    }
+
+    /** Ensures saved remote sender/keyword overlay is loaded once in background entry points. */
+    fun ensureOverlayRestored(context: android.content.Context) {
+        if (overlayRestored) return
+        synchronized(this) {
+            if (!overlayRestored) {
+                restoreSavedOverlay(context.applicationContext)
+                overlayRestored = true
+            }
+        }
     }
 
     /** Re-verifies and re-applies the last persisted signed config overlay on process restart. */

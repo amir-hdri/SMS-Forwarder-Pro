@@ -61,7 +61,7 @@ class AnonymousBootstrapLoopbackTest {
         val coordinator = BootstrapCoordinator(selected, DeviceBootstrapKey { pair },
             challenge = client::challenge, poll = client::poll,
             stage = storage::savePendingBootstrap, loadStage = storage::getPendingBootstrap,
-            permissionsGranted = { true }, sendSms = { _, nonce ->
+            permissionsGranted = { true }, sendSms = { _, nonce, _ ->
                 sends++
                 // This adapter models carrier-origin intake in the owned fixture, not a physical SMS.
                 val proof = BootstrapSms.parse("+989120000001", BootstrapSms.message(nonce))!!

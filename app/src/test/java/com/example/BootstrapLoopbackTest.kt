@@ -55,7 +55,7 @@ class BootstrapLoopbackTest {
         val coordinator = BootstrapCoordinator(selected, DeviceBootstrapKey { pair },
             challenge = client::challenge, poll = client::poll,
             stage = storage::savePendingBootstrap, loadStage = storage::getPendingBootstrap,
-            permissionsGranted = { true }, sendSms = { _, nonce ->
+            permissionsGranted = { true }, sendSms = { _, nonce, _ ->
                 sends++
                 // Carrier hop is synthetic. Hub must use received origin, never a claimed body phone.
                 val received = BootstrapSms.parse("+989120000001", BootstrapSms.message(nonce))!!

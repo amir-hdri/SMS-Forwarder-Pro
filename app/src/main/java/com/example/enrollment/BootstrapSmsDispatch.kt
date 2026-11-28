@@ -20,18 +20,21 @@ object BootstrapSmsDispatch {
             json.optLong("retry_at"), json.optString("message").takeIf { it.isNotEmpty() })
     }
 
-    @Synchronized fun send(context: Context, destination: String, nonce: String): Boolean {
+    @Synchronized fun send(context: Context, destination: String, nonce: String,
+        driverPhone: String = ""): Boolean {
         val previous = state(context, nonce)
         if (previous != null && System.currentTimeMillis() < previous.retryAt) {
             return previous.status != "failed"
         }
         if ((previous?.attempts ?: 0) >= SmsDispatch.MAX_ATTEMPTS)
             throw BootstrapSmsNotSent("تلاش‌های محدود پیامک تمام شده است؛ پس از پایان مهلت، برنامه خودکار دوباره بررسی می‌کند.")
-        val subs = BootstrapSms.availableSubscriptions(context)
+        // Only an attempt from the SIM that carries the entered number can be proved
+        // by the Hub. Rotation stays inside that set, never across a foreign SIM.
+        val subs = BootstrapSms.activationSubscriptions(context, driverPhone)
         val selected = if (subs.isNotEmpty()) {
             subs[(previous?.attempts ?: 0) % subs.size]
         } else {
-            BootstrapSms.selectedSubscription(context)
+            BootstrapSms.selectedSubscription(context, driverPhone)
         }
         SecureStorageManager.getInstance(context).getBootstrapSmsAttempt()?.let {
             val old = JSONObject(it)
@@ -43,7 +46,7 @@ object BootstrapSmsDispatch {
         val pending = JSONObject().put("nonce", nonce).put("attempt_at", attemptAt)
             .put("attempts", (previous?.attempts ?: 0) + 1).put("status", "dispatching")
             .put("destination", destination).put("retry_at", attemptAt + SmsDispatch.RESULT_TIMEOUT_MS)
-            .put("subscription_id", selected)
+            .put("subscription_id", selected).put("driver_phone", driverPhone)
         val storage = SecureStorageManager.getInstance(context)
         storage.saveBootstrapSmsAttempt(pending.toString())
         val sent = SmsDispatch.bootstrapResultIntent(context, nonce, attemptAt, false)

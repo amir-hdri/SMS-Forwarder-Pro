@@ -119,4 +119,34 @@ class AutomaticDriverScreenTest {
 
         assertEquals(listOf("09121112233" to "محمد رضایی"), claims)
     }
+
+    @Test fun errorCardDisplaysRetryResetAndSeparateSimPermissionButton() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        shadowOf(context).grantPermissions(
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+        shadowOf(context).denyPermissions(
+            Manifest.permission.READ_PHONE_NUMBERS,
+            Manifest.permission.READ_PHONE_STATE
+        )
+        var resetCount = 0
+        compose.setContent {
+            MaterialTheme {
+                ManagedDriverScreen(
+                    ForwardConfig(), {}, {}, {},
+                    activationState = DriverActivationUiState(
+                        errorMessage = "خطا در دریافت پاسخ از سرور؛ در صورت روشن بودن VPN آن را خاموش کرده و دوباره تلاش کنید."
+                    ),
+                    onActivateDriver = {},
+                    onResetActivation = { resetCount++ }
+                )
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("activation_error_card").performScrollTo().assertExists()
+        compose.onNodeWithTag("btn_error_sim_permissions").performScrollTo().assertExists()
+        compose.onNodeWithTag("btn_request_sim_permissions").performScrollTo().assertExists()
+    }
 }

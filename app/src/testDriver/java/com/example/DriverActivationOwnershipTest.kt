@@ -290,4 +290,24 @@ class DriverActivationOwnershipTest {
         assertEquals(1, pending.size)
         assertNotEquals("Explicit retry must give the user's new request its own work", original, pending.single().id)
     }
+
+    @Test fun nonRetryableChallenge403DoesNotEnqueueBackgroundWorkerOrResumeOnLifecycle() = runBlocking(Dispatchers.IO) {
+        val manager = startWorkManager()
+        val storage = SecureStorageManager.getInstance(context)
+        val failingManager = EnrollmentManager(endpoint, "DRIVER", { "synthetic-device" },
+            redeem = { _, _ -> error("No activation link") }, getConfig = repository::getConfig,
+            saveConfig = repository::saveConfig, stage = storage::savePendingEnrollment,
+            loadStage = storage::getPendingEnrollment, permissionsGranted = { true }, onActivated = {},
+            resolve = { _, _, _ -> throw com.example.enrollment.ActivationRequiredException() },
+            bootstrap = { _, _ -> throw com.example.enrollment.BootstrapHttpException(403, "challenge") })
+        DriverActivationRuntime::class.java.getDeclaredField("enrollment").apply { isAccessible = true }.set(runtime, failingManager)
+
+        runtime.activate(phone, "Driver")
+        assertEquals(EnrollmentStatus.FAILED, runtime.enrollment.status.value)
+        assertFalse(runtime.enrollment.failureRetryable)
+        assertTrue("Non-retryable failure must pause automatic background recovery", DriverActivationRuntime.isActivationStopped(context))
+        assertFalse(DriverActivationRuntime.hasPendingActivation(context))
+        assertNull(DriverBootstrapWorker.enqueue(context))
+        assertTrue("No background worker may be enqueued after 403 challenge", manager.workDatabase.workSpecDao().getAllWorkSpecIds().isEmpty())
+    }
 }

@@ -82,6 +82,18 @@ class SmsReceiver : BroadcastReceiver() {
             return
         }
 
+        val isRelayEnvelope = com.example.utils.SmsFallbackEnvelope.parse(messageText) != null
+        if (isRelayEnvelope) {
+            if (com.example.BuildConfig.APP_ROLE != "HUB") {
+                return
+            }
+        } else {
+            com.example.update.RemoteConfig.ensureOverlayRestored(context.applicationContext)
+            if (!com.example.utils.SmsParser.isWhitelistedSender(sender)) {
+                return
+            }
+        }
+
         Log.i(TAG, LogSanitizer.sanitize("Incoming SMS detected | Sender: $sender | Length: ${messageText.length} | Slot: $simSlot"))
 
         val pendingResult = goAsync()

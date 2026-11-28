@@ -126,7 +126,11 @@ object DriverSmsSubscription {
             try {
                 val subManager =
                     context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
-                val subNumber = subManager?.getActiveSubscriptionInfo(subId)?.number
+                val modern = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    runCatching { subManager?.getPhoneNumber(subId) }.getOrNull()
+                } else null
+                val subNumber = modern?.takeIf { it.isNotBlank() }
+                    ?: runCatching { subManager?.getActiveSubscriptionInfo(subId)?.number }.getOrNull()
                 val normSubNumber = SmsParser.normalizePhoneNumber(subNumber ?: "")
                 if (normSubNumber == mci) return mci
                 if (normSubNumber == irancell) return irancell

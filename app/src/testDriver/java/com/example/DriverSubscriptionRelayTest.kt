@@ -67,7 +67,7 @@ class DriverSubscriptionRelayTest {
                 endpointUrl = "http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
                 fallbackServerPhoneNumber = "09120000002", hubIrancellPhoneNumber = "09350000003"))
             val storage = SecureStorageManager.getInstance(context)
-            val body = AesEncryptionUtils.encrypt("کد تایید: 54321", storage.getOrCreateOutboxKey())
+            val body = AesEncryptionUtils.encrypt("کد تایید: 543210", storage.getOrCreateOutboxKey())
             val id = database.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "***",
                 recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
                 encryptedBody = "v2:${body.iv}:${body.ciphertext}", simSlot = "SIM 2 (Sub #17)"))
@@ -121,7 +121,7 @@ class DriverSubscriptionRelayTest {
                 fallbackServerPhoneNumber = "09120000002", hubIrancellPhoneNumber = "09350000003"))
             com.example.utils.DriverSmsSubscription.remember(context, "09120000001", "SIM 2 (Sub #18)")
             val storage = SecureStorageManager.getInstance(context)
-            val body = AesEncryptionUtils.encrypt("کد تایید: 54321", storage.getOrCreateOutboxKey())
+            val body = AesEncryptionUtils.encrypt("کد تایید: 543210", storage.getOrCreateOutboxKey())
             val id = database.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "***",
                 recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
                 encryptedBody = "v2:${body.iv}:${body.ciphertext}", simSlot = "SIM 2 (Sub #17)"))
@@ -149,10 +149,10 @@ class DriverSubscriptionRelayTest {
                 endpointUrl = "http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
                 fallbackServerPhoneNumber = "09120000002", hubIrancellPhoneNumber = "09350000003"))
             val time = System.currentTimeMillis()
-            val notification = repository.processIncomingSms("20007777", "کد تایید: 67890", time, "Notification Listener")
+            val notification = repository.processIncomingSms("20007777", "کد تایید: 678901", time, "Notification Listener")
             assertEquals("Notification capture must wait for SMS_RECEIVED", com.example.data.model.ForwardStatus.SKIPPED, notification.status)
             assertNull(shadowOf(manager(context)).lastSentTextMessageParams)
-            val authoritative = repository.processIncomingSms("20007777", "کد تایید: 67890", time, "SIM 2 (Sub #17)")
+            val authoritative = repository.processIncomingSms("20007777", "کد تایید: 678901", time, "SIM 2 (Sub #17)")
             assertEquals(com.example.data.model.ForwardStatus.SMS_DISPATCHED, authoritative.status)
             assertNotNull(shadowOf(manager(context, 17)).lastSentTextMessageParams)
         } finally { database.close() }
@@ -195,7 +195,7 @@ class DriverSubscriptionRelayTest {
                 endpointUrl = "http://87.107.160.251/api/v1/otp/sms-forwarder/09120000001",
                 fallbackServerPhoneNumber = "09120000002", hubIrancellPhoneNumber = "09350000003"))
             val storage = SecureStorageManager.getInstance(context)
-            val body = AesEncryptionUtils.encrypt("کد تایید: 54321", storage.getOrCreateOutboxKey())
+            val body = AesEncryptionUtils.encrypt("کد تایید: 543210", storage.getOrCreateOutboxKey())
             val id = database.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "***",
                 recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
                 encryptedBody = "v2:${body.iv}:${body.ciphertext}", simSlot = "SIM 2 (Sub #17)"))

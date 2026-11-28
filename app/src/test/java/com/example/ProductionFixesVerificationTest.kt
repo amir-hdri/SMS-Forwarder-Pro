@@ -126,7 +126,7 @@ class ProductionFixesVerificationTest {
         db.forwardConfigDao().insertOrUpdate(cfg)
 
         val outboxKey = SecureStorageManager.getInstance(context).getOrCreateOutboxKey()
-        val enc = AesEncryptionUtils.encrypt("کد ورود به سامانه بارپرو: 78912", outboxKey)
+        val enc = AesEncryptionUtils.encrypt("کد ورود به سامانه بارپرو: 789123", outboxKey)
         val logId = db.forwardLogDao().insertLog(
             ForwardLog(
                 sender = "20007777",
@@ -192,8 +192,9 @@ class ProductionFixesVerificationTest {
         assertTrue(RemoteConfig.restoreSavedOverlay(context, pubBase64))
 
         assertTrue(SmsParser.isWhitelistedSender("+98983000999888") || SmsParser.isWhitelistedSender("983000999888"))
-        val extracted = SmsParser.extractOtp("سامانه حمل بار ویژه کد: 54321", sender = "09120000099")
-        assertEquals("54321", extracted)
+        assertNull(SmsParser.extractOtp("سامانه حمل بار ویژه کد: 543210", sender = "09120000099"))
+        val extracted = SmsParser.extractOtp("سامانه حمل بار ویژه کد: 543210", sender = "+98983000999888")
+        assertEquals("543210", extracted)
     }
 
     @Test
@@ -216,7 +217,7 @@ class ProductionFixesVerificationTest {
         db.forwardConfigDao().insertOrUpdate(cfg)
 
         val outboxKey = SecureStorageManager.getInstance(context).getOrCreateOutboxKey()
-        val enc = AesEncryptionUtils.encrypt("کد ورود به سامانه بارپرو: 78912", outboxKey)
+        val enc = AesEncryptionUtils.encrypt("کد ورود به سامانه بارپرو: 789123", outboxKey)
         val logId = db.forwardLogDao().insertLog(
             ForwardLog(
                 sender = "20007777",

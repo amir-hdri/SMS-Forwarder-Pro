@@ -72,7 +72,7 @@ class BootstrapEnrollmentIntegrationTest {
         val coordinator = BootstrapCoordinator("https://fleet.example.test".toHttpUrl(), DeviceBootstrapKey { pair },
             challenge = client::challenge, poll = client::poll,
             stage = store::savePendingBootstrap, loadStage = store::getPendingBootstrap,
-            permissionsGranted = { true }, sendSms = { _, _ -> sent++; true })
+            permissionsGranted = { true }, sendSms = { _, _, _ -> sent++; true })
         val manager = EnrollmentManager("https://fleet.example.test/api/v1/otp/sms-forwarder", "DRIVER",
             { fixture.getString("device_id") }, redeem = { _, _ -> error("No activation link") },
             getConfig = repository::getConfig, saveConfig = repository::saveConfig,

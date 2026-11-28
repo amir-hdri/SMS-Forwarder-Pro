@@ -34,15 +34,20 @@ class HubBootstrapWorker(context: Context, parameters: WorkerParameters) : Corou
                 if (egress != null) {
                     egress.use { session ->
                         if (!hasCurrentAuthority(repository, config)) return Result.failure()
-                        BootstrapClient(EnrollmentContract.trustedServer(config.endpointUrl), session.bind(okhttp3.OkHttpClient()))
-                            .prove(origin, nonce, BarProContract.token(config))
+                        BootstrapClient(
+                            EnrollmentContract.trustedServer(config.endpointUrl),
+                            session.bind(okhttp3.OkHttpClient()),
+                            poolConnections = false
+                        ).prove(origin, nonce, BarProContract.token(config))
                     }
                     return Result.success()
                 }
             }
             if (!hasCurrentAuthority(repository, config)) return Result.failure()
-            BootstrapClient(EnrollmentContract.trustedServer(config.endpointUrl))
-                .prove(origin, nonce, BarProContract.token(config))
+            BootstrapClient(
+                EnrollmentContract.trustedServer(config.endpointUrl),
+                poolConnections = false
+            ).prove(origin, nonce, BarProContract.token(config))
             Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled

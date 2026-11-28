@@ -28,10 +28,17 @@ import java.util.concurrent.TimeUnit
 @Config(application = Application::class, sdk = [34])
 class HubDurableEnqueueTest {
     private var manager: WorkManagerImpl? = null
+    private val defaultManager = WorkManagerImpl::class.java.getDeclaredField("sDefaultInstance").apply {
+        isAccessible = true
+    }
+    private var previousManager: Any? = null
 
     @After fun close() {
-        manager?.workDatabase?.close()
-        WorkManagerImpl.setDelegate(null)
+        manager?.let {
+            it.workDatabase.close()
+            WorkManagerImpl.setDelegate(null)
+            defaultManager.set(null, previousManager)
+        }
     }
 
     private fun pending(): BroadcastReceiver.PendingResult {
@@ -45,6 +52,9 @@ class HubDurableEnqueueTest {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val tasks = LinkedBlockingQueue<Runnable>()
         val executor = Executor { tasks.add(it) }
+        previousManager = defaultManager.get(null)
+        defaultManager.set(null, null)
+        WorkManagerImpl.setDelegate(null)
         WorkManager.initialize(context, Configuration.Builder().setTaskExecutor(executor)
             .setExecutor(executor).build())
         manager = WorkManager.getInstance(context) as WorkManagerImpl

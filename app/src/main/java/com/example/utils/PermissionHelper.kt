@@ -64,6 +64,15 @@ object PermissionHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /** Required to learn which SIM actually carries the driver's own number. */
+    fun isReadPhoneNumbersGranted(context: Context): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return false
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_PHONE_NUMBERS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun isPostNotificationGranted(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -106,13 +115,39 @@ object PermissionHelper {
             com.example.BuildConfig.APP_ROLE, isReceiveSmsGranted(context), isSendSmsGranted(context)
         )
 
+    fun areDriverSimPermissionsGranted(context: Context): Boolean {
+        if (com.example.BuildConfig.APP_ROLE != "DRIVER") return true
+        val hasPhoneState = isReadPhoneStateGranted(context)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            hasPhoneState && isReadPhoneNumbersGranted(context)
+        } else {
+            hasPhoneState
+        }
+    }
+
     fun getRequiredRuntimePermissions(): Array<String> {
         val permissions = mutableListOf(
             Manifest.permission.RECEIVE_SMS
         )
         if (com.example.BuildConfig.APP_ROLE == "DRIVER") permissions.add(Manifest.permission.SEND_SMS)
+        // The activation SMS must leave from the SIM whose number was entered, so the
+        // platform must let this app read each SIM's own number.
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER" &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            permissions.add(Manifest.permission.READ_PHONE_NUMBERS)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        return permissions.toTypedArray()
+    }
+
+    /** Driver activation also needs READ_PHONE_STATE to enumerate active dual-SIM slots. */
+    fun getDriverActivationRuntimePermissions(): Array<String> {
+        val permissions = getRequiredRuntimePermissions().toMutableList()
+        if (com.example.BuildConfig.APP_ROLE == "DRIVER" &&
+            !permissions.contains(Manifest.permission.READ_PHONE_STATE)) {
+            permissions.add(Manifest.permission.READ_PHONE_STATE)
         }
         return permissions.toTypedArray()
     }
@@ -158,6 +193,22 @@ object PermissionHelper {
                 category = PermissionCategory.SMS
             )
         )
+
+        // READ_PHONE_NUMBERS only exists from API 26; older platforms expose no SIM number.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            list.add(
+                PermissionItemInfo(
+                    id = "read_phone_numbers",
+                    title = "خواندن شمارهٔ سیم‌کارت (READ_PHONE_NUMBERS)",
+                    description = "ارسال پیامک تأیید از همان سیم‌کارتی که شمارهٔ راننده است؛ بدون این مجوز سرور اثبات هاب را رد می‌کند.",
+                    isGranted = isReadPhoneNumbersGranted(context),
+                    isRequired = com.example.BuildConfig.APP_ROLE == "DRIVER",
+                    permissionType = PermissionType.RUNTIME_PERMISSION,
+                    manifestPermission = Manifest.permission.READ_PHONE_NUMBERS,
+                    category = PermissionCategory.SMS
+                )
+            )
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(

@@ -89,20 +89,30 @@ object CarrierDetector {
         return try {
             // 1. Check all active SIM subscriptions (SIM 1 and SIM 2) via SubscriptionManager
             val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? android.telephony.SubscriptionManager
-            val subList = subManager?.activeSubscriptionInfoList
+            val subList = runCatching { subManager?.activeSubscriptionInfoList }.getOrNull()
             if (!subList.isNullOrEmpty()) {
                 for (info in subList) {
-                    // Keep the optional existing subscription hint; the modern phone-number
-                    // permission is not declared, so normal modern installs return above.
-                    val num = info.number
+                    val modern = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        runCatching { subManager?.getPhoneNumber(info.subscriptionId) }.getOrNull()
+                    } else null
+                    val num = modern?.takeIf { it.isNotBlank() } ?: runCatching { info.number }.getOrNull()
                     val norm = SmsParser.normalizePhoneNumber(num ?: "")
                     if (norm.matches(Regex("09[0-9]{9}"))) return norm
                 }
             }
 
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && subManager != null) {
+                val defaultSmsSub = android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
+                if (defaultSmsSub >= 0 && defaultSmsSub != Int.MAX_VALUE) {
+                    val defaultNum = runCatching { subManager.getPhoneNumber(defaultSmsSub) }.getOrNull()
+                    val normDefault = SmsParser.normalizePhoneNumber(defaultNum ?: "")
+                    if (normDefault.matches(Regex("09[0-9]{9}"))) return normDefault
+                }
+            }
+
             // 2. Fallback to default TelephonyManager line1Number
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-            val line1 = tm?.line1Number ?: ""
+            val line1 = runCatching { tm?.line1Number }.getOrNull() ?: ""
             val norm = SmsParser.normalizePhoneNumber(line1)
             if (norm.matches(Regex("09[0-9]{9}"))) norm else ""
         } catch (_: SecurityException) {

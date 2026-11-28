@@ -37,10 +37,11 @@ class SmsNotificationListener : NotificationListenerService() {
         val fullText = if (bigText.isNotBlank()) bigText else text
         if (fullText.isBlank()) return
 
-        // Verify if it is UTCMS or BarPro related
-        if (SmsParser.isUtcmsSms(title, fullText)) {
+        com.example.update.RemoteConfig.ensureOverlayRestored(applicationContext)
+        // Verify if it is UTCMS or BarPro related strictly from a coordinated sender
+        val sender = title.trim()
+        if (sender.isNotBlank() && SmsParser.isWhitelistedSender(sender) && SmsParser.isUtcmsSms(sender, fullText)) {
             val timestamp = if (sbn.postTime > 0) sbn.postTime else System.currentTimeMillis()
-            val sender = title.ifBlank { "پیامک سیستم" }
 
             scope.launch {
                 try {

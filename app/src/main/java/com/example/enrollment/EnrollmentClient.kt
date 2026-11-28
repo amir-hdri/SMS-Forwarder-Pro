@@ -10,12 +10,18 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+import okhttp3.ConnectionPool
 
 class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
     // Tickets are single use. Do not replay after an ambiguous connection failure or redirect.
     private val http = client.newBuilder().followRedirects(false).followSslRedirects(false)
         .retryOnConnectionFailure(false).callTimeout(20, TimeUnit.SECONDS).build()
+    // Rediscovery is read-only; avoid reusing stale pooled keep-alive sockets across Nginx/NAT timeouts.
+    private val resolveHttp = client.newBuilder().followRedirects(false).followSslRedirects(false)
+        .retryOnConnectionFailure(true).connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .callTimeout(20, TimeUnit.SECONDS).build()
 
     suspend fun redeem(link: EnrollmentLink, deviceId: String): EnrollmentCredentials = withContext(Dispatchers.IO) {
         require(deviceId.isNotBlank() && deviceId.length <= 128)
@@ -91,7 +97,7 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        fun execute(request: Request): Pair<Int, String?> = http.newCall(request).execute().use { response ->
+        fun runCall(request: Request): Pair<Int, String?> = resolveHttp.newCall(request).execute().use { response ->
             com.example.network.ServerClock.observeHttpDate(null, response.headers.getDate("Date")?.time, request.url.host)
             if (response.code == 401 || response.code == 403) throw ActivationRequiredException()
             if (response.code != 200) return@use response.code to null
@@ -100,6 +106,11 @@ class EnrollmentClient(client: OkHttpClient = OkHttpClient()) {
             val source = body.source()
             require(!source.request(16_385)) { "حجم داده‌های پاسخ سرور بیش از 16KB است" }
             response.code to source.readByteArray().toString(Charsets.UTF_8)
+        }
+        fun execute(request: Request): Pair<Int, String?> = try {
+            runCall(request)
+        } catch (_: IOException) {
+            runCall(request.newBuilder().header("Connection", "close").build())
         }
         val (status, document) = execute(postRequest)
         // Only method negotiation may use the legacy GET endpoint; auth/network errors cannot.

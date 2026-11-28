@@ -79,7 +79,7 @@ class SmsDispatchReliabilityTest {
     @After fun close() { context.unregisterReceiver(callbackReceiver); singleton.set(null, null); db.close() }
 
     private suspend fun insert(): Long {
-        val body = AesEncryptionUtils.encrypt("کد تایید: 54321", SecureStorageManager.getInstance(context).getOrCreateOutboxKey())
+        val body = AesEncryptionUtils.encrypt("کد تایید: 543210", SecureStorageManager.getInstance(context).getOrCreateOutboxKey())
         return db.forwardLogDao().insertLog(ForwardLog(sender = "20007777", messageBody = "کد تایید: ***",
             recipientPhone = "09120000001", receivedTimestamp = System.currentTimeMillis(),
             smsType = SmsType.UTCMS_OTP, simSlot = "SIM 2 (Sub #17)", encryptedBody = "v2:${body.iv}:${body.ciphertext}"))

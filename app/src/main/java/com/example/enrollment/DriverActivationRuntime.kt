@@ -21,7 +21,8 @@ class DriverActivationRuntime private constructor(private val context: Context) 
     private val storage = SecureStorageManager.getInstance(context)
     private val defaultEndpoint = BuildConfig.DEFAULT_ENDPOINT_URL.ifBlank { ForwardConfig().endpointUrl }
     private val server = EnrollmentContract.trustedServer(defaultEndpoint)
-    private val client by lazy { BootstrapClient(server) }
+    private val baseHttp by lazy { okhttp3.OkHttpClient() }
+    private val client by lazy { BootstrapClient(server, baseHttp) }
     private val preferences = context.getSharedPreferences(IDENTITY_STORE, Context.MODE_PRIVATE)
     val progress = MutableStateFlow<String?>(null)
     private val automaticLock = Mutex()
@@ -33,8 +34,11 @@ class DriverActivationRuntime private constructor(private val context: Context) 
             if (egress != null) {
                 return egress.use { session ->
                     enrollment.withActiveOperation { Unit }
-                    val boundClient = session.bind(okhttp3.OkHttpClient())
-                    block(BootstrapClient(server, boundClient))
+                    // Share dispatcher with baseHttp without pooling sockets past the ephemeral NetworkCallback lifetime.
+                    val boundClient = session.bind(baseHttp).newBuilder()
+                        .connectionPool(okhttp3.ConnectionPool(0, 1, java.util.concurrent.TimeUnit.MILLISECONDS))
+                        .build()
+                    block(BootstrapClient(server, boundClient, poolConnections = false))
                 }
             }
         }
@@ -53,7 +57,7 @@ class DriverActivationRuntime private constructor(private val context: Context) 
         stage = { value -> enrollment.withActiveOperation { storage.savePendingBootstrap(value) } },
         loadStage = { enrollment.withActiveOperation { storage.getPendingBootstrap() } },
         permissionsGranted = { PermissionHelper.areForwardingPermissionsGranted(context) },
-        sendSms = { number, nonce -> enrollment.withActiveOperation { BootstrapSms.send(context, number, nonce) } },
+        sendSms = { number, nonce, phone -> enrollment.withActiveOperation { BootstrapSms.send(context, number, nonce, phone) } },
         progress = { value -> enrollment.withActiveOperation { progress.value = value } },
         smsState = { nonce -> enrollment.withActiveOperation { BootstrapSmsDispatch.state(context, nonce) } }) }
     val enrollment: EnrollmentManager = EnrollmentManager(defaultEndpoint, BuildConfig.APP_ROLE,
@@ -196,6 +200,11 @@ class DriverActivationRuntime private constructor(private val context: Context) 
         }
     }
 
+    internal fun stopBackgroundRecovery() {
+        check(preferences.edit().putBoolean(STOPPED, true).commit())
+        DriverBootstrapWorker.cancel(context)
+    }
+
     suspend fun activateAutomatically() {
         if (isActivationStopped(context)) return
         val expected = enrollment.currentGeneration()
@@ -236,6 +245,10 @@ class DriverActivationRuntime private constructor(private val context: Context) 
         val pending = runCatching {
             enrollment.withGeneration(expected) {
                 progress.value = null
+                if (enrollment.status.value == EnrollmentStatus.FAILED && !enrollment.failureRetryable) {
+                    check(preferences.edit().putBoolean(STOPPED, true).commit())
+                    return@withGeneration false
+                }
                 hasPendingActivation(context)
             }
         }.getOrDefault(false)

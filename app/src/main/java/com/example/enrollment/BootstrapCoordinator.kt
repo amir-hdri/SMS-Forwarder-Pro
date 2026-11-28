@@ -2,6 +2,7 @@ package com.example.enrollment
 
 import com.example.utils.CarrierDetector
 import com.example.utils.SmsParser
+import java.io.IOException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -21,7 +22,7 @@ class BootstrapCoordinator(
     private val stage: (String?) -> Unit,
     private val loadStage: () -> String?,
     private val permissionsGranted: () -> Boolean,
-    private val sendSms: (String, String) -> Boolean,
+    private val sendSms: (String, String, String) -> Boolean,
     private val progress: (String) -> Unit = {},
     private val now: () -> Long = System::currentTimeMillis,
     private val pause: suspend () -> Unit = { delay(3_000) },
@@ -33,10 +34,15 @@ class BootstrapCoordinator(
         val normalized = SmsParser.normalizePhoneNumber(phone)
         require(normalized.isEmpty() || normalized.matches(Regex("09[0-9]{9}")))
         require(deviceId.matches(Regex("[A-Za-z0-9_-]{8,128}")))
-        val pending = loadStage()?.let(::JSONObject)?.takeIf {
-            it.optString("phone") == normalized && it.optString("device_id") == deviceId &&
-                (it.optLong("expires_at", Long.MAX_VALUE) > now())
-        } ?: JSONObject().put("phone", normalized).put("device_id", deviceId)
+        val existing = loadStage()?.let(::JSONObject)?.takeIf {
+            it.optString("phone") == normalized && it.optString("device_id") == deviceId
+        }
+        val pending = existing?.takeIf {
+            it.optLong("expires_at", Long.MAX_VALUE) > now()
+        } ?: JSONObject().put("phone", normalized).put("device_id", deviceId).apply {
+            existing?.optString("requested_name", "")?.takeIf { it.isNotBlank() }?.let { put("requested_name", it) }
+            existing?.optString("accepted_link_sha256", "")?.takeIf { it.isNotBlank() }?.let { put("accepted_link_sha256", it) }
+        }
         stage(pending.toString())
         if (!permissionsGranted()) throw BootstrapNeedsPermissions()
         val publicKey = key.publicKey()
@@ -66,6 +72,7 @@ class BootstrapCoordinator(
         val nonce = pending.getString("nonce")
         val protocol = pending.optString("protocol", DeviceBootstrapKey.PROTOCOL)
         require(protocol == if (normalized.isEmpty()) DeviceBootstrapKey.AUTOMATIC_PROTOCOL else DeviceBootstrapKey.PROTOCOL)
+        var consecutivePollNetworkErrors = 0
         repeat(60) {
             if (now() >= pending.getLong("expires_at")) { stage(null); throw BootstrapHttpException(410) }
             val attempt = smsState?.invoke(nonce)
@@ -77,7 +84,7 @@ class BootstrapCoordinator(
                 val destinations = pending.optJSONArray("destinations")
                 val destination = if (destinations != null && destinations.length() > 0)
                     destinations.getString((attempt?.attempts ?: 0) % destinations.length()) else pending.getString("destination")
-                val sent = try { sendSms(destination, nonce) }
+                val sent = try { sendSms(destination, nonce, normalized) }
                 catch (error: Exception) {
                     pending.put("sent", false); stage(pending.toString()); throw error
                 }
@@ -87,10 +94,19 @@ class BootstrapCoordinator(
                 }
             }
             progress(attempt?.message ?: "در انتظار تأیید پیامک توسط هاب…")
-            val grant = try { poll(nonce, deviceId, key.signature(nonce, deviceId, protocol)) }
-            catch (error: BootstrapHttpException) {
+            val grant = try {
+                poll(nonce, deviceId, key.signature(nonce, deviceId, protocol)).also {
+                    consecutivePollNetworkErrors = 0
+                }
+            } catch (error: BootstrapHttpException) {
                 if (error.code == 410) stage(null)
                 throw error
+            } catch (error: IOException) {
+                consecutivePollNetworkErrors++
+                if (consecutivePollNetworkErrors >= MAX_CONSECUTIVE_POLL_IO_ERRORS) throw error
+                progress("اختلال موقت ارتباط با سرور؛ در حال تلاش دوباره…")
+                pause()
+                return@repeat
             }
             if (grant.optString("status") == "granted") {
                 require(grant.getString("protocol") == protocol)
@@ -105,4 +121,8 @@ class BootstrapCoordinator(
     }
 
     fun pendingPhone(): String? = loadStage()?.let { JSONObject(it).optString("phone").takeIf(String::isNotBlank) }
+
+    companion object {
+        private const val MAX_CONSECUTIVE_POLL_IO_ERRORS = 3
+    }
 }

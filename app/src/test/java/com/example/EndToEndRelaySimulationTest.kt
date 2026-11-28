@@ -31,13 +31,13 @@ class EndToEndRelaySimulationTest {
     @Test
     fun `simulate complete Driver to Hub relay lifecycle with Persian digits`() {
         val driverPhone = "09123456789" // MCI driver
-        val rawUtcMsSms = "کد ورود به سامانه بارپرو (UTCMS): ۷۹۳۴۵"
+        val rawUtcMsSms = "کد ورود به سامانه بارپرو (UTCMS): ۷۹۳۴۵۶"
         val timestamp = 1728567890000L
 
         // 1. DRIVER STAGE: Intercept & Extract OTP
         assertTrue(SmsParser.isUtcmsSms("7777000982", rawUtcMsSms))
-        val extractedOtp = OtpExtractor.extractOtp(rawUtcMsSms)
-        assertEquals("79345", extractedOtp)
+        val extractedOtp = OtpExtractor.extractOtp("7777000982", rawUtcMsSms).code
+        assertEquals("793456", extractedOtp)
 
         // 2. DRIVER STAGE: Reconcile Hub numbers & Carrier Route
         val hubNumbers = CarrierDetector.resolveHubNumbers(
@@ -65,7 +65,7 @@ class EndToEndRelaySimulationTest {
             code = extractedOtp!!,
             secret = webhookToken
         )
-        assertTrue(envelope.startsWith("BP1#$driverPhone#$timestamp#79345#"))
+        assertTrue(envelope.startsWith("BP1#$driverPhone#$timestamp#793456#"))
         assertEquals(5, envelope.split("#").size)
         assertTrue("Envelope must be single standard GSM 7-bit SMS length", envelope.length <= 160)
 
@@ -77,7 +77,7 @@ class EndToEndRelaySimulationTest {
         assertNotNull(parsedEnvelope)
         assertEquals(driverPhone, parsedEnvelope!!.phone)
         assertEquals(timestamp, parsedEnvelope.timestamp)
-        assertEquals("79345", parsedEnvelope.code)
+        assertEquals("793456", parsedEnvelope.code)
 
         val isHmacValid = SmsFallbackEnvelope.verify(parsedEnvelope, webhookToken)
         assertTrue("Hub must verify authentic HMAC signature in constant time", isHmacValid)

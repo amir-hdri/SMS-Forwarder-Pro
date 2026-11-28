@@ -40,6 +40,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSmsManager
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -113,7 +114,7 @@ class DriverForwardingStrategyTest {
 
     private suspend fun insertEncryptedLog(
         sender: String = "20007777",
-        rawMessage: String = "کد ورود به سامانه بارپرو: 78912",
+        rawMessage: String = "کد ورود به سامانه بارپرو: 789123",
         recipient: String = driverPhone
     ): Long {
         val outboxKey = SecureStorageManager.getInstance(context).getOrCreateOutboxKey()
@@ -203,7 +204,7 @@ class DriverForwardingStrategyTest {
         assertNotNull("Modem should have received the fallback SMS", lastSent)
         assertEquals("Fallback SMS should be addressed to MCI hub for 0912 driver", hubMci, lastSent!!.destinationAddress)
         assertTrue("Fallback SMS payload must start with BP1# signature prefix", lastSent.text.startsWith("BP1#$driverPhone#"))
-        assertTrue("Fallback SMS payload must contain extracted OTP 78912", lastSent.text.contains("78912"))
+        assertTrue("Fallback SMS payload must contain extracted OTP 789123", lastSent.text.contains("789123"))
     }
 
     @Test
@@ -241,5 +242,33 @@ class DriverForwardingStrategyTest {
         assertEquals("Health check should route to hub MCI", hubMci, lastSent!!.destinationAddress)
         assertTrue("Health check payload must start with BP1#", lastSent.text.startsWith("BP1#$driverPhone#"))
         assertTrue("Health check payload must encode HEALTH_CHECK code", lastSent.text.contains("HEALTH_CHECK"))
+    }
+
+    @Test
+    fun testCoordinatedSenderAndSixDigitOtpGuardPreventsPaidSmsDrain() = runBlocking {
+        val httpAttempts = AtomicInteger(0)
+        val failingClient = OkHttpClient.Builder().addInterceptor {
+            httpAttempts.incrementAndGet()
+            throw IOException("Offline")
+        }.build()
+        val repository = SmsForwardRepository(db, SmsForwarderClient(failingClient), context)
+        repository.saveConfig(baseConfig.copy(filterUtcmsOnly = false))
+
+        // 1. Uncoordinated sender with 6-digit code must never send HTTP or GSM SMS (even if filterUtcmsOnly=false)
+        val unlisted = repository.processIncomingSms("09129991111", "کد تایید: 654321", System.currentTimeMillis(), "SIM 2 (Sub #17)")
+        assertEquals(ForwardStatus.SKIPPED, unlisted.status)
+
+        // 2. Coordinated sender with 5-digit code must never send HTTP or GSM SMS
+        val fiveDigit = repository.processIncomingSms("7777000982", "کد ورود: 54321", System.currentTimeMillis(), "SIM 2 (Sub #17)")
+        assertEquals(ForwardStatus.SKIPPED, fiveDigit.status)
+        assertEquals(0, httpAttempts.get())
+        assertNull("Neither uncoordinated nor 5-digit SMS may consume GSM credit", shadowOf(modem()).lastSentTextMessageParams)
+
+        // 3. Coordinated sender with standalone 6-digit numeric code forwards normally
+        val sixDigit = repository.processIncomingSms("7777000982", "سامانه بارنامه: 833282", System.currentTimeMillis(), "SIM 2 (Sub #17)")
+        if (BuildConfig.APP_ROLE == "DRIVER") {
+            assertEquals(ForwardStatus.SMS_DISPATCHED, sixDigit.status)
+            assertTrue(shadowOf(modem()).lastSentTextMessageParams!!.text.contains("833282"))
+        }
     }
 }

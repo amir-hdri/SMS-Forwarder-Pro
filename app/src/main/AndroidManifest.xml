@@ -20,6 +20,11 @@
          auto-detect via line1Number (CarrierDetector); requested lazily when the operator enables
          the SMS fallback/relay, same as SEND_SMS above. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- READ_PHONE_NUMBERS is what lets activation send the carrier-proof SMS from the
+         SIM whose own number is the driver number entered on screen. Without it the app
+         can only guess a subscription, the Hub proves a different origin, and the server
+         refuses the proof with 403 "SIM origin does not match activation". -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Self-update without an app store.

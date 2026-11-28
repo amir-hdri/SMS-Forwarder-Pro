@@ -289,4 +289,26 @@ class EnrollmentTest {
             assertEquals(before + 1, requests.size)
         }
     }
+
+    @Test fun eofExceptionMapsToActionablePersianErrorInEnrollmentManager() = runBlocking {
+        val manager = EnrollmentManager(
+            defaultEndpoint = endpoint,
+            role = "DRIVER",
+            deviceId = { "device-123" },
+            redeem = { _, _ -> error("No link") },
+            getConfig = { ForwardConfig() },
+            saveConfig = {},
+            stage = {},
+            loadStage = { null },
+            permissionsGranted = { true },
+            onActivated = {},
+            resolve = { _, _, _ -> throw ActivationRequiredException() },
+            bootstrap = { _, _ -> throw java.io.EOFException("unexpected end of stream on http://87.107.160.251/...") }
+        )
+        manager.resolveDriverConfiguration("09120000001")
+        assertEquals(EnrollmentStatus.FAILED, manager.status.value)
+        val msg = manager.errorMessage.value.orEmpty()
+        assertTrue("Expected Persian VPN guidance, got: $msg", msg.contains("VPN") && msg.contains("خطا"))
+        assertFalse("Raw OkHttp stream message must not leak to UI: $msg", msg.contains("unexpected end of stream"))
+    }
 }

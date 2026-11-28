@@ -493,6 +493,13 @@ class SmsForwardRepository(
             return@withContext dispatchGsmRelay(logId, log, config, code, isFallback = false)
         }
 
+        if (!isRelay && (!com.example.utils.SmsParser.isWhitelistedSender(activeLog.sender) ||
+                com.example.utils.SmsParser.extractOtp(rawMessage, activeLog.sender) == null)) {
+            val reason = "پیامک از شماره هماهنگ‌شده یا دارای کد ۶ رقمی معتبر نیست."
+            updateClaimedLogStatus(logId, ForwardStatus.SKIPPED, reason)
+            return@withContext TransmissionResult(false, null, null, reason, "", false, 0)
+        }
+
         // 2. HTTP Forwarding (with X-Webhook-Token header support):
         val token = BarProContract.token(config)
         val driverHttpClient = client.httpClient.newBuilder().apply {
@@ -876,8 +883,31 @@ class SmsForwardRepository(
         database.forwardLogDao().findRecentCapture(fingerprint, recipient, receivedTimestamp - DEDUP_WINDOW_MS)
             ?.let { return@withContext CapturedSms(it, false) }
 
-        // 0. If filterUtcmsOnly is enabled, check if SMS is UTCMS/BarPro related (or valid signed relay envelope)
-        if (config.filterUtcmsOnly && !isRelay && !com.example.utils.SmsParser.isUtcmsSms(sender, messageBody)) {
+        // 0. Strictly accept messages only from coordinated senders (or valid signed relay envelopes)
+        // Hub role is a pure relay – any sender is allowed; whitelist gate applies only to DRIVER.
+        val isDriverRole = com.example.BuildConfig.APP_ROLE == "DRIVER"
+        if (isDriverRole && !isRelay && !com.example.utils.SmsParser.isWhitelistedSender(sender)) {
+            val log = ForwardLog(
+                sender = sender,
+                messageBody = LogSanitizer.sanitize(messageBody),
+                receivedTimestamp = receivedTimestamp,
+                status = ForwardStatus.SKIPPED,
+                errorMessage = "پیامک فیلتر شد: شماره فرستنده در لیست شماره‌های هماهنگ‌شده نیست",
+                endpointUrl = config.endpointUrl,
+                driverId = config.driverId,
+                smsType = com.example.data.model.SmsType.OTHER,
+                simSlot = simSlot,
+                otpCode = null
+            )
+            val id = database.forwardLogDao().insertLog(log)
+            val resultLog = log.copy(id = id)
+            synchronized(dedupLock) { recentSmsLogs[fingerprint] = resultLog }
+            return@withContext CapturedSms(resultLog, false)
+        }
+
+        // 0b. If filterUtcmsOnly is enabled, reject bank/ad content even from whitelisted senders
+        // Hub is a pure relay; this filter applies only to DRIVER role.
+        if (config.filterUtcmsOnly && isDriverRole && !isRelay && !com.example.utils.SmsParser.isUtcmsSms(sender, messageBody)) {
             val log = ForwardLog(
                 sender = sender,
                 messageBody = LogSanitizer.sanitize(messageBody),
@@ -888,7 +918,7 @@ class SmsForwardRepository(
                 driverId = config.driverId,
                 smsType = com.example.data.model.SmsType.OTHER,
                 simSlot = simSlot,
-                otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
+                otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody, sender))
             )
             val id = database.forwardLogDao().insertLog(log)
             val resultLog = log.copy(id = id)
@@ -912,9 +942,9 @@ class SmsForwardRepository(
                 errorMessage = stopReason,
                 endpointUrl = config.endpointUrl,
                 driverId = config.driverId,
-                smsType = com.example.utils.SmsParser.detectSmsType(messageBody),
+                smsType = com.example.utils.SmsParser.detectSmsType(messageBody, sender),
                 simSlot = simSlot,
-                otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
+                otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody, sender))
             )
             val id = database.forwardLogDao().insertLog(log)
             val resultLog = log.copy(id = id)
@@ -937,9 +967,9 @@ class SmsForwardRepository(
                     errorMessage = "شماره فرستنده $sender با هیچ‌یک از قوانین فعال همخوانی ندارد",
                     endpointUrl = config.endpointUrl,
                     driverId = config.driverId,
-                    smsType = com.example.utils.SmsParser.detectSmsType(messageBody),
+                    smsType = com.example.utils.SmsParser.detectSmsType(messageBody, sender),
                     simSlot = simSlot,
-                    otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody))
+                    otpCode = LogSanitizer.maskOtp(com.example.utils.SmsParser.extractOtp(messageBody, sender))
                 )
                 val id = database.forwardLogDao().insertLog(log)
                 val resultLog = log.copy(id = id)
